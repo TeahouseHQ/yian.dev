@@ -16,6 +16,11 @@ export const GameBundles: Record<string, BundleMetadata> = {
     name: "Pop Le Lock",
     version: "1.0.0",
   },
+  challenge5: {
+    id: "challenge5",
+    name: "Challenge 5",
+    version: "1.0.0",
+  },
 };
 
 export const getBundleMetadata = (

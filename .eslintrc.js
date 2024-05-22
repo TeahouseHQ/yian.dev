@@ -12,6 +12,7 @@ module.exports = {
     ".next/",
     ".eslintrc.js",
     "tailwind.config.js",
+    "next.config.js",
   ],
   parserOptions: {
     ecmaVersion: "latest",

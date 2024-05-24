@@ -1,5 +1,6 @@
 "use client";
 
+import Script from "next/script";
 import React, { useEffect } from "react";
 
 import { createUnityInstance } from "../utils";
@@ -25,12 +26,15 @@ export default function UnityRenderer({ handle }: PageProps): JSX.Element {
   }, [handle]);
 
   return (
-    <canvas
-      id="unity-canvas"
-      width="500"
-      height="800"
-      tabIndex={-1}
-      className="w-[500px] h-[800px] bg-black outline-none"
-    />
+    <>
+      <Script src="/assets/js/WebGL.loader.js" strategy="afterInteractive" />
+      <canvas
+        id="unity-canvas"
+        width="500"
+        height="800"
+        tabIndex={-1}
+        className="w-[500px] h-[800px] bg-black outline-none"
+      />
+    </>
   );
 }

@@ -1,8 +1,8 @@
-import Script from "next/script";
 import React from "react";
 
+import GodotRenderer from "./components/godotRenderer";
 import UnityRenderer from "./components/unityRenderer";
-import { GameBundles } from "../gameCatalog";
+import { GameBundles, getBundleMetadata } from "../gameCatalog";
 
 interface Params {
   handle: string;
@@ -16,15 +16,12 @@ export const dynamicParams = false;
 
 export default function Index({ params }: PageProps): JSX.Element {
   const { handle } = params;
+  const { engineType } = getBundleMetadata(handle) || {};
 
-  return (
-    <>
-      <Script
-        src="https://play.yian.dev/WebGL.loader.js"
-        strategy="beforeInteractive"
-      />
-      <UnityRenderer handle={handle} />
-    </>
+  return engineType === "godot" ? (
+    <GodotRenderer handle={handle} />
+  ) : (
+    <UnityRenderer handle={handle} />
   );
 }
 

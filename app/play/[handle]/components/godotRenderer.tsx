@@ -1,7 +1,17 @@
+"use client";
+
 import Script from "next/script";
 import React from "react";
 
-export default function Index(): JSX.Element {
+import { getBundleMetadata } from "../../gameCatalog";
+
+type PageProps = {
+  handle: string;
+};
+
+export default function GodotRenderer({ handle }: PageProps): JSX.Element {
+  const { metadata = {} } = getBundleMetadata(handle) || {};
+
   return (
     <>
       <canvas id="canvas">
@@ -13,7 +23,7 @@ export default function Index(): JSX.Element {
       <Script id="start-godot">
         {`
 setTimeout(() => {
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":1,"executable":"helloDot","experimentalVK":false,"fileSizes":{"helloDot.pck":148944,"helloDot.wasm":35708238},"focusCanvas":true,"gdextensionLibs":[]};
+const GODOT_CONFIG = JSON.parse('${JSON.stringify(metadata.config)}');
 const engine = new Engine(GODOT_CONFIG);
 const missing = Engine.getMissingFeatures();
 if (missing.length > 0) {
@@ -23,8 +33,6 @@ engine.startGame({
   'onProgress': function (current, total) {
     if (total > 0) {
       console.log('current', current, 'total', total);
-    } else {
-      console.log('YOLO');
     }
   },
 });

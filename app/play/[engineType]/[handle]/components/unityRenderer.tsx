@@ -27,7 +27,10 @@ export default function UnityRenderer({ handle }: PageProps): JSX.Element {
 
   return (
     <>
-      <Script src="/assets/js/WebGL.loader.js" strategy="afterInteractive" />
+      <Script
+        src="https://play.yian.dev/WebGL.loader.js"
+        strategy="afterInteractive"
+      />
       <canvas
         id="unity-canvas"
         width="500"

@@ -1,3 +1,5 @@
+import { Url } from "next/dist/shared/lib/router/router";
+
 export type BundleMetadata = {
   id: string;
   name: string;
@@ -49,4 +51,13 @@ export const getBundleMetadata = (
   handle: string
 ): BundleMetadata | undefined => {
   return GameBundles[handle];
+};
+
+export const getGamePath = (handle: string): Url => {
+  const metadata = getBundleMetadata(handle);
+  if (!metadata) {
+    return "";
+  }
+  const engineType = metadata.engineType === "godot" ? "g" : "u";
+  return `/play/${engineType}/${handle}`;
 };

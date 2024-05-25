@@ -2,9 +2,10 @@ import React from "react";
 
 import GodotRenderer from "./components/godotRenderer";
 import UnityRenderer from "./components/unityRenderer";
-import { GameBundles, getBundleMetadata } from "../gameCatalog";
+import { GameBundles } from "../../gameCatalog";
 
 interface Params {
+  engineType: "g" | "u";
   handle: string;
 }
 
@@ -15,10 +16,9 @@ type PageProps = {
 export const dynamicParams = false;
 
 export default function Index({ params }: PageProps): JSX.Element {
-  const { handle } = params;
-  const { engineType } = getBundleMetadata(handle) || {};
+  const { handle, engineType } = params;
 
-  return engineType === "godot" ? (
+  return engineType === "g" ? (
     <GodotRenderer handle={handle} />
   ) : (
     <UnityRenderer handle={handle} />
@@ -26,5 +26,8 @@ export default function Index({ params }: PageProps): JSX.Element {
 }
 
 export async function generateStaticParams(): Promise<Params[]> {
-  return Object.keys(GameBundles).map((handle) => ({ handle }));
+  return Object.values(GameBundles).map((bundle) => ({
+    engineType: bundle.engineType === "godot" ? "g" : "u",
+    handle: bundle.id,
+  }));
 }

@@ -13,11 +13,7 @@ module.exports = {
   async headers() {
     return [
       {
-        source: "/play/:path*",
-        headers: COOP_COEP_HEADERS,
-      },
-      {
-        source: "/assets/js/:path*",
+        source: "/play/g/:path*",
         headers: COOP_COEP_HEADERS,
       },
     ];

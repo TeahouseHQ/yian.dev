@@ -3,7 +3,7 @@
 import Script from "next/script";
 import React from "react";
 
-import { getBundleMetadata } from "../../gameCatalog";
+import { getBundleMetadata } from "../../../gameCatalog";
 
 type PageProps = {
   handle: string;
@@ -36,7 +36,7 @@ engine.startGame({
     }
   },
 });
-},1000);
+},300);
           `}
       </Script>
     </>

@@ -1,11 +1,14 @@
 import { Metadata, ResolvingMetadata, Viewport } from "next/types";
 import React from "react";
 
-import { Suffix } from "../../../lib/constants";
-import { getBundleMetadata } from "../gameCatalog";
+import { Suffix } from "../../../../lib/constants";
+import { getBundleMetadata } from "../../gameCatalog";
 
 type PageProps = {
-  params: { handle: string };
+  params: {
+    engineType: "g" | "u";
+    handle: string;
+  };
 };
 
 export const viewport: Viewport = {

@@ -1,4 +1,4 @@
-import { getBundleMetadata } from "../gameCatalog";
+import { getBundleMetadata } from "../../gameCatalog";
 
 const BUNDLE_BASE_URL = "https://play.yian.dev";
 
@@ -40,12 +40,12 @@ export const createUnityInstance = (
     console.log("Initializing Unity instance");
     window.createUnityInstance(targetElm, {
       dataUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.data`,
-      frameworkUrl: "/assets/js/WebGL.framework.js",
+      frameworkUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.framework.js`,
       codeUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.wasm`,
       streamingAssetsUrl: "StreamingAssets", // ?
       companyName: "play.yian.dev",
       productName: name,
       productVersion: version,
     });
-  }, 1000);
+  }, 300);
 };

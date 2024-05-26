@@ -14,12 +14,17 @@ export default function GodotRenderer({ handle }: PageProps): JSX.Element {
 
   return (
     <>
-      <canvas id="canvas">
+      <canvas
+        className="w-[600px] h-[800px] bg-black outline-none"
+        id="canvas"
+        width={600}
+        height={800}
+      >
         HTML5 canvas appears to be unsupported in the current browser.
         <br />
         Please try updating or use a different browser.
       </canvas>
-      <Script src="/assets/js/godot.js" strategy="afterInteractive" />
+      <Script src="/assets/js/godot.js" />
       <Script id="start-godot">
         {`
 setTimeout(() => {

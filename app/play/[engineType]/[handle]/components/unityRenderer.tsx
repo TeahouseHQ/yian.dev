@@ -29,7 +29,7 @@ export default function UnityRenderer({ handle }: PageProps): JSX.Element {
     <>
       <Script
         src="https://play.yian.dev/WebGL.loader.js"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
       <canvas
         id="unity-canvas"

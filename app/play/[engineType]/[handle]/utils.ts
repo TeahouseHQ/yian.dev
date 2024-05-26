@@ -36,16 +36,13 @@ export const createUnityInstance = (
 
   const { id, name, version } = bundleMetadata;
 
-  setTimeout(() => {
-    console.log("Initializing Unity instance");
-    window.createUnityInstance(targetElm, {
-      dataUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.data`,
-      frameworkUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.framework.js`,
-      codeUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.wasm`,
-      streamingAssetsUrl: "StreamingAssets", // ?
-      companyName: "play.yian.dev",
-      productName: name,
-      productVersion: version,
-    });
-  }, 300);
+  window.createUnityInstance(targetElm, {
+    dataUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.data`,
+    frameworkUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.framework.js`,
+    codeUrl: `${BUNDLE_BASE_URL}/${id}/WebGL.wasm`,
+    streamingAssetsUrl: "StreamingAssets", // ?
+    companyName: "play.yian.dev",
+    productName: name,
+    productVersion: version,
+  });
 };

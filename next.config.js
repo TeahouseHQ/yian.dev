@@ -16,6 +16,10 @@ module.exports = {
         source: "/play/g/:path*",
         headers: COOP_COEP_HEADERS,
       },
+      {
+        source: "/assets/js/:path*",
+        headers: COOP_COEP_HEADERS,
+      },
     ];
   },
 };

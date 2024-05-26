@@ -36,10 +36,10 @@ export const GameBundles: Record<string, BundleMetadata> = {
     metadata: {
       config: {
         args: [],
-        canvasResizePolicy: 1,
+        canvasResizePolicy: 0,
         executable: "helloDot",
         experimentalVK: false,
-        fileSizes: { "helloDot.pck": 148944, "helloDot.wasm": 35708238 },
+        fileSizes: { "helloDot.pck": 150416, "helloDot.wasm": 35708238 },
         focusCanvas: true,
         gdextensionLibs: [],
       },

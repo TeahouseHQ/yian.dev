@@ -6,6 +6,7 @@ import { SiteTitle, SiteDescription, IS_LOCAL_DEV } from "../lib/constants";
 import "../styles/index.css";
 
 export const metadata = {
+  metadataBase: new URL("https://www.yian.dev"),
   title: SiteTitle,
   description: SiteDescription,
 };
@@ -50,6 +51,13 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/favicon.ico?v=202403" />
         <meta name="msapplication-TileColor" content="#4c574a" />
         <meta name="theme-color" content="#c6ccc3" />
+
+        {/* Theme for highlight.js */}
+        {/* eslint-disable-next-line @next/next/no-css-tags */}
+        <link
+          rel="stylesheet"
+          href="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css"
+        />
 
         {!IS_LOCAL_DEV && (
           <>

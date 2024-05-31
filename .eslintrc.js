@@ -10,6 +10,8 @@ module.exports = {
     "node_modules/",
     "build/",
     ".next/",
+    "public/assets/js/",
+    "postcss.config.js",
     ".eslintrc.js",
     "tailwind.config.js",
     "next.config.js",

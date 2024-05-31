@@ -1,4 +1,6 @@
 import { Metadata, ResolvingMetadata } from "next";
+import Script from "next/script";
+import { useEffect } from "react";
 
 import Container from "../../../components/container";
 import Layout from "../../../components/layout";
@@ -45,6 +47,7 @@ export default async function Page({
   params: Params;
 }): Promise<JSX.Element> {
   const post = await getPost(params);
+
   return (
     <Layout>
       <Container>
@@ -59,6 +62,7 @@ export default async function Page({
           <PostBody content={post.content} />
         </article>
         <PageFooter />
+        <Script src="/assets/js/copy.js" />
       </Container>
     </Layout>
   );

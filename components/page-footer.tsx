@@ -4,7 +4,7 @@ import styles from "./post-styles.module.css";
 
 const PageFooter = (): JSX.Element => {
   return (
-    <div className={`max-w-2xl mx-auto mb-28 ${styles.footer}`}>
+    <div className={`max-w-4xl mx-auto mb-28 ${styles.footer}`}>
       <hr />
 
       <ul className="flex justify-center list-none my-4">

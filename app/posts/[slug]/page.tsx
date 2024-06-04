@@ -1,16 +1,16 @@
 import { Metadata, ResolvingMetadata } from "next";
 import Script from "next/script";
-import { useEffect } from "react";
 
+import PostType from "../../../@types/post";
+import CommentsBox from "../../../components/comments-box";
 import Container from "../../../components/container";
 import Layout from "../../../components/layout";
 import PageFooter from "../../../components/page-footer";
 import PageHeader from "../../../components/page-header";
 import PostBody from "../../../components/post-body";
 import PostHeader from "../../../components/post-header";
-import PostType from "../../../interfaces/post";
 import { getAllPosts, getPostBySlug } from "../../../lib/api";
-import { Suffix } from "../../../lib/constants";
+import { BaseUrl, Suffix } from "../../../lib/constants";
 import markdownToHtml from "../../../lib/markdownToHtml";
 
 export const dynamicParams = false;
@@ -52,7 +52,7 @@ export default async function Page({
     <Layout>
       <Container>
         <PageHeader />
-        <article className="mb-32">
+        <article className="mb-24">
           <PostHeader
             title={post.title}
             coverImage={post.coverImage}
@@ -61,6 +61,11 @@ export default async function Page({
           />
           <PostBody content={post.content} />
         </article>
+        <CommentsBox
+          pageUrl={`${BaseUrl}/posts/${post.slug}`}
+          pageId={post.id}
+          enabled={post.commentsEnabled}
+        />
         <PageFooter />
         <Script src="/assets/js/copy.js" />
       </Container>
@@ -78,6 +83,7 @@ export async function generateStaticParams(): Promise<Params[]> {
 
 async function getPost(params): Promise<PostType> {
   const post = getPostBySlug(params.slug, [
+    "id",
     "title",
     "date",
     "slug",

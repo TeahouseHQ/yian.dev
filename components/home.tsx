@@ -1,6 +1,6 @@
 import PostList from "./post-list";
 import Logo from "./ppd-logo";
-import PostType from "../interfaces/post";
+import PostType from "../@types/post";
 
 type Props = {
   posts: PostType[];

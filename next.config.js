@@ -1,3 +1,7 @@
+/**
+ * @type {import('next').NextConfig}
+ */
+
 const COOP_COEP_HEADERS = [
   {
     key: "Cross-Origin-Opener-Policy",

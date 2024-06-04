@@ -28,12 +28,9 @@
     }
   },
   "files.associations": {
-    "*.css": "tailwindcss",
+    "*.css": "tailwindcss"
   },
-  "cSpell.words": [
-    "firestore",
-    "tailwindcss"
-  ],
+  "cSpell.words": ["COEP", "disqus", "firestore", "tailwindcss"],
   "[javascript][javascriptreact][typescript][typescriptreact]": {
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit"

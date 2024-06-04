@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import DateFormatter from "./date-formatter";
-import Post from "../interfaces/post";
+import Post from "../@types/post";
 
 interface Props {
   posts: Post[];
@@ -13,7 +13,10 @@ const PostList = ({ posts }: Props): JSX.Element => {
       {posts.map((post) => (
         <div key={post.slug}>
           <h3 className="mb-4 text-3xl font-bold leading-tight tracking-tight">
-            <Link href={`/posts/${post.slug}`}>{post.title}</Link>
+            <Link href={`/posts/${post.slug}`}>
+              {post.isDraft ? "[Draft-local-only] " : ""}
+              {post.title}
+            </Link>
           </h3>
           <div className="mb-4 text-gray-700">{post.excerpt}</div>
           <div className="mb-4 text-gray-500">

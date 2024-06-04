@@ -1,13 +1,14 @@
 ---
-title: 'Hello World'
-excerpt: 'Hello, World. Welcome to Pedal Powered Dev, the new homepage/blog where I plan to write about my journey in game dev, cycling, and random things worth documenting in life.'
-coverImage: '/assets/blog/hello-world/helloworld.jpg'
-date: '2024-02-19T01:28:48Z'
+id: "8a0a8671-428f-4604-80d3-46fec5315aa7"
+title: "Hello World"
+excerpt: "Hello, World. Welcome to Pedal Powered Dev, the new homepage/blog where I plan to write about my journey in game dev, cycling, and random things worth documenting in life."
+coverImage: "/assets/blog/hello-world/helloworld.jpg"
+date: "2024-02-19T01:28:48Z"
 author:
   name: Yian
-  picture: '/assets/blog/authors/yian.png'
+  picture: "/assets/blog/authors/yian.png"
 ogImage:
-  url: '/assets/blog/hello-world/helloworld.jpg'
+  url: "/assets/blog/hello-world/helloworld.jpg"
 ---
 
 Hello, World.

@@ -1,12 +1,17 @@
 import { Noto_Sans } from "next/font/google";
 import Script from "next/script";
 
-import { SiteTitle, SiteDescription, IS_LOCAL_DEV } from "../lib/constants";
+import {
+  SiteTitle,
+  SiteDescription,
+  IS_LOCAL_DEV,
+  BaseUrl,
+} from "../lib/constants";
 
 import "../styles/index.css";
 
 export const metadata = {
-  metadataBase: new URL("https://www.yian.dev"),
+  metadataBase: new URL(BaseUrl),
   title: SiteTitle,
   description: SiteDescription,
 };

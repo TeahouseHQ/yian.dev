@@ -3,7 +3,8 @@ import { join } from "path";
 
 import matter from "gray-matter";
 
-import type Post from "../interfaces/post";
+import { IS_LOCAL_DEV } from "./constants";
+import type Post from "../@types/post";
 
 const postsDirectory = join(process.cwd(), "_posts");
 
@@ -34,6 +35,9 @@ export function getPostBySlug(slug: string, fields: string[] = []): Items {
     }
   });
 
+  items["isDraft"] = data["isDraft"] || false;
+  items["commentsEnabled"] = data["commentsEnabled"] || false;
+
   return items;
 }
 
@@ -41,6 +45,7 @@ export function getAllPosts(fields: string[] = []): Post[] {
   const slugs = getPostSlugs();
   const posts = slugs
     .map((slug) => getPostBySlug(slug, fields))
+    .filter((post) => IS_LOCAL_DEV || !post.isDraft)
     // sort posts by date in descending order
     .sort((post1, post2) => (post1.date > post2.date ? -1 : 1));
   return posts as unknown as Post[];

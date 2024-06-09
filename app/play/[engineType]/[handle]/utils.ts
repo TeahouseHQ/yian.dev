@@ -1,4 +1,4 @@
-import { getBundleMetadata } from "../../gameCatalog";
+import { getBundleMetadata } from "../../../../lib/gameCatalog";
 
 const BUNDLE_BASE_URL = "https://play.yian.dev";
 

@@ -2,7 +2,7 @@ import { Metadata, ResolvingMetadata, Viewport } from "next/types";
 import React from "react";
 
 import { Suffix } from "../../../../lib/constants";
-import { getBundleMetadata } from "../../gameCatalog";
+import { getBundleMetadata } from "../../../../lib/gameCatalog";
 
 type PageProps = {
   params: {
@@ -42,12 +42,5 @@ export async function generateMetadata(
 }
 
 export default async function Index({ children }): Promise<JSX.Element> {
-  return (
-    <div className="flex justify-center">
-      {children}
-      <div className="md:fixed md:block hidden bottom-0 right-0 p-2">
-        <a href="https://play.yian.dev">play.yian.dev</a>
-      </div>
-    </div>
-  );
+  return <div className="flex justify-center min-h-screen">{children}</div>;
 }

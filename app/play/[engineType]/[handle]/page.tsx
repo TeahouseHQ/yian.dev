@@ -2,7 +2,7 @@ import React from "react";
 
 import GodotRenderer from "./components/godotRenderer";
 import UnityRenderer from "./components/unityRenderer";
-import { GameBundles } from "../../gameCatalog";
+import { GameBundles } from "../../../../lib/gameCatalog";
 
 interface Params {
   engineType: "g" | "u";

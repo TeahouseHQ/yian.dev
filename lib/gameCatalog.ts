@@ -5,6 +5,7 @@ export type BundleMetadata = {
   name: string;
   version: string;
   description?: string;
+  screenshots: string[];
   engineType: "godot" | "unity";
   metadata?: Record<string, unknown>;
 };
@@ -15,24 +16,28 @@ export const GameBundles: Record<string, BundleMetadata> = {
     name: "Floppy Bird",
     version: "1.0.0",
     engineType: "unity",
+    screenshots: ["/assets/images/floppybird.png"],
   },
   "pop-le-lock": {
     id: "pop-le-lock",
     name: "Pop Le Lock",
     version: "1.0.0",
     engineType: "unity",
+    screenshots: ["/assets/images/poplelock.png"],
   },
   challenge5: {
     id: "challenge5",
     name: "Challenge 5",
     version: "1.0.0",
     engineType: "unity",
+    screenshots: ["/assets/images/challenge5.png"],
   },
   "hello-dot": {
     id: "hello-dot",
     name: "Hello Dot",
     version: "1.0.0",
     engineType: "godot",
+    screenshots: ["/assets/images/hellodot.png"],
     metadata: {
       config: {
         args: [],

@@ -1,7 +1,16 @@
-const PpdLogo = ({ width = 240, height = 240 }): JSX.Element => {
+const Classes = {
+  base: "relative",
+  background: "absolute bottom-0 right-0 opacity-20 z-[-10]",
+};
+
+const PpdLogo = ({
+  width = 240,
+  height = 240,
+  backgroundMode = false,
+}): JSX.Element => {
   return (
     <div
-      className="relative"
+      className={backgroundMode ? Classes.background : Classes.base}
       style={{ width: `${width}px`, height: `${height}px` }}
     >
       <svg

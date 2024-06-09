@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-brand-50 text-brand-400;
+    @apply bg-brand-50 text-brand-400 relative;
   }
 
   h1 {

@@ -3,7 +3,7 @@
 import Script from "next/script";
 import React from "react";
 
-import { getBundleMetadata } from "../../../gameCatalog";
+import { getBundleMetadata } from "../../../../../lib/gameCatalog";
 
 type PageProps = {
   handle: string;

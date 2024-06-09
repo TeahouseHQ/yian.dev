@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import styles from "./post-styles.module.css";
+import styles from "./styles.module.css";
 
 const PageFooter = (): JSX.Element => {
   return (

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import PostList from "./post-list";
 import Logo from "./ppd-logo";
 import PostType from "../@types/post";
@@ -10,7 +12,9 @@ const Home = ({ posts }: Props): JSX.Element => {
   return (
     <div className="flex-col md:flex-row flex items-center md:justify-between md:h-screen">
       <div className="flex flex-col items-center md:w-5/12 gap-2 py-16 md:py-0">
-        <Logo />
+        <Link href={"/play"}>
+          <Logo />
+        </Link>
         <h1>Yi-An Lai</h1>
         <h2>Fullstack | Roadie</h2>
         <div className="flex flex-row items-center justify-center gap-2 text-2xl min-h-[40px]">

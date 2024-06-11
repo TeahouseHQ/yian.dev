@@ -15,8 +15,8 @@ const Home = ({ posts }: Props): JSX.Element => {
         <Link href={"/play"}>
           <Logo />
         </Link>
-        <h1>Yi-An Lai</h1>
-        <h2>Fullstack | Roadie</h2>
+        <h1 className="text-4xl">Yi-An Lai</h1>
+        <h2 className="text-2xl">Fullstack | Roadie</h2>
         <div className="flex flex-row items-center justify-center gap-2 text-2xl min-h-[40px]">
           <a
             href="https://www.linkedin.com/in/yi-an-lai-andrew/"

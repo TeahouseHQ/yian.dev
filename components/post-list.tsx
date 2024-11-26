@@ -18,7 +18,13 @@ const PostList = ({ posts }: Props): JSX.Element => {
               {post.title}
             </Link>
           </h3>
-          <div className="mb-4 text-gray-700">{post.excerpt}</div>
+          <div
+            className={`mb-4 ${
+              post.excerpt ? "text-gray-700" : "text-gray-400"
+            }`}
+          >
+            {post.excerpt || "No excerpt available for this post."}
+          </div>
           <div className="mb-4 text-gray-500">
             <DateFormatter isoDateString={post.date} />
           </div>

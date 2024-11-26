@@ -39,7 +39,9 @@ const HeroPost = ({
           </div>
         </div>
         <div>
-          <p className="text-lg leading-relaxed mb-4">{excerpt}</p>
+          <p className="text-lg leading-relaxed mb-4">
+            {excerpt || "No excerpt available for this post."}
+          </p>
           <Avatar name={author.name} picture={author.picture} />
         </div>
       </div>

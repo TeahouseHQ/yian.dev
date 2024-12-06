@@ -15,6 +15,9 @@
     "isolatedModules": true,
     "incremental": true,
     "strictNullChecks": true,
+    "paths": {
+      "#/*": ["./*"]
+    },
     "plugins": [
       {
         "name": "next"

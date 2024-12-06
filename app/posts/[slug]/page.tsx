@@ -1,7 +1,7 @@
 import { Metadata, ResolvingMetadata } from "next";
 import Script from "next/script";
+import type PostType from "types/post";
 
-import PostType from "../../../@types/post";
 import CommentsBox from "../../../components/comments-box";
 import Container from "../../../components/container";
 import Layout from "../../../components/layout";

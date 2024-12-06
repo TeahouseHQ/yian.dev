@@ -16,7 +16,8 @@
     "incremental": true,
     "strictNullChecks": true,
     "paths": {
-      "#/*": ["./*"]
+      "#/*": ["./*"],
+      "types/*": ["./@types/*"]
     },
     "plugins": [
       {

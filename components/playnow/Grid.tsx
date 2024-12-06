@@ -1,7 +1,8 @@
+import { TileValue } from "types/game";
+
 import SummaryTile from "./SummaryTile";
 import Tile from "./Tile";
 
-import { TileValue } from "#/@types/game";
 import { useGame } from "#/lib/GameContext";
 
 // Helper function to calculate row statistics

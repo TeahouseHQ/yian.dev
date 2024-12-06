@@ -1,4 +1,5 @@
-import { Tile as TileType } from "#/@types/game";
+import { Tile as TileType } from "types/game";
+
 import { useGame } from "#/lib/GameContext";
 
 interface TileProps {

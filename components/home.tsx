@@ -1,8 +1,8 @@
 import Link from "next/link";
+import PostType from "types/post";
 
 import PostList from "./post-list";
 import Logo from "./ppd-logo";
-import PostType from "../@types/post";
 
 type Props = {
   posts: PostType[];

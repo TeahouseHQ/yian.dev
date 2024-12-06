@@ -32,6 +32,7 @@ const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
   const { revealTile, isGameOver } = useGame();
 
   const handleClick = () => {
+    console.log("handleClick", rowIndex, colIndex);
     if (!tile.isRevealed) {
       revealTile(rowIndex, colIndex);
     }

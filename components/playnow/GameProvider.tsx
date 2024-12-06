@@ -17,13 +17,16 @@ export default function GameProvider({
   );
   const [grid, setGrid] = useState<Tile[][]>(createInitialGrid(seed));
   const [isGameOver, setIsGameOver] = useState(false);
+  const [score, setScore] = useState(1);
 
   const revealTile = (rowIndex: number, colIndex: number) => {
+    console.log("revealTile", rowIndex, colIndex);
     if (isGameOver) {
       return;
     }
 
     setGrid((prevGrid) => {
+      console.log("prevGrid", prevGrid);
       const newGrid = [...prevGrid];
       newGrid[rowIndex] = [...newGrid[rowIndex]];
       const tile = newGrid[rowIndex][colIndex];
@@ -35,6 +38,7 @@ export default function GameProvider({
       if (tile.value === 0) {
         setIsGameOver(true);
       }
+      setScore((currentScore) => currentScore * tile.value);
 
       return newGrid;
     });
@@ -45,11 +49,12 @@ export default function GameProvider({
     setSeed(newSeed);
     setGrid(createInitialGrid(newSeed));
     setIsGameOver(false);
+    setScore(1);
   };
 
   return (
     <GameContext.Provider
-      value={{ grid, revealTile, seed, isGameOver, resetGame }}
+      value={{ grid, revealTile, seed, isGameOver, resetGame, score }}
     >
       {children}
     </GameContext.Provider>

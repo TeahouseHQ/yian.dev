@@ -9,6 +9,7 @@ export const GameContext = createContext<GameContextType>({
   resetGame: () => {},
   seed: 0,
   isGameOver: false,
+  score: 1,
 });
 
 // Create a 5x5 grid with random values (1, 2, 3, or bomb)

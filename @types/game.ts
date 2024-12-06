@@ -8,6 +8,7 @@ export interface Tile {
 export interface GameContextType {
   grid: Tile[][];
   seed: number;
+  score: number;
   isGameOver: boolean;
   revealTile: (rowIndex: number, colIndex: number) => void;
   resetGame: () => void;

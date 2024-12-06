@@ -1,6 +1,5 @@
-import { Tile as TileType, TileValue } from "types/game";
-
 import { useGame } from "#/lib/GameContext";
+import { Tile as TileType, TileValue } from "types/game";
 
 interface TileProps {
   rowIndex: number;
@@ -51,11 +50,7 @@ const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
       `}
         onClick={handleClick}
       >
-        <TileValue
-          value={tile.value}
-          isRevealed={tile.isRevealed}
-          forceReveal
-        />
+        <TileValue value={tile.value} isRevealed={tile.isRevealed} forceReveal />
       </div>
     );
   }

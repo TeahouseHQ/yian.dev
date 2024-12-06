@@ -31,8 +31,7 @@ const TypeWriter = ({ phrases }: { phrases: string[] }): JSX.Element => {
 
   const getRandomPhrase = useCallback(
     (shouldClearPreviousContent: boolean) => {
-      const previousPhrase =
-        sequence.length && sequence[sequence.length - 1].text;
+      const previousPhrase = sequence.length && sequence[sequence.length - 1].text;
 
       const result =
         shouldClearPreviousContent && previousPhrase
@@ -62,10 +61,7 @@ const TypeWriter = ({ phrases }: { phrases: string[] }): JSX.Element => {
   const playRandomSequence = useCallback(
     (shouldClearPreviousContent: boolean) => {
       if (typewriter.current === null) {
-        typewriter.current = initializeTypewriterJs(
-          targetSpan.current,
-          onTypeSequenceComplete
-        );
+        typewriter.current = initializeTypewriterJs(targetSpan.current, onTypeSequenceComplete);
       }
 
       const newSequence = getRandomPhrase(shouldClearPreviousContent);
@@ -88,10 +84,7 @@ const TypeWriter = ({ phrases }: { phrases: string[] }): JSX.Element => {
   }, []);
 
   return (
-    <div
-      className="typewriter"
-      onClick={isTypeProgressing ? undefined : replayRandomSequence}
-    >
+    <div className="typewriter" onClick={isTypeProgressing ? undefined : replayRandomSequence}>
       <span>{"> "}</span>
       <span ref={targetSpan} />
     </div>

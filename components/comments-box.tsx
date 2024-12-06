@@ -44,9 +44,7 @@ const CommentsBox = (props: Props): JSX.Element => {
       <div id="disqus_thread" />
       <noscript>
         Please enable JavaScript to view the{" "}
-        <a href="https://disqus.com/?ref_noscript">
-          comments powered by Disqus.
-        </a>
+        <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
       </noscript>
     </div>
   );

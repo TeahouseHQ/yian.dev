@@ -5,7 +5,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@typescript-eslint/parser": "^6.3.0",
@@ -38,6 +39,8 @@
     "eslint-plugin-promise": "^6.0.0",
     "eslint-plugin-react": "^7.33.1",
     "postcss": "^8.4.14",
-    "tailwindcss": "^3.3.3"
+    "tailwindcss": "^3.3.3",
+    "prettier": "^3.2.5",
+    "eslint-plugin-prettier": "^5.1.3"
   }
 }

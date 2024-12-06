@@ -195,8 +195,7 @@ var Godot = (() => {
       if (typeof print != "undefined") {
         if (typeof console == "undefined") console = {};
         console.log = print;
-        console.warn = console.error =
-          typeof printErr != "undefined" ? printErr : print;
+        console.warn = console.error = typeof printErr != "undefined" ? printErr : print;
       }
     } else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
       if (ENVIRONMENT_IS_WORKER) {
@@ -330,14 +329,11 @@ var Godot = (() => {
 
     legacyModuleProp("setWindowTitle", "setWindowTitle");
 
-    var PROXYFS =
-      "PROXYFS is no longer included by default; build with -lproxyfs.js";
+    var PROXYFS = "PROXYFS is no longer included by default; build with -lproxyfs.js";
 
-    var WORKERFS =
-      "WORKERFS is no longer included by default; build with -lworkerfs.js";
+    var WORKERFS = "WORKERFS is no longer included by default; build with -lworkerfs.js";
 
-    var NODEFS =
-      "NODEFS is no longer included by default; build with -lnodefs.js";
+    var NODEFS = "NODEFS is no longer included by default; build with -lnodefs.js";
 
     assert(
       ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER || ENVIRONMENT_IS_NODE,
@@ -485,9 +481,7 @@ var Godot = (() => {
         );
       }
       if (GROWABLE_HEAP_U32()[0] !== 1668509029) {
-        abort(
-          "Runtime error: The application has corrupted its heap memory area (address zero)!"
-        );
+        abort("Runtime error: The application has corrupted its heap memory area (address zero)!");
       }
     }
 
@@ -522,8 +516,7 @@ var Godot = (() => {
     function preRun() {
       assert(!ENVIRONMENT_IS_PTHREAD);
       if (Module["preRun"]) {
-        if (typeof Module["preRun"] == "function")
-          Module["preRun"] = [Module["preRun"]];
+        if (typeof Module["preRun"] == "function") Module["preRun"] = [Module["preRun"]];
         while (Module["preRun"].length) {
           addOnPreRun(Module["preRun"].shift());
         }
@@ -566,8 +559,7 @@ var Godot = (() => {
       checkStackCookie();
       if (ENVIRONMENT_IS_PTHREAD) return;
       if (Module["postRun"]) {
-        if (typeof Module["postRun"] == "function")
-          Module["postRun"] = [Module["postRun"]];
+        if (typeof Module["postRun"] == "function") Module["postRun"] = [Module["postRun"]];
         while (Module["postRun"].length) {
           addOnPostRun(Module["postRun"].shift());
         }
@@ -639,10 +631,7 @@ var Godot = (() => {
       if (id) {
         assert(!runDependencyTracking[id]);
         runDependencyTracking[id] = 1;
-        if (
-          runDependencyWatcher === null &&
-          typeof setInterval != "undefined"
-        ) {
+        if (runDependencyWatcher === null && typeof setInterval != "undefined") {
           runDependencyWatcher = setInterval(() => {
             if (ABORT) {
               clearInterval(runDependencyWatcher);
@@ -723,9 +712,7 @@ var Godot = (() => {
         }
         assert(
           runtimeInitialized,
-          "native function `" +
-            displayName +
-            "` called before runtime initialization"
+          "native function `" + displayName + "` called before runtime initialization"
         );
         assert(
           !runtimeExited,
@@ -734,10 +721,7 @@ var Godot = (() => {
             "` called after runtime exit (use NO_EXIT_RUNTIME to keep it alive after main() exits)"
         );
         if (!asm[name]) {
-          assert(
-            asm[name],
-            "exported native function `" + displayName + "` not found"
-          );
+          assert(asm[name], "exported native function `" + displayName + "` not found");
         }
         return asm[name].apply(null, arguments);
       };
@@ -839,9 +823,7 @@ var Godot = (() => {
         assert(wasmTable, "table not found in wasm exports");
         addOnInit(Module["asm"]["__wasm_call_ctors"]);
         wasmModule = module;
-        PThread.loadWasmModuleToAllWorkers(() =>
-          removeRunDependency("wasm-instantiate")
-        );
+        PThread.loadWasmModuleToAllWorkers(() => removeRunDependency("wasm-instantiate"));
         return exports;
       }
       addRunDependency("wasm-instantiate");
@@ -862,12 +844,9 @@ var Godot = (() => {
           readyPromiseReject(e);
         }
       }
-      instantiateAsync(
-        wasmBinary,
-        wasmBinaryFile,
-        info,
-        receiveInstantiationResult
-      ).catch(readyPromiseReject);
+      instantiateAsync(wasmBinary, wasmBinaryFile, info, receiveInstantiationResult).catch(
+        readyPromiseReject
+      );
       return {};
     }
 
@@ -922,9 +901,7 @@ var Godot = (() => {
         Object.defineProperty(globalThis, sym, {
           configurable: true,
           get: function () {
-            warnOnce(
-              "`" + sym + "` is not longer defined by emscripten. " + msg
-            );
+            warnOnce("`" + sym + "` is not longer defined by emscripten. " + msg);
             return undefined;
           },
         });
@@ -934,10 +911,7 @@ var Godot = (() => {
     missingGlobal("buffer", "Please use HEAP8.buffer or wasmMemory.buffer");
 
     function missingLibrarySymbol(sym) {
-      if (
-        typeof globalThis !== "undefined" &&
-        !Object.getOwnPropertyDescriptor(globalThis, sym)
-      ) {
+      if (typeof globalThis !== "undefined" && !Object.getOwnPropertyDescriptor(globalThis, sym)) {
         Object.defineProperty(globalThis, sym, {
           configurable: true,
           get: function () {
@@ -949,10 +923,7 @@ var Godot = (() => {
             if (!librarySymbol.startsWith("_")) {
               librarySymbol = "$" + sym;
             }
-            msg +=
-              " (e.g. -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=" +
-              librarySymbol +
-              ")";
+            msg += " (e.g. -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=" + librarySymbol + ")";
             if (isExportedByForceFilesystem(sym)) {
               msg +=
                 ". Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you";
@@ -971,9 +942,7 @@ var Godot = (() => {
           configurable: true,
           get: function () {
             var msg =
-              "'" +
-              sym +
-              "' was not exported. add it to EXPORTED_RUNTIME_METHODS (see the FAQ)";
+              "'" + sym + "' was not exported. add it to EXPORTED_RUNTIME_METHODS (see the FAQ)";
             if (isExportedByForceFilesystem(sym)) {
               msg +=
                 ". Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you";
@@ -998,12 +967,7 @@ var Godot = (() => {
       worker.terminate();
       worker.onmessage = (e) => {
         var cmd = e["data"]["cmd"];
-        err(
-          'received "' +
-            cmd +
-            '" command from terminated worker: ' +
-            worker.workerID
-        );
+        err('received "' + cmd + '" command from terminated worker: ' + worker.workerID);
       };
     }
 
@@ -1076,8 +1040,7 @@ var Godot = (() => {
     var PATH = {
       isAbs: (path) => path.charAt(0) === "/",
       splitPath: (filename) => {
-        var splitPathRe =
-          /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
+        var splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
         return splitPathRe.exec(filename).slice(1);
       },
       normalizeArray: (parts, allowAboveRoot) => {
@@ -1146,14 +1109,8 @@ var Godot = (() => {
     };
 
     function initRandomFill() {
-      if (
-        typeof crypto == "object" &&
-        typeof crypto["getRandomValues"] == "function"
-      ) {
-        return (view) => (
-          view.set(crypto.getRandomValues(new Uint8Array(view.byteLength))),
-          view
-        );
+      if (typeof crypto == "object" && typeof crypto["getRandomValues"] == "function") {
+        return (view) => (view.set(crypto.getRandomValues(new Uint8Array(view.byteLength))), view);
       } else
         abort(
           "no cryptographic support found for randomDevice. consider polyfilling it if you want to use something insecure like Math.random(), e.g. put this in a --pre-js: var crypto = { getRandomValues: function(array) { for (var i = 0; i < array.length; i++) array[i] = (Math.random()*256)|0 } };"
@@ -1280,18 +1237,12 @@ var Godot = (() => {
     function intArrayFromString(stringy, dontAddNull, length) {
       var len = length > 0 ? length : lengthBytesUTF8(stringy) + 1;
       var u8array = new Array(len);
-      var numBytesWritten = stringToUTF8Array(
-        stringy,
-        u8array,
-        0,
-        u8array.length
-      );
+      var numBytesWritten = stringToUTF8Array(stringy, u8array, 0, u8array.length);
       if (dontAddNull) u8array.length = numBytesWritten;
       return u8array;
     }
 
-    var UTF8Decoder =
-      typeof TextDecoder != "undefined" ? new TextDecoder("utf8") : undefined;
+    var UTF8Decoder = typeof TextDecoder != "undefined" ? new TextDecoder("utf8") : undefined;
 
     function UTF8ArrayToString(heapOrArray, idx, maxBytesToRead) {
       var endIdx = idx + maxBytesToRead;
@@ -1326,11 +1277,7 @@ var Godot = (() => {
                 ptrToString(u0) +
                 " encountered when deserializing a UTF-8 string in wasm memory to a JS string!"
             );
-          u0 =
-            ((u0 & 7) << 18) |
-            (u1 << 12) |
-            (u2 << 6) |
-            (heapOrArray[idx++] & 63);
+          u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
         }
         if (u0 < 65536) {
           str += String.fromCharCode(u0);
@@ -1414,10 +1361,7 @@ var Godot = (() => {
         get_char: function (tty) {
           if (!tty.input.length) {
             var result = null;
-            if (
-              typeof window != "undefined" &&
-              typeof window.prompt == "function"
-            ) {
+            if (typeof window != "undefined" && typeof window.prompt == "function") {
               result = window.prompt("Input: ");
               if (result !== null) {
                 result += "\n";
@@ -1563,8 +1507,7 @@ var Godot = (() => {
       },
       getFileDataAsTypedArray: function (node) {
         if (!node.contents) return new Uint8Array(0);
-        if (node.contents.subarray)
-          return node.contents.subarray(0, node.usedBytes);
+        if (node.contents.subarray) return node.contents.subarray(0, node.usedBytes);
         return new Uint8Array(node.contents);
       },
       expandFileStorage: function (node, newCapacity) {
@@ -1573,15 +1516,12 @@ var Godot = (() => {
         var CAPACITY_DOUBLING_MAX = 1024 * 1024;
         newCapacity = Math.max(
           newCapacity,
-          (prevCapacity *
-            (prevCapacity < CAPACITY_DOUBLING_MAX ? 2 : 1.125)) >>>
-            0
+          (prevCapacity * (prevCapacity < CAPACITY_DOUBLING_MAX ? 2 : 1.125)) >>> 0
         );
         if (prevCapacity != 0) newCapacity = Math.max(newCapacity, 256);
         var oldContents = node.contents;
         node.contents = new Uint8Array(newCapacity);
-        if (node.usedBytes > 0)
-          node.contents.set(oldContents.subarray(0, node.usedBytes), 0);
+        if (node.usedBytes > 0) node.contents.set(oldContents.subarray(0, node.usedBytes), 0);
       },
       resizeFileStorage: function (node, newSize) {
         if (node.usedBytes == newSize) return;
@@ -1592,9 +1532,7 @@ var Godot = (() => {
           var oldContents = node.contents;
           node.contents = new Uint8Array(newSize);
           if (oldContents) {
-            node.contents.set(
-              oldContents.subarray(0, Math.min(newSize, node.usedBytes))
-            );
+            node.contents.set(oldContents.subarray(0, Math.min(newSize, node.usedBytes)));
           }
           node.usedBytes = newSize;
         }
@@ -1704,8 +1642,7 @@ var Godot = (() => {
           if (size > 8 && contents.subarray) {
             buffer.set(contents.subarray(position, position + size), offset);
           } else {
-            for (var i = 0; i < size; i++)
-              buffer[offset + i] = contents[position + i];
+            for (var i = 0; i < size; i++) buffer[offset + i] = contents[position + i];
           }
           return size;
         },
@@ -1719,10 +1656,7 @@ var Godot = (() => {
           node.timestamp = Date.now();
           if (buffer.subarray && (!node.contents || node.contents.subarray)) {
             if (canOwn) {
-              assert(
-                position === 0,
-                "canOwn must imply no weird position inside the file"
-              );
+              assert(position === 0, "canOwn must imply no weird position inside the file");
               node.contents = buffer.subarray(offset, offset + length);
               node.usedBytes = length;
               return length;
@@ -1731,19 +1665,13 @@ var Godot = (() => {
               node.usedBytes = length;
               return length;
             } else if (position + length <= node.usedBytes) {
-              node.contents.set(
-                buffer.subarray(offset, offset + length),
-                position
-              );
+              node.contents.set(buffer.subarray(offset, offset + length), position);
               return length;
             }
           }
           MEMFS.expandFileStorage(node, position + length);
           if (node.contents.subarray && buffer.subarray) {
-            node.contents.set(
-              buffer.subarray(offset, offset + length),
-              position
-            );
+            node.contents.set(buffer.subarray(offset, offset + length), position);
           } else {
             for (var i = 0; i < length; i++) {
               node.contents[position + i] = buffer[offset + i];
@@ -1768,10 +1696,7 @@ var Godot = (() => {
         },
         allocate: function (stream, offset, length) {
           MEMFS.expandFileStorage(stream.node, offset + length);
-          stream.node.usedBytes = Math.max(
-            stream.node.usedBytes,
-            offset + length
-          );
+          stream.node.usedBytes = Math.max(stream.node.usedBytes, offset + length);
         },
         mmap: function (stream, length, position, prot, flags) {
           if (!FS.isFile(stream.node.mode)) {
@@ -1788,11 +1713,7 @@ var Godot = (() => {
               if (contents.subarray) {
                 contents = contents.subarray(position, position + length);
               } else {
-                contents = Array.prototype.slice.call(
-                  contents,
-                  position,
-                  position + length
-                );
+                contents = Array.prototype.slice.call(contents, position, position + length);
               }
             }
             allocated = true;
@@ -1819,10 +1740,7 @@ var Godot = (() => {
       readAsync(
         url,
         (arrayBuffer) => {
-          assert(
-            arrayBuffer,
-            `Loading data file "${url}" failed (no arrayBuffer).`
-          );
+          assert(arrayBuffer, `Loading data file "${url}" failed (no arrayBuffer).`);
           onload(new Uint8Array(arrayBuffer));
           if (dep) removeRunDependency(dep);
         },
@@ -1870,14 +1788,7 @@ var Godot = (() => {
         function finish(byteArray) {
           if (preFinish) preFinish();
           if (!dontCreateFile) {
-            FS.createDataFile(
-              parent,
-              name,
-              byteArray,
-              canRead,
-              canWrite,
-              canOwn
-            );
+            FS.createDataFile(parent, name, byteArray, canRead, canWrite, canOwn);
           }
           if (onload) onload();
           removeRunDependency(dep);
@@ -1930,10 +1841,7 @@ var Godot = (() => {
         var ret = null;
         if (typeof window == "object")
           ret =
-            window.indexedDB ||
-            window.mozIndexedDB ||
-            window.webkitIndexedDB ||
-            window.msIndexedDB;
+            window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
         assert(ret, "IDBFS used, but indexedDB not supported");
         return ret;
       },
@@ -2018,10 +1926,7 @@ var Godot = (() => {
             return callback(e);
           }
           if (FS.isDir(stat.mode)) {
-            check.push.apply(
-              check,
-              FS.readdir(path).filter(isRealDir).map(toAbsolute(path))
-            );
+            check.push.apply(check, FS.readdir(path).filter(isRealDir).map(toAbsolute(path)));
           }
           entries[path] = {
             timestamp: stat.mtime,
@@ -2345,9 +2250,7 @@ var Godot = (() => {
     var ERRNO_CODES = {};
 
     function demangle(func) {
-      warnOnce(
-        "warning: build with -sDEMANGLE_SUPPORT to link in libcxxabi demangling"
-      );
+      warnOnce("warning: build with -sDEMANGLE_SUPPORT to link in libcxxabi demangling");
       return func;
     }
 
@@ -2429,9 +2332,7 @@ var Godot = (() => {
           if (FS.isRoot(node)) {
             var mount = node.mount.mountpoint;
             if (!path) return mount;
-            return mount[mount.length - 1] !== "/"
-              ? `${mount}/${path}`
-              : mount + path;
+            return mount[mount.length - 1] !== "/" ? `${mount}/${path}` : mount + path;
           }
           path = path ? `${node.name}/${path}` : node.name;
           node = node.parent;
@@ -2909,10 +2810,7 @@ var Godot = (() => {
         if (!old_dir.node_ops.rename) {
           throw new FS.ErrnoError(63);
         }
-        if (
-          FS.isMountpoint(old_node) ||
-          (new_node && FS.isMountpoint(new_node))
-        ) {
+        if (FS.isMountpoint(old_node) || (new_node && FS.isMountpoint(new_node))) {
           throw new FS.ErrnoError(10);
         }
         if (new_dir !== old_dir) {
@@ -2992,10 +2890,7 @@ var Godot = (() => {
         if (!link.node_ops.readlink) {
           throw new FS.ErrnoError(28);
         }
-        return PATH_FS.resolve(
-          FS.getPath(link.parent),
-          link.node_ops.readlink(link)
-        );
+        return PATH_FS.resolve(FS.getPath(link.parent), link.node_ops.readlink(link));
       },
       stat: (path, dontFollow) => {
         var lookup = FS.lookupPath(path, {
@@ -3247,13 +3142,7 @@ var Godot = (() => {
         } else if (!stream.seekable) {
           throw new FS.ErrnoError(70);
         }
-        var bytesRead = stream.stream_ops.read(
-          stream,
-          buffer,
-          offset,
-          length,
-          position
-        );
+        var bytesRead = stream.stream_ops.read(stream, buffer, offset, length, position);
         if (!seeking) stream.position += bytesRead;
         return bytesRead;
       },
@@ -3312,11 +3201,7 @@ var Godot = (() => {
         stream.stream_ops.allocate(stream, offset, length);
       },
       mmap: (stream, length, position, prot, flags) => {
-        if (
-          (prot & 2) !== 0 &&
-          (flags & 2) === 0 &&
-          (stream.flags & 2097155) !== 2
-        ) {
+        if ((prot & 2) !== 0 && (flags & 2) === 0 && (stream.flags & 2097155) !== 2) {
           throw new FS.ErrnoError(2);
         }
         if ((stream.flags & 2097155) === 1) {
@@ -3331,13 +3216,7 @@ var Godot = (() => {
         if (!stream.stream_ops.msync) {
           return 0;
         }
-        return stream.stream_ops.msync(
-          stream,
-          buffer,
-          offset,
-          length,
-          mmapFlags
-        );
+        return stream.stream_ops.msync(stream, buffer, offset, length, mmapFlags);
       },
       munmap: (stream) => 0,
       ioctl: (stream, cmd, arg) => {
@@ -3609,10 +3488,7 @@ var Godot = (() => {
         return current;
       },
       createFile: (parent, name, properties, canRead, canWrite) => {
-        var path = PATH.join2(
-          typeof parent == "string" ? parent : FS.getPath(parent),
-          name
-        );
+        var path = PATH.join2(typeof parent == "string" ? parent : FS.getPath(parent), name);
         var mode = FS_getMode(canRead, canWrite);
         return FS.create(path, mode);
       },
@@ -3627,8 +3503,7 @@ var Godot = (() => {
         if (data) {
           if (typeof data == "string") {
             var arr = new Array(data.length);
-            for (var i = 0, len = data.length; i < len; ++i)
-              arr[i] = data.charCodeAt(i);
+            for (var i = 0, len = data.length; i < len; ++i) arr[i] = data.charCodeAt(i);
             data = arr;
           }
           FS.chmod(node, mode | 146);
@@ -3640,10 +3515,7 @@ var Godot = (() => {
         return node;
       },
       createDevice: (parent, name, input, output) => {
-        var path = PATH.join2(
-          typeof parent == "string" ? parent : FS.getPath(parent),
-          name
-        );
+        var path = PATH.join2(typeof parent == "string" ? parent : FS.getPath(parent), name);
         var mode = FS_getMode(!!input, !!output);
         if (!FS.createDevice.major) FS.createDevice.major = 64;
         var dev = FS.makedev(FS.createDevice.major++, 0);
@@ -3694,8 +3566,7 @@ var Godot = (() => {
         return FS.mkdev(path, mode, dev);
       },
       forceLoadFile: (obj) => {
-        if (obj.isDevice || obj.isFolder || obj.link || obj.contents)
-          return true;
+        if (obj.isDevice || obj.isFolder || obj.link || obj.contents) return true;
         if (typeof XMLHttpRequest != "undefined") {
           throw new Error(
             "Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread."
@@ -3724,88 +3595,63 @@ var Godot = (() => {
           var chunkNum = (idx / this.chunkSize) | 0;
           return this.getter(chunkNum)[chunkOffset];
         };
-        LazyUint8Array.prototype.setDataGetter =
-          function LazyUint8Array_setDataGetter(getter) {
-            this.getter = getter;
-          };
-        LazyUint8Array.prototype.cacheLength =
-          function LazyUint8Array_cacheLength() {
+        LazyUint8Array.prototype.setDataGetter = function LazyUint8Array_setDataGetter(getter) {
+          this.getter = getter;
+        };
+        LazyUint8Array.prototype.cacheLength = function LazyUint8Array_cacheLength() {
+          var xhr = new XMLHttpRequest();
+          xhr.open("HEAD", url, false);
+          xhr.send(null);
+          if (!((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304))
+            throw new Error("Couldn't load " + url + ". Status: " + xhr.status);
+          var datalength = Number(xhr.getResponseHeader("Content-length"));
+          var header;
+          var hasByteServing =
+            (header = xhr.getResponseHeader("Accept-Ranges")) && header === "bytes";
+          var usesGzip = (header = xhr.getResponseHeader("Content-Encoding")) && header === "gzip";
+          var chunkSize = 1024 * 1024;
+          if (!hasByteServing) chunkSize = datalength;
+          var doXHR = (from, to) => {
+            if (from > to)
+              throw new Error("invalid range (" + from + ", " + to + ") or no bytes requested!");
+            if (to > datalength - 1)
+              throw new Error("only " + datalength + " bytes available! programmer error!");
             var xhr = new XMLHttpRequest();
-            xhr.open("HEAD", url, false);
-            xhr.send(null);
-            if (
-              !((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304)
-            )
-              throw new Error(
-                "Couldn't load " + url + ". Status: " + xhr.status
-              );
-            var datalength = Number(xhr.getResponseHeader("Content-length"));
-            var header;
-            var hasByteServing =
-              (header = xhr.getResponseHeader("Accept-Ranges")) &&
-              header === "bytes";
-            var usesGzip =
-              (header = xhr.getResponseHeader("Content-Encoding")) &&
-              header === "gzip";
-            var chunkSize = 1024 * 1024;
-            if (!hasByteServing) chunkSize = datalength;
-            var doXHR = (from, to) => {
-              if (from > to)
-                throw new Error(
-                  "invalid range (" +
-                    from +
-                    ", " +
-                    to +
-                    ") or no bytes requested!"
-                );
-              if (to > datalength - 1)
-                throw new Error(
-                  "only " + datalength + " bytes available! programmer error!"
-                );
-              var xhr = new XMLHttpRequest();
-              xhr.open("GET", url, false);
-              if (datalength !== chunkSize)
-                xhr.setRequestHeader("Range", "bytes=" + from + "-" + to);
-              xhr.responseType = "arraybuffer";
-              if (xhr.overrideMimeType) {
-                xhr.overrideMimeType("text/plain; charset=x-user-defined");
-              }
-              xhr.send(null);
-              if (
-                !((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304)
-              )
-                throw new Error(
-                  "Couldn't load " + url + ". Status: " + xhr.status
-                );
-              if (xhr.response !== undefined) {
-                return new Uint8Array(xhr.response || []);
-              }
-              return intArrayFromString(xhr.responseText || "", true);
-            };
-            var lazyArray = this;
-            lazyArray.setDataGetter((chunkNum) => {
-              var start = chunkNum * chunkSize;
-              var end = (chunkNum + 1) * chunkSize - 1;
-              end = Math.min(end, datalength - 1);
-              if (typeof lazyArray.chunks[chunkNum] == "undefined") {
-                lazyArray.chunks[chunkNum] = doXHR(start, end);
-              }
-              if (typeof lazyArray.chunks[chunkNum] == "undefined")
-                throw new Error("doXHR failed!");
-              return lazyArray.chunks[chunkNum];
-            });
-            if (usesGzip || !datalength) {
-              chunkSize = datalength = 1;
-              datalength = this.getter(0).length;
-              chunkSize = datalength;
-              out(
-                "LazyFiles on gzip forces download of the whole file when length is accessed"
-              );
+            xhr.open("GET", url, false);
+            if (datalength !== chunkSize) xhr.setRequestHeader("Range", "bytes=" + from + "-" + to);
+            xhr.responseType = "arraybuffer";
+            if (xhr.overrideMimeType) {
+              xhr.overrideMimeType("text/plain; charset=x-user-defined");
             }
-            this._length = datalength;
-            this._chunkSize = chunkSize;
-            this.lengthKnown = true;
+            xhr.send(null);
+            if (!((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304))
+              throw new Error("Couldn't load " + url + ". Status: " + xhr.status);
+            if (xhr.response !== undefined) {
+              return new Uint8Array(xhr.response || []);
+            }
+            return intArrayFromString(xhr.responseText || "", true);
           };
+          var lazyArray = this;
+          lazyArray.setDataGetter((chunkNum) => {
+            var start = chunkNum * chunkSize;
+            var end = (chunkNum + 1) * chunkSize - 1;
+            end = Math.min(end, datalength - 1);
+            if (typeof lazyArray.chunks[chunkNum] == "undefined") {
+              lazyArray.chunks[chunkNum] = doXHR(start, end);
+            }
+            if (typeof lazyArray.chunks[chunkNum] == "undefined") throw new Error("doXHR failed!");
+            return lazyArray.chunks[chunkNum];
+          });
+          if (usesGzip || !datalength) {
+            chunkSize = datalength = 1;
+            datalength = this.getter(0).length;
+            chunkSize = datalength;
+            out("LazyFiles on gzip forces download of the whole file when length is accessed");
+          }
+          this._length = datalength;
+          this._chunkSize = chunkSize;
+          this.lengthKnown = true;
+        };
         if (typeof XMLHttpRequest != "undefined") {
           if (!ENVIRONMENT_IS_WORKER)
             throw "Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc";
@@ -3909,22 +3755,16 @@ var Godot = (() => {
         abort("FS.joinPath has been removed; use PATH.join instead");
       },
       mmapAlloc: () => {
-        abort(
-          "FS.mmapAlloc has been replaced by the top level function mmapAlloc"
-        );
+        abort("FS.mmapAlloc has been replaced by the top level function mmapAlloc");
       },
       standardizePath: () => {
-        abort(
-          "FS.standardizePath has been removed; use PATH.normalize instead"
-        );
+        abort("FS.standardizePath has been removed; use PATH.normalize instead");
       },
     };
 
     function UTF8ToString(ptr, maxBytesToRead) {
       assert(typeof ptr == "number");
-      return ptr
-        ? UTF8ArrayToString(GROWABLE_HEAP_U8(), ptr, maxBytesToRead)
-        : "";
+      return ptr ? UTF8ArrayToString(GROWABLE_HEAP_U8(), ptr, maxBytesToRead) : "";
     }
 
     var SYSCALLS = {
@@ -3952,11 +3792,7 @@ var Godot = (() => {
         try {
           var stat = func(path);
         } catch (e) {
-          if (
-            e &&
-            e.node &&
-            PATH.normalize(path) !== PATH.normalize(FS.getPath(e.node))
-          ) {
+          if (e && e.node && PATH.normalize(path) !== PATH.normalize(FS.getPath(e.node))) {
             return -54;
           }
           throw e;
@@ -3974,9 +3810,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(buf + 40) >> 2] = tempI64[0]),
@@ -3992,9 +3826,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(buf + 56) >> 2] = tempI64[0]),
@@ -4006,9 +3838,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(buf + 72) >> 2] = tempI64[0]),
@@ -4020,9 +3850,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(buf + 88) >> 2] = tempI64[0]),
@@ -4034,9 +3862,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(buf + 104) >> 2] = tempI64[0]),
@@ -4131,16 +3957,10 @@ var Godot = (() => {
       debugInit: function () {
         function pthreadLogPrefix() {
           var t = 0;
-          if (
-            runtimeInitialized &&
-            typeof _pthread_self != "undefined" &&
-            !runtimeExited
-          ) {
+          if (runtimeInitialized && typeof _pthread_self != "undefined" && !runtimeExited) {
             t = _pthread_self();
           }
-          return (
-            "w:" + (Module["workerID"] || 0) + ",t:" + ptrToString(t) + ": "
-          );
+          return "w:" + (Module["workerID"] || 0) + ",t:" + ptrToString(t) + ": ";
         }
         var origDbg = dbg;
         dbg = (message) => origDbg(pthreadLogPrefix() + message);
@@ -4185,10 +4005,7 @@ var Godot = (() => {
         var pthread_ptr = worker.pthread_ptr;
         delete PThread.pthreads[pthread_ptr];
         PThread.unusedWorkers.push(worker);
-        PThread.runningWorkers.splice(
-          PThread.runningWorkers.indexOf(worker),
-          1
-        );
+        PThread.runningWorkers.splice(PThread.runningWorkers.indexOf(worker), 1);
         worker.pthread_ptr = 0;
         __emscripten_thread_free_data(pthread_ptr);
       },
@@ -4250,10 +4067,7 @@ var Godot = (() => {
           worker.onerror = (e) => {
             var message = "worker sent an error!";
             if (worker.pthread_ptr) {
-              message =
-                "Pthread " +
-                ptrToString(worker.pthread_ptr) +
-                " sent an error!";
+              message = "Pthread " + ptrToString(worker.pthread_ptr) + " sent an error!";
             }
             err(message + " " + e.filename + ":" + e.lineno + ": " + e.message);
             throw e;
@@ -4294,9 +4108,7 @@ var Godot = (() => {
       },
       allocateUnusedWorker: function () {
         var worker;
-        var pthreadMainJs = locateFile(
-          "godot.web.template_release.wasm32.worker.js"
-        );
+        var pthreadMainJs = locateFile("godot.web.template_release.wasm32.worker.js");
         worker = new Worker(pthreadMainJs);
         PThread.unusedWorkers.push(worker);
       },
@@ -4380,8 +4192,7 @@ var Godot = (() => {
     function getWasmTableEntry(funcPtr) {
       var func = wasmTableMirror[funcPtr];
       if (!func) {
-        if (funcPtr >= wasmTableMirror.length)
-          wasmTableMirror.length = funcPtr + 1;
+        if (funcPtr >= wasmTableMirror.length) wasmTableMirror.length = funcPtr + 1;
         wasmTableMirror[funcPtr] = func = wasmTable.get(funcPtr);
       }
       assert(
@@ -4434,9 +4245,7 @@ var Godot = (() => {
             +Math.abs(tempDouble) >= 1
               ? tempDouble > 0
                 ? +Math.floor(tempDouble / 4294967296) >>> 0
-                : ~~+Math.ceil(
-                    (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                  ) >>> 0
+                : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
               : 0),
           ]),
             (GROWABLE_HEAP_I32()[ptr >> 2] = tempI64[0]),
@@ -4491,13 +4300,7 @@ var Godot = (() => {
     }
 
     function ___emscripten_init_main_thread_js(tb) {
-      __emscripten_thread_init(
-        tb,
-        !ENVIRONMENT_IS_WORKER,
-        1,
-        !ENVIRONMENT_IS_WEB,
-        2097152
-      );
+      __emscripten_thread_init(tb, !ENVIRONMENT_IS_WORKER, 1, !ENVIRONMENT_IS_WEB, 2097152);
       PThread.threadInitTLS();
     }
 
@@ -4518,9 +4321,7 @@ var Godot = (() => {
 
     function ___pthread_create_js(pthread_ptr, attr, startRoutine, arg) {
       if (typeof SharedArrayBuffer == "undefined") {
-        err(
-          "Current environment does not support SharedArrayBuffer, pthreads are not available!"
-        );
+        err("Current environment does not support SharedArrayBuffer, pthreads are not available!");
         return 6;
       }
       var transferList = [];
@@ -4543,23 +4344,9 @@ var Godot = (() => {
       return spawnThread(threadParams);
     }
 
-    function ___syscall__newselect(
-      nfds,
-      readfds,
-      writefds,
-      exceptfds,
-      timeout
-    ) {
+    function ___syscall__newselect(nfds, readfds, writefds, exceptfds, timeout) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          4,
-          1,
-          nfds,
-          readfds,
-          writefds,
-          exceptfds,
-          timeout
-        );
+        return proxyToMainThread(4, 1, nfds, readfds, writefds, exceptfds, timeout);
       try {
         assert(nfds <= 64, "nfds must be less than or equal to 64");
         assert(!exceptfds, "exceptfds not supported");
@@ -4567,13 +4354,9 @@ var Godot = (() => {
         var srcReadLow = readfds ? GROWABLE_HEAP_I32()[readfds >> 2] : 0,
           srcReadHigh = readfds ? GROWABLE_HEAP_I32()[(readfds + 4) >> 2] : 0;
         var srcWriteLow = writefds ? GROWABLE_HEAP_I32()[writefds >> 2] : 0,
-          srcWriteHigh = writefds
-            ? GROWABLE_HEAP_I32()[(writefds + 4) >> 2]
-            : 0;
+          srcWriteHigh = writefds ? GROWABLE_HEAP_I32()[(writefds + 4) >> 2] : 0;
         var srcExceptLow = exceptfds ? GROWABLE_HEAP_I32()[exceptfds >> 2] : 0,
-          srcExceptHigh = exceptfds
-            ? GROWABLE_HEAP_I32()[(exceptfds + 4) >> 2]
-            : 0;
+          srcExceptHigh = exceptfds ? GROWABLE_HEAP_I32()[(exceptfds + 4) >> 2] : 0;
         var dstReadLow = 0,
           dstReadHigh = 0;
         var dstWriteLow = 0,
@@ -4602,21 +4385,15 @@ var Godot = (() => {
             flags = stream.stream_ops.poll(stream);
           }
           if (flags & 1 && check(fd, srcReadLow, srcReadHigh, mask)) {
-            fd < 32
-              ? (dstReadLow = dstReadLow | mask)
-              : (dstReadHigh = dstReadHigh | mask);
+            fd < 32 ? (dstReadLow = dstReadLow | mask) : (dstReadHigh = dstReadHigh | mask);
             total++;
           }
           if (flags & 4 && check(fd, srcWriteLow, srcWriteHigh, mask)) {
-            fd < 32
-              ? (dstWriteLow = dstWriteLow | mask)
-              : (dstWriteHigh = dstWriteHigh | mask);
+            fd < 32 ? (dstWriteLow = dstWriteLow | mask) : (dstWriteHigh = dstWriteHigh | mask);
             total++;
           }
           if (flags & 2 && check(fd, srcExceptLow, srcExceptHigh, mask)) {
-            fd < 32
-              ? (dstExceptLow = dstExceptLow | mask)
-              : (dstExceptHigh = dstExceptHigh | mask);
+            fd < 32 ? (dstExceptLow = dstExceptLow | mask) : (dstExceptHigh = dstExceptHigh | mask);
             total++;
           }
         }
@@ -4642,9 +4419,7 @@ var Godot = (() => {
     var SOCKFS = {
       mount: function (mount) {
         Module["websocket"] =
-          Module["websocket"] && "object" === typeof Module["websocket"]
-            ? Module["websocket"]
-            : {};
+          Module["websocket"] && "object" === typeof Module["websocket"] ? Module["websocket"] : {};
         Module["websocket"]._callbacks = {};
         Module["websocket"]["on"] = function (event, callback) {
           if ("function" === typeof callback) {
@@ -4744,17 +4519,14 @@ var Godot = (() => {
             } else {
               var result = /ws[s]?:\/\/([^:]+):(\d+)/.exec(ws.url);
               if (!result) {
-                throw new Error(
-                  "WebSocket URL must be in the format ws(s)://address:port"
-                );
+                throw new Error("WebSocket URL must be in the format ws(s)://address:port");
               }
               addr = result[1];
               port = parseInt(result[2], 10);
             }
           } else {
             try {
-              var runtimeConfig =
-                Module["websocket"] && "object" === typeof Module["websocket"];
+              var runtimeConfig = Module["websocket"] && "object" === typeof Module["websocket"];
               var url = "ws:#".replace("#", "//");
               if (runtimeConfig) {
                 if ("string" === typeof Module["websocket"]["url"]) {
@@ -4763,8 +4535,7 @@ var Godot = (() => {
               }
               if (url === "ws://" || url === "wss://") {
                 var parts = addr.split("/");
-                url =
-                  url + parts[0] + ":" + port + "/" + parts.slice(1).join("/");
+                url = url + parts[0] + ":" + port + "/" + parts.slice(1).join("/");
               }
               var subProtocols = "binary";
               if (runtimeConfig) {
@@ -4774,15 +4545,10 @@ var Godot = (() => {
               }
               var opts = undefined;
               if (subProtocols !== "null") {
-                subProtocols = subProtocols
-                  .replace(/^ +| +$/g, "")
-                  .split(/ *, */);
+                subProtocols = subProtocols.replace(/^ +| +$/g, "").split(/ *, */);
                 opts = subProtocols;
               }
-              if (
-                runtimeConfig &&
-                null === Module["websocket"]["subprotocol"]
-              ) {
+              if (runtimeConfig && null === Module["websocket"]["subprotocol"]) {
                 subProtocols = "null";
                 opts = undefined;
               }
@@ -4980,10 +4746,7 @@ var Godot = (() => {
           return 0;
         },
         bind: function (sock, addr, port) {
-          if (
-            typeof sock.saddr != "undefined" ||
-            typeof sock.sport != "undefined"
-          ) {
+          if (typeof sock.saddr != "undefined" || typeof sock.sport != "undefined") {
             throw new FS.ErrnoError(28);
           }
           sock.saddr = addr;
@@ -5005,15 +4768,8 @@ var Godot = (() => {
           if (sock.server) {
             throw new FS.ErrnoError(138);
           }
-          if (
-            typeof sock.daddr != "undefined" &&
-            typeof sock.dport != "undefined"
-          ) {
-            var dest = SOCKFS.websocket_sock_ops.getPeer(
-              sock,
-              sock.daddr,
-              sock.dport
-            );
+          if (typeof sock.daddr != "undefined" && typeof sock.dport != "undefined") {
+            var dest = SOCKFS.websocket_sock_ops.getPeer(sock, sock.daddr, sock.dport);
             if (dest) {
               if (dest.socket.readyState === dest.socket.CONNECTING) {
                 throw new FS.ErrnoError(7);
@@ -5088,9 +4844,7 @@ var Godot = (() => {
           }
           var data;
           if (buffer instanceof SharedArrayBuffer) {
-            data = new Uint8Array(
-              new Uint8Array(buffer.slice(offset, offset + length))
-            ).buffer;
+            data = new Uint8Array(new Uint8Array(buffer.slice(offset, offset + length))).buffer;
           } else {
             data = buffer.slice(offset, offset + length);
           }
@@ -5121,11 +4875,7 @@ var Godot = (() => {
           var queued = sock.recv_queue.shift();
           if (!queued) {
             if (sock.type === 1) {
-              var dest = SOCKFS.websocket_sock_ops.getPeer(
-                sock,
-                sock.daddr,
-                sock.dport
-              );
+              var dest = SOCKFS.websocket_sock_ops.getPeer(sock, sock.daddr, sock.dport);
               if (!dest) {
                 throw new FS.ErrnoError(53);
               }
@@ -5150,11 +4900,7 @@ var Godot = (() => {
           };
           if (sock.type === 1 && bytesRead < queuedLength) {
             var bytesRemaining = queuedLength - bytesRead;
-            queued.data = new Uint8Array(
-              queuedBuffer,
-              queuedOffset + bytesRead,
-              bytesRemaining
-            );
+            queued.data = new Uint8Array(queuedBuffer, queuedOffset + bytesRead, bytesRemaining);
             sock.recv_queue.unshift(queued);
           }
           return res;
@@ -5185,8 +4931,8 @@ var Godot = (() => {
       portmap: {},
       localAddr: 4261412874,
       addrPool: [
-        33554442, 50331658, 67108874, 83886090, 100663306, 117440522, 134217738,
-        150994954, 167772170, 184549386, 201326602, 218103818, 234881034,
+        33554442, 50331658, 67108874, 83886090, 100663306, 117440522, 134217738, 150994954,
+        167772170, 184549386, 201326602, 218103818, 234881034,
       ],
     };
 
@@ -5225,11 +4971,9 @@ var Godot = (() => {
         str = str.replace(new RegExp("[.]", "g"), ":");
         words = str.split(":");
         words[words.length - 4] =
-          jstoi_q(words[words.length - 4]) +
-          jstoi_q(words[words.length - 3]) * 256;
+          jstoi_q(words[words.length - 4]) + jstoi_q(words[words.length - 3]) * 256;
         words[words.length - 3] =
-          jstoi_q(words[words.length - 2]) +
-          jstoi_q(words[words.length - 1]) * 256;
+          jstoi_q(words[words.length - 2]) + jstoi_q(words[words.length - 1]) * 256;
         words = words.slice(0, words.length - 2);
       } else {
         words = str.split(":");
@@ -5327,8 +5071,7 @@ var Godot = (() => {
     };
 
     function ___syscall_accept4(fd, addr, addrlen, flags, d1, d2) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(5, 1, fd, addr, addrlen, flags, d1, d2);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(5, 1, fd, addr, addrlen, flags, d1, d2);
       try {
         var sock = getSocketFromFD(fd);
         var newsock = sock.sock_ops.accept(sock);
@@ -5482,8 +5225,7 @@ var Godot = (() => {
     }
 
     function ___syscall_bind(fd, addr, addrlen, d1, d2, d3) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(6, 1, fd, addr, addrlen, d1, d2, d3);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(6, 1, fd, addr, addrlen, d1, d2, d3);
       try {
         var sock = getSocketFromFD(fd);
         var info = getSocketAddress(addr, addrlen);
@@ -5520,8 +5262,7 @@ var Godot = (() => {
     }
 
     function ___syscall_connect(fd, addr, addrlen, d1, d2, d3) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(9, 1, fd, addr, addrlen, d1, d2, d3);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(9, 1, fd, addr, addrlen, d1, d2, d3);
       try {
         var sock = getSocketFromFD(fd);
         var info = getSocketAddress(addr, addrlen);
@@ -5534,8 +5275,7 @@ var Godot = (() => {
     }
 
     function ___syscall_faccessat(dirfd, path, amode, flags) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(10, 1, dirfd, path, amode, flags);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(10, 1, dirfd, path, amode, flags);
       try {
         path = SYSCALLS.getStr(path);
         assert(flags === 0);
@@ -5576,8 +5316,7 @@ var Godot = (() => {
     }
 
     function ___syscall_fcntl64(fd, cmd, varargs) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(12, 1, fd, cmd, varargs);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(12, 1, fd, cmd, varargs);
       SYSCALLS.varargs = varargs;
       try {
         var stream = SYSCALLS.getStreamFromFD(fd);
@@ -5639,12 +5378,7 @@ var Godot = (() => {
         typeof maxBytesToWrite == "number",
         "stringToUTF8(str, outPtr, maxBytesToWrite) is missing the third parameter that specifies the length of the output buffer!"
       );
-      return stringToUTF8Array(
-        str,
-        GROWABLE_HEAP_U8(),
-        outPtr,
-        maxBytesToWrite
-      );
+      return stringToUTF8Array(str, GROWABLE_HEAP_U8(), outPtr, maxBytesToWrite);
     }
 
     function ___syscall_getcwd(buf, size) {
@@ -5663,8 +5397,7 @@ var Godot = (() => {
     }
 
     function ___syscall_getdents64(fd, dirp, count) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(14, 1, fd, dirp, count);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(14, 1, fd, dirp, count);
       try {
         var stream = SYSCALLS.getStreamFromFD(fd);
         if (!stream.getdents) {
@@ -5693,10 +5426,10 @@ var Godot = (() => {
             type = FS.isChrdev(child.mode)
               ? 2
               : FS.isDir(child.mode)
-              ? 4
-              : FS.isLink(child.mode)
-              ? 10
-              : 8;
+                ? 4
+                : FS.isLink(child.mode)
+                  ? 10
+                  : 8;
           }
           assert(id);
           (tempI64 = [
@@ -5705,9 +5438,7 @@ var Godot = (() => {
             +Math.abs(tempDouble) >= 1
               ? tempDouble > 0
                 ? +Math.floor(tempDouble / 4294967296) >>> 0
-                : ~~+Math.ceil(
-                    (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                  ) >>> 0
+                : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
               : 0),
           ]),
             (GROWABLE_HEAP_I32()[(dirp + pos) >> 2] = tempI64[0]),
@@ -5718,9 +5449,7 @@ var Godot = (() => {
             +Math.abs(tempDouble) >= 1
               ? tempDouble > 0
                 ? +Math.floor(tempDouble / 4294967296) >>> 0
-                : ~~+Math.ceil(
-                    (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                  ) >>> 0
+                : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
               : 0),
           ]),
             (GROWABLE_HEAP_I32()[(dirp + pos + 8) >> 2] = tempI64[0]),
@@ -5740,8 +5469,7 @@ var Godot = (() => {
     }
 
     function ___syscall_getsockname(fd, addr, addrlen, d1, d2, d3) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(15, 1, fd, addr, addrlen, d1, d2, d3);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(15, 1, fd, addr, addrlen, d1, d2, d3);
       try {
         var sock = getSocketFromFD(fd);
         var errno = writeSockaddr(
@@ -5780,8 +5508,7 @@ var Godot = (() => {
     }
 
     function ___syscall_ioctl(fd, op, varargs) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(17, 1, fd, op, varargs);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(17, 1, fd, op, varargs);
       SYSCALLS.varargs = varargs;
       try {
         var stream = SYSCALLS.getStreamFromFD(fd);
@@ -5862,14 +5589,12 @@ var Godot = (() => {
     }
 
     function ___syscall_mkdirat(dirfd, path, mode) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(20, 1, dirfd, path, mode);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(20, 1, dirfd, path, mode);
       try {
         path = SYSCALLS.getStr(path);
         path = SYSCALLS.calculateAt(dirfd, path);
         path = PATH.normalize(path);
-        if (path[path.length - 1] === "/")
-          path = path.substr(0, path.length - 1);
+        if (path[path.length - 1] === "/") path = path.substr(0, path.length - 1);
         FS.mkdir(path, mode, 0);
         return 0;
       } catch (e) {
@@ -5879,8 +5604,7 @@ var Godot = (() => {
     }
 
     function ___syscall_newfstatat(dirfd, path, buf, flags) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(21, 1, dirfd, path, buf, flags);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(21, 1, dirfd, path, buf, flags);
       try {
         path = SYSCALLS.getStr(path);
         var nofollow = flags & 256;
@@ -5896,8 +5620,7 @@ var Godot = (() => {
     }
 
     function ___syscall_openat(dirfd, path, flags, varargs) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(22, 1, dirfd, path, flags, varargs);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(22, 1, dirfd, path, flags, varargs);
       SYSCALLS.varargs = varargs;
       try {
         path = SYSCALLS.getStr(path);
@@ -5911,8 +5634,7 @@ var Godot = (() => {
     }
 
     function ___syscall_poll(fds, nfds, timeout) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(23, 1, fds, nfds, timeout);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(23, 1, fds, nfds, timeout);
       try {
         var nonzero = 0;
         for (var i = 0; i < nfds; i++) {
@@ -5939,8 +5661,7 @@ var Godot = (() => {
     }
 
     function ___syscall_readlinkat(dirfd, path, buf, bufsize) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(24, 1, dirfd, path, buf, bufsize);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(24, 1, dirfd, path, buf, bufsize);
       try {
         path = SYSCALLS.getStr(path);
         path = SYSCALLS.calculateAt(dirfd, path);
@@ -6012,16 +5733,7 @@ var Godot = (() => {
 
     function ___syscall_sendto(fd, message, length, flags, addr, addr_len) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          28,
-          1,
-          fd,
-          message,
-          length,
-          flags,
-          addr,
-          addr_len
-        );
+        return proxyToMainThread(28, 1, fd, message, length, flags, addr, addr_len);
       try {
         var sock = getSocketFromFD(fd);
         var dest = getSocketAddress(addr, addr_len, true);
@@ -6043,8 +5755,7 @@ var Godot = (() => {
     }
 
     function ___syscall_socket(domain, type, protocol) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(29, 1, domain, type, protocol);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(29, 1, domain, type, protocol);
       try {
         var sock = SOCKFS.createSocket(domain, type, protocol);
         assert(sock.stream.fd < 64);
@@ -6067,8 +5778,7 @@ var Godot = (() => {
     }
 
     function ___syscall_statfs64(path, size, buf) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(31, 1, path, size, buf);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(31, 1, path, size, buf);
       try {
         path = SYSCALLS.getStr(path);
         assert(size === 64);
@@ -6090,8 +5800,7 @@ var Godot = (() => {
     }
 
     function ___syscall_symlink(target, linkpath) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(32, 1, target, linkpath);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(32, 1, target, linkpath);
       try {
         target = SYSCALLS.getStr(target);
         linkpath = SYSCALLS.getStr(linkpath);
@@ -6104,8 +5813,7 @@ var Godot = (() => {
     }
 
     function ___syscall_unlinkat(dirfd, path, flags) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(33, 1, dirfd, path, flags);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(33, 1, dirfd, path, flags);
       try {
         path = SYSCALLS.getStr(path);
         path = SYSCALLS.calculateAt(dirfd, path);
@@ -6145,9 +5853,7 @@ var Godot = (() => {
 
     function callUserCallback(func) {
       if (runtimeExited || ABORT) {
-        err(
-          "user callback triggered after runtime exited or application aborted.  Ignoring."
-        );
+        err("user callback triggered after runtime exited or application aborted.  Ignoring.");
         return;
       }
       try {
@@ -6160,11 +5866,7 @@ var Godot = (() => {
 
     function __emscripten_thread_mailbox_await(pthread_ptr) {
       if (typeof Atomics.waitAsync === "function") {
-        var wait = Atomics.waitAsync(
-          GROWABLE_HEAP_I32(),
-          pthread_ptr >> 2,
-          pthread_ptr
-        );
+        var wait = Atomics.waitAsync(GROWABLE_HEAP_I32(), pthread_ptr >> 2, pthread_ptr);
         assert(wait.async);
         wait.value.then(checkMailbox);
         var waitingAsync = pthread_ptr + 128;
@@ -6172,8 +5874,7 @@ var Godot = (() => {
       }
     }
 
-    Module["__emscripten_thread_mailbox_await"] =
-      __emscripten_thread_mailbox_await;
+    Module["__emscripten_thread_mailbox_await"] = __emscripten_thread_mailbox_await;
 
     function checkMailbox() {
       var pthread_ptr = _pthread_self();
@@ -6185,11 +5886,7 @@ var Godot = (() => {
 
     Module["checkMailbox"] = checkMailbox;
 
-    function __emscripten_notify_mailbox_postmessage(
-      targetThreadId,
-      currThreadId,
-      mainThreadId
-    ) {
+    function __emscripten_notify_mailbox_postmessage(targetThreadId, currThreadId, mainThreadId) {
       if (targetThreadId == currThreadId) {
         setTimeout(() => checkMailbox());
       } else if (ENVIRONMENT_IS_PTHREAD) {
@@ -6200,11 +5897,7 @@ var Godot = (() => {
       } else {
         var worker = PThread.pthreads[targetThreadId];
         if (!worker) {
-          err(
-            "Cannot send message to thread with ID " +
-              targetThreadId +
-              ", unknown thread ID!"
-          );
+          err("Cannot send message to thread with ID " + targetThreadId + ", unknown thread ID!");
           return;
         }
         worker.postMessage({
@@ -6222,20 +5915,8 @@ var Godot = (() => {
         ctx["drawArraysInstanced"] = function (mode, first, count, primcount) {
           ext["drawArraysInstancedANGLE"](mode, first, count, primcount);
         };
-        ctx["drawElementsInstanced"] = function (
-          mode,
-          count,
-          type,
-          indices,
-          primcount
-        ) {
-          ext["drawElementsInstancedANGLE"](
-            mode,
-            count,
-            type,
-            indices,
-            primcount
-          );
+        ctx["drawElementsInstanced"] = function (mode, count, type, indices, primcount) {
+          ext["drawElementsInstancedANGLE"](mode, count, type, indices, primcount);
         };
         return 1;
       }
@@ -6271,14 +5952,10 @@ var Godot = (() => {
     }
 
     function webgl_enable_WEBGL_draw_instanced_base_vertex_base_instance(ctx) {
-      return !!(ctx.dibvbi = ctx.getExtension(
-        "WEBGL_draw_instanced_base_vertex_base_instance"
-      ));
+      return !!(ctx.dibvbi = ctx.getExtension("WEBGL_draw_instanced_base_vertex_base_instance"));
     }
 
-    function webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(
-      ctx
-    ) {
+    function webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(ctx) {
       return !!(ctx.mdibvbi = ctx.getExtension(
         "WEBGL_multi_draw_instanced_base_vertex_base_instance"
       ));
@@ -6361,34 +6038,13 @@ var Godot = (() => {
         gl.texParameteri(3553, 10240, 9728);
         gl.texParameteri(3553, 10242, 33071);
         gl.texParameteri(3553, 10243, 33071);
-        gl.texImage2D(
-          3553,
-          0,
-          6408,
-          gl.canvas.width,
-          gl.canvas.height,
-          0,
-          6408,
-          5121,
-          null
-        );
-        gl.framebufferTexture2D(
-          36160,
-          36064,
-          3553,
-          context.defaultColorTarget,
-          0
-        );
+        gl.texImage2D(3553, 0, 6408, gl.canvas.width, gl.canvas.height, 0, 6408, 5121, null);
+        gl.framebufferTexture2D(36160, 36064, 3553, context.defaultColorTarget, 0);
         gl.bindTexture(3553, null);
         var depthTarget = gl.createRenderbuffer();
         gl.bindRenderbuffer(36161, context.defaultDepthTarget);
         gl.renderbufferStorage(36161, 33189, gl.canvas.width, gl.canvas.height);
-        gl.framebufferRenderbuffer(
-          36160,
-          36096,
-          36161,
-          context.defaultDepthTarget
-        );
+        gl.framebufferRenderbuffer(36160, 36096, 36161, context.defaultDepthTarget);
         gl.bindRenderbuffer(36161, null);
         var vertices = [-1, -1, -1, 1, 1, -1, 1, 1];
         var vb = gl.createBuffer();
@@ -6448,12 +6104,7 @@ var Godot = (() => {
         if (context.defaultDepthTarget) {
           var prevRenderBufferBinding = gl.getParameter(36007);
           gl.bindRenderbuffer(36161, context.defaultDepthTarget);
-          gl.renderbufferStorage(
-            36161,
-            33189,
-            gl.drawingBufferWidth,
-            gl.drawingBufferHeight
-          );
+          gl.renderbufferStorage(36161, 33189, gl.drawingBufferWidth, gl.drawingBufferHeight);
           gl.bindRenderbuffer(36161, prevRenderBufferBinding);
         }
       },
@@ -6571,8 +6222,7 @@ var Godot = (() => {
         if (ctx.canvas) ctx.canvas.GLctxObject = context;
         GL.contexts[handle] = context;
         if (
-          typeof webGLContextAttributes.enableExtensionsByDefault ==
-            "undefined" ||
+          typeof webGLContextAttributes.enableExtensionsByDefault == "undefined" ||
           webGLContextAttributes.enableExtensionsByDefault
         ) {
           GL.initExtensions(context);
@@ -6590,16 +6240,10 @@ var Godot = (() => {
         return GL.contexts[contextHandle];
       },
       deleteContext: function (contextHandle) {
-        if (GL.currentContext === GL.contexts[contextHandle])
-          GL.currentContext = null;
+        if (GL.currentContext === GL.contexts[contextHandle]) GL.currentContext = null;
         if (typeof JSEvents == "object")
-          JSEvents.removeAllHandlersOnTarget(
-            GL.contexts[contextHandle].GLctx.canvas
-          );
-        if (
-          GL.contexts[contextHandle] &&
-          GL.contexts[contextHandle].GLctx.canvas
-        )
+          JSEvents.removeAllHandlersOnTarget(GL.contexts[contextHandle].GLctx.canvas);
+        if (GL.contexts[contextHandle] && GL.contexts[contextHandle].GLctx.canvas)
           GL.contexts[contextHandle].GLctx.canvas.GLctxObject = undefined;
         _free(GL.contexts[contextHandle].handle);
         GL.contexts[contextHandle] = null;
@@ -6613,18 +6257,12 @@ var Godot = (() => {
         webgl_enable_OES_vertex_array_object(GLctx);
         webgl_enable_WEBGL_draw_buffers(GLctx);
         webgl_enable_WEBGL_draw_instanced_base_vertex_base_instance(GLctx);
-        webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(
-          GLctx
-        );
+        webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(GLctx);
         if (context.version >= 2) {
-          GLctx.disjointTimerQueryExt = GLctx.getExtension(
-            "EXT_disjoint_timer_query_webgl2"
-          );
+          GLctx.disjointTimerQueryExt = GLctx.getExtension("EXT_disjoint_timer_query_webgl2");
         }
         if (context.version < 2 || !GLctx.disjointTimerQueryExt) {
-          GLctx.disjointTimerQueryExt = GLctx.getExtension(
-            "EXT_disjoint_timer_query"
-          );
+          GLctx.disjointTimerQueryExt = GLctx.getExtension("EXT_disjoint_timer_query");
         }
         webgl_enable_WEBGL_multi_draw(GLctx);
         var exts = GLctx.getSupportedExtensions() || [];
@@ -6636,9 +6274,7 @@ var Godot = (() => {
       },
     };
 
-    function __emscripten_proxied_gl_context_activated_from_main_browser_thread(
-      contextHandle
-    ) {
+    function __emscripten_proxied_gl_context_activated_from_main_browser_thread(contextHandle) {
       GLctx = Module.ctx = GL.currentContext = contextHandle;
       GL.currentContextIsProxied = true;
     }
@@ -6657,10 +6293,7 @@ var Godot = (() => {
     }
 
     function readI53FromI64(ptr) {
-      return (
-        GROWABLE_HEAP_U32()[ptr >> 2] +
-        GROWABLE_HEAP_I32()[(ptr + 4) >> 2] * 4294967296
-      );
+      return GROWABLE_HEAP_U32()[ptr >> 2] + GROWABLE_HEAP_I32()[(ptr + 4) >> 2] * 4294967296;
     }
 
     function __gmtime_js(time, tmPtr) {
@@ -6681,19 +6314,13 @@ var Godot = (() => {
       return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
     }
 
-    var MONTH_DAYS_LEAP_CUMULATIVE = [
-      0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335,
-    ];
+    var MONTH_DAYS_LEAP_CUMULATIVE = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
 
-    var MONTH_DAYS_REGULAR_CUMULATIVE = [
-      0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
-    ];
+    var MONTH_DAYS_REGULAR_CUMULATIVE = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
     function ydayFromDate(date) {
       var leap = isLeapYear(date.getFullYear());
-      var monthDaysCumulative = leap
-        ? MONTH_DAYS_LEAP_CUMULATIVE
-        : MONTH_DAYS_REGULAR_CUMULATIVE;
+      var monthDaysCumulative = leap ? MONTH_DAYS_LEAP_CUMULATIVE : MONTH_DAYS_REGULAR_CUMULATIVE;
       var yday = monthDaysCumulative[date.getMonth()] + date.getDate() - 1;
       return yday;
     }
@@ -6726,8 +6353,7 @@ var Godot = (() => {
     _emscripten_get_now = () => performance.timeOrigin + performance.now();
 
     function __setitimer_js(which, timeout_ms) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(34, 1, which, timeout_ms);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(34, 1, which, timeout_ms);
       if (timers[which]) {
         clearTimeout(timers[which].id);
         delete timers[which];
@@ -6736,9 +6362,7 @@ var Godot = (() => {
       var id = setTimeout(() => {
         assert(which in timers);
         delete timers[which];
-        callUserCallback(() =>
-          __emscripten_timeout(which, _emscripten_get_now())
-        );
+        callUserCallback(() => __emscripten_timeout(which, _emscripten_get_now()));
       }, timeout_ms);
       timers[which] = {
         id: id,
@@ -6806,15 +6430,11 @@ var Godot = (() => {
         Browser.mainLoop.running = true;
       }
       if (mode == 0) {
-        Browser.mainLoop.scheduler =
-          function Browser_mainLoop_scheduler_setTimeout() {
-            var timeUntilNextTick =
-              Math.max(
-                0,
-                Browser.mainLoop.tickStartTime + value - _emscripten_get_now()
-              ) | 0;
-            setTimeout(Browser.mainLoop.runner, timeUntilNextTick);
-          };
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setTimeout() {
+          var timeUntilNextTick =
+            Math.max(0, Browser.mainLoop.tickStartTime + value - _emscripten_get_now()) | 0;
+          setTimeout(Browser.mainLoop.runner, timeUntilNextTick);
+        };
         Browser.mainLoop.method = "timeout";
       } else if (mode == 1) {
         Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_rAF() {
@@ -6834,16 +6454,11 @@ var Godot = (() => {
               setImmediates.shift()();
             }
           };
-          addEventListener(
-            "message",
-            Browser_setImmediate_messageHandler,
-            true
-          );
+          addEventListener("message", Browser_setImmediate_messageHandler, true);
           setImmediate = function Browser_emulated_setImmediate(func) {
             setImmediates.push(func);
             if (ENVIRONMENT_IS_WORKER) {
-              if (Module["setImmediates"] === undefined)
-                Module["setImmediates"] = [];
+              if (Module["setImmediates"] === undefined) Module["setImmediates"] = [];
               Module["setImmediates"].push(func);
               postMessage({
                 target: emscriptenMainLoopMessageId,
@@ -6851,10 +6466,9 @@ var Godot = (() => {
             } else postMessage(emscriptenMainLoopMessageId, "*");
           };
         }
-        Browser.mainLoop.scheduler =
-          function Browser_mainLoop_scheduler_setImmediate() {
-            setImmediate(Browser.mainLoop.runner);
-          };
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setImmediate() {
+          setImmediate(Browser.mainLoop.runner);
+        };
         Browser.mainLoop.method = "immediate";
       }
       return 0;
@@ -6865,13 +6479,7 @@ var Godot = (() => {
       runtimeKeepaliveCounter -= 1;
     }
 
-    function setMainLoop(
-      browserIterationFunc,
-      fps,
-      simulateInfiniteLoop,
-      arg,
-      noSetTiming
-    ) {
+    function setMainLoop(browserIterationFunc, fps, simulateInfiniteLoop, arg, noSetTiming) {
       assert(
         !Browser.mainLoop.func,
         "emscripten_set_main_loop: there can only be one main loop function at once: call emscripten_cancel_main_loop to cancel the previous one before setting a new one with different parameters."
@@ -6896,8 +6504,7 @@ var Godot = (() => {
           blocker.func(blocker.arg);
           if (Browser.mainLoop.remainingBlockers) {
             var remaining = Browser.mainLoop.remainingBlockers;
-            var next =
-              remaining % 1 == 0 ? remaining - 1 : Math.floor(remaining);
+            var next = remaining % 1 == 0 ? remaining - 1 : Math.floor(remaining);
             if (blocker.counted) {
               Browser.mainLoop.remainingBlockers = next;
             } else {
@@ -6905,26 +6512,18 @@ var Godot = (() => {
               Browser.mainLoop.remainingBlockers = (8 * remaining + next) / 9;
             }
           }
-          out(
-            'main loop blocker "' +
-              blocker.name +
-              '" took ' +
-              (Date.now() - start) +
-              " ms"
-          );
+          out('main loop blocker "' + blocker.name + '" took ' + (Date.now() - start) + " ms");
           Browser.mainLoop.updateStatus();
           if (!checkIsRunning()) return;
           setTimeout(Browser.mainLoop.runner, 0);
           return;
         }
         if (!checkIsRunning()) return;
-        Browser.mainLoop.currentFrameNumber =
-          (Browser.mainLoop.currentFrameNumber + 1) | 0;
+        Browser.mainLoop.currentFrameNumber = (Browser.mainLoop.currentFrameNumber + 1) | 0;
         if (
           Browser.mainLoop.timingMode == 1 &&
           Browser.mainLoop.timingValue > 1 &&
-          Browser.mainLoop.currentFrameNumber % Browser.mainLoop.timingValue !=
-            0
+          Browser.mainLoop.currentFrameNumber % Browser.mainLoop.timingValue != 0
         ) {
           Browser.mainLoop.scheduler();
           return;
@@ -6998,9 +6597,7 @@ var Godot = (() => {
             var expected = Browser.mainLoop.expectedBlockers;
             if (remaining) {
               if (remaining < expected) {
-                Module["setStatus"](
-                  message + " (" + (expected - remaining) + "/" + expected + ")"
-                );
+                Module["setStatus"](message + " (" + (expected - remaining) + "/" + expected + ")");
               } else {
                 Module["setStatus"](message);
               }
@@ -7032,12 +6629,7 @@ var Godot = (() => {
         imagePlugin["canHandle"] = function imagePlugin_canHandle(name) {
           return !Module.noImageDecoding && /\.(jpg|jpeg|png|bmp)$/i.test(name);
         };
-        imagePlugin["handle"] = function imagePlugin_handle(
-          byteArray,
-          name,
-          onload,
-          onerror
-        ) {
+        imagePlugin["handle"] = function imagePlugin_handle(byteArray, name, onload, onerror) {
           var b = new Blob([byteArray], {
             type: Browser.getMimetype(name),
           });
@@ -7047,10 +6639,7 @@ var Godot = (() => {
             });
           }
           var url = URL.createObjectURL(b);
-          assert(
-            typeof url == "string",
-            "createObjectURL must return a url as a string"
-          );
+          assert(typeof url == "string", "createObjectURL must return a url as a string");
           var img = new Image();
           img.onload = () => {
             assert(img.complete, "Image " + name + " could not be decoded");
@@ -7082,12 +6671,7 @@ var Godot = (() => {
               }
           );
         };
-        audioPlugin["handle"] = function audioPlugin_handle(
-          byteArray,
-          name,
-          onload,
-          onerror
-        ) {
+        audioPlugin["handle"] = function audioPlugin_handle(byteArray, name, onload, onerror) {
           var done = false;
           function finish(audio) {
             if (done) return;
@@ -7105,10 +6689,7 @@ var Godot = (() => {
             type: Browser.getMimetype(name),
           });
           var url = URL.createObjectURL(b);
-          assert(
-            typeof url == "string",
-            "createObjectURL must return a url as a string"
-          );
+          assert(typeof url == "string", "createObjectURL must return a url as a string");
           var audio = new Audio();
           audio.addEventListener("canplaythrough", () => finish(audio), false);
           audio.onerror = function audio_onerror(event) {
@@ -7119,8 +6700,7 @@ var Godot = (() => {
                 ", trying slower base64 approach"
             );
             function encode64(data) {
-              var BASE =
-                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+              var BASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
               var PAD = "=";
               var ret = "";
               var leftchar = 0;
@@ -7143,11 +6723,7 @@ var Godot = (() => {
               }
               return ret;
             }
-            audio.src =
-              "data:audio/x-" +
-              name.substr(-3) +
-              ";base64," +
-              encode64(byteArray);
+            audio.src = "data:audio/x-" + name.substr(-3) + ";base64," + encode64(byteArray);
             finish(audio);
           };
           audio.src = url;
@@ -7178,34 +6754,15 @@ var Godot = (() => {
             document["msExitPointerLock"] ||
             (() => {});
           canvas.exitPointerLock = canvas.exitPointerLock.bind(document);
-          document.addEventListener(
-            "pointerlockchange",
-            pointerLockChange,
-            false
-          );
-          document.addEventListener(
-            "mozpointerlockchange",
-            pointerLockChange,
-            false
-          );
-          document.addEventListener(
-            "webkitpointerlockchange",
-            pointerLockChange,
-            false
-          );
-          document.addEventListener(
-            "mspointerlockchange",
-            pointerLockChange,
-            false
-          );
+          document.addEventListener("pointerlockchange", pointerLockChange, false);
+          document.addEventListener("mozpointerlockchange", pointerLockChange, false);
+          document.addEventListener("webkitpointerlockchange", pointerLockChange, false);
+          document.addEventListener("mspointerlockchange", pointerLockChange, false);
           if (Module["elementPointerLock"]) {
             canvas.addEventListener(
               "click",
               (ev) => {
-                if (
-                  !Browser.pointerLock &&
-                  Module["canvas"].requestPointerLock
-                ) {
+                if (!Browser.pointerLock && Module["canvas"].requestPointerLock) {
                   Module["canvas"].requestPointerLock();
                   ev.preventDefault();
                 }
@@ -7215,14 +6772,8 @@ var Godot = (() => {
           }
         }
       },
-      createContext: function (
-        canvas,
-        useWebGL,
-        setInModule,
-        webGLContextAttributes
-      ) {
-        if (useWebGL && Module.ctx && canvas == Module.canvas)
-          return Module.ctx;
+      createContext: function (canvas, useWebGL, setInModule, webGLContextAttributes) {
+        if (useWebGL && Module.ctx && canvas == Module.canvas) return Module.ctx;
         var ctx;
         var contextHandle;
         if (useWebGL) {
@@ -7255,9 +6806,7 @@ var Godot = (() => {
           Module.ctx = ctx;
           if (useWebGL) GL.makeContextCurrent(contextHandle);
           Module.useWebGL = useWebGL;
-          Browser.moduleContextCreatedCallbacks.forEach((callback) =>
-            callback()
-          );
+          Browser.moduleContextCreatedCallbacks.forEach((callback) => callback());
           Browser.init();
         }
         return ctx;
@@ -7269,10 +6818,8 @@ var Godot = (() => {
       requestFullscreen: function (lockPointer, resizeCanvas) {
         Browser.lockPointer = lockPointer;
         Browser.resizeCanvas = resizeCanvas;
-        if (typeof Browser.lockPointer == "undefined")
-          Browser.lockPointer = true;
-        if (typeof Browser.resizeCanvas == "undefined")
-          Browser.resizeCanvas = false;
+        if (typeof Browser.lockPointer == "undefined") Browser.lockPointer = true;
+        if (typeof Browser.resizeCanvas == "undefined") Browser.resizeCanvas = false;
         var canvas = Module["canvas"];
         function fullscreenChange() {
           Browser.isFullscreen = false;
@@ -7301,33 +6848,15 @@ var Godot = (() => {
               Browser.updateCanvasDimensions(canvas);
             }
           }
-          if (Module["onFullScreen"])
-            Module["onFullScreen"](Browser.isFullscreen);
-          if (Module["onFullscreen"])
-            Module["onFullscreen"](Browser.isFullscreen);
+          if (Module["onFullScreen"]) Module["onFullScreen"](Browser.isFullscreen);
+          if (Module["onFullscreen"]) Module["onFullscreen"](Browser.isFullscreen);
         }
         if (!Browser.fullscreenHandlersInstalled) {
           Browser.fullscreenHandlersInstalled = true;
-          document.addEventListener(
-            "fullscreenchange",
-            fullscreenChange,
-            false
-          );
-          document.addEventListener(
-            "mozfullscreenchange",
-            fullscreenChange,
-            false
-          );
-          document.addEventListener(
-            "webkitfullscreenchange",
-            fullscreenChange,
-            false
-          );
-          document.addEventListener(
-            "MSFullscreenChange",
-            fullscreenChange,
-            false
-          );
+          document.addEventListener("fullscreenchange", fullscreenChange, false);
+          document.addEventListener("mozfullscreenchange", fullscreenChange, false);
+          document.addEventListener("webkitfullscreenchange", fullscreenChange, false);
+          document.addEventListener("MSFullscreenChange", fullscreenChange, false);
         }
         var canvasContainer = document.createElement("div");
         canvas.parentNode.insertBefore(canvasContainer, canvas);
@@ -7337,16 +6866,10 @@ var Godot = (() => {
           canvasContainer["mozRequestFullScreen"] ||
           canvasContainer["msRequestFullscreen"] ||
           (canvasContainer["webkitRequestFullscreen"]
-            ? () =>
-                canvasContainer["webkitRequestFullscreen"](
-                  Element["ALLOW_KEYBOARD_INPUT"]
-                )
+            ? () => canvasContainer["webkitRequestFullscreen"](Element["ALLOW_KEYBOARD_INPUT"])
             : null) ||
           (canvasContainer["webkitRequestFullScreen"]
-            ? () =>
-                canvasContainer["webkitRequestFullScreen"](
-                  Element["ALLOW_KEYBOARD_INPUT"]
-                )
+            ? () => canvasContainer["webkitRequestFullScreen"](Element["ALLOW_KEYBOARD_INPUT"])
             : null);
         canvasContainer.requestFullscreen();
       },
@@ -7413,26 +6936,15 @@ var Godot = (() => {
       },
       getUserMedia: function (func) {
         if (!window.getUserMedia) {
-          window.getUserMedia =
-            navigator["getUserMedia"] || navigator["mozGetUserMedia"];
+          window.getUserMedia = navigator["getUserMedia"] || navigator["mozGetUserMedia"];
         }
         window.getUserMedia(func);
       },
       getMovementX: function (event) {
-        return (
-          event["movementX"] ||
-          event["mozMovementX"] ||
-          event["webkitMovementX"] ||
-          0
-        );
+        return event["movementX"] || event["mozMovementX"] || event["webkitMovementX"] || 0;
       },
       getMovementY: function (event) {
-        return (
-          event["movementY"] ||
-          event["mozMovementY"] ||
-          event["webkitMovementY"] ||
-          0
-        );
+        return event["movementY"] || event["mozMovementY"] || event["webkitMovementY"] || 0;
       },
       getMouseWheelDelta: function (event) {
         var delta = 0;
@@ -7495,14 +7007,8 @@ var Godot = (() => {
           var rect = Module["canvas"].getBoundingClientRect();
           var cw = Module["canvas"].width;
           var ch = Module["canvas"].height;
-          var scrollX =
-            typeof window.scrollX != "undefined"
-              ? window.scrollX
-              : window.pageXOffset;
-          var scrollY =
-            typeof window.scrollY != "undefined"
-              ? window.scrollY
-              : window.pageYOffset;
+          var scrollX = typeof window.scrollX != "undefined" ? window.scrollX : window.pageXOffset;
+          var scrollY = typeof window.scrollY != "undefined" ? window.scrollY : window.pageYOffset;
           assert(
             typeof scrollX != "undefined" && typeof scrollY != "undefined",
             "Unable to retrieve scroll position, mouse positions likely broken."
@@ -7527,10 +7033,7 @@ var Godot = (() => {
             if (event.type === "touchstart") {
               Browser.lastTouches[touch.identifier] = coords;
               Browser.touches[touch.identifier] = coords;
-            } else if (
-              event.type === "touchend" ||
-              event.type === "touchmove"
-            ) {
+            } else if (event.type === "touchend" || event.type === "touchmove") {
               var last = Browser.touches[touch.identifier];
               if (!last) last = coords;
               Browser.lastTouches[touch.identifier] = last;
@@ -7551,9 +7054,7 @@ var Godot = (() => {
       resizeListeners: [],
       updateResizeListeners: function () {
         var canvas = Module["canvas"];
-        Browser.resizeListeners.forEach((listener) =>
-          listener(canvas.width, canvas.height)
-        );
+        Browser.resizeListeners.forEach((listener) => listener(canvas.width, canvas.height));
       },
       setCanvasSize: function (width, height, noUpdates) {
         var canvas = Module["canvas"];
@@ -7709,9 +7210,7 @@ var Godot = (() => {
     function _glBindFramebuffer(target, framebuffer) {
       GLctx.bindFramebuffer(
         target,
-        framebuffer
-          ? GL.framebuffers[framebuffer]
-          : GL.currentContext.defaultFbo
+        framebuffer ? GL.framebuffers[framebuffer] : GL.currentContext.defaultFbo
       );
     }
 
@@ -7785,15 +7284,10 @@ var Godot = (() => {
 
     function _glBufferSubData(target, offset, size, data) {
       if (GL.currentContext.version >= 2) {
-        size &&
-          GLctx.bufferSubData(target, offset, GROWABLE_HEAP_U8(), data, size);
+        size && GLctx.bufferSubData(target, offset, GROWABLE_HEAP_U8(), data, size);
         return;
       }
-      GLctx.bufferSubData(
-        target,
-        offset,
-        GROWABLE_HEAP_U8().subarray(data, data + size)
-      );
+      GLctx.bufferSubData(target, offset, GROWABLE_HEAP_U8().subarray(data, data + size));
     }
 
     var _emscripten_glBufferSubData = _glBufferSubData;
@@ -7900,10 +7394,7 @@ var Godot = (() => {
       var id = GL.getNewId(GL.programs);
       var program = GLctx.createProgram();
       program.name = id;
-      program.maxUniformLength =
-        program.maxAttributeLength =
-        program.maxUniformBlockNameLength =
-          0;
+      program.maxUniformLength = program.maxAttributeLength = program.maxUniformBlockNameLength = 0;
       program.uniformIdCounter = 1;
       GL.programs[id] = program;
       return id;
@@ -7933,10 +7424,8 @@ var Godot = (() => {
         GLctx.deleteBuffer(buffer);
         buffer.name = 0;
         GL.buffers[id] = null;
-        if (id == GLctx.currentPixelPackBufferBinding)
-          GLctx.currentPixelPackBufferBinding = 0;
-        if (id == GLctx.currentPixelUnpackBufferBinding)
-          GLctx.currentPixelUnpackBufferBinding = 0;
+        if (id == GLctx.currentPixelPackBufferBinding) GLctx.currentPixelPackBufferBinding = 0;
+        if (id == GLctx.currentPixelUnpackBufferBinding) GLctx.currentPixelUnpackBufferBinding = 0;
       }
     }
 
@@ -8129,12 +7618,7 @@ var Godot = (() => {
 
     var _emscripten_glFinish = _glFinish;
 
-    function _glFramebufferRenderbuffer(
-      target,
-      attachment,
-      renderbuffertarget,
-      renderbuffer
-    ) {
+    function _glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer) {
       GLctx.framebufferRenderbuffer(
         target,
         attachment,
@@ -8145,38 +7629,14 @@ var Godot = (() => {
 
     var _emscripten_glFramebufferRenderbuffer = _glFramebufferRenderbuffer;
 
-    function _glFramebufferTexture2D(
-      target,
-      attachment,
-      textarget,
-      texture,
-      level
-    ) {
-      GLctx.framebufferTexture2D(
-        target,
-        attachment,
-        textarget,
-        GL.textures[texture],
-        level
-      );
+    function _glFramebufferTexture2D(target, attachment, textarget, texture, level) {
+      GLctx.framebufferTexture2D(target, attachment, textarget, GL.textures[texture], level);
     }
 
     var _emscripten_glFramebufferTexture2D = _glFramebufferTexture2D;
 
-    function _glFramebufferTextureLayer(
-      target,
-      attachment,
-      texture,
-      level,
-      layer
-    ) {
-      GLctx.framebufferTextureLayer(
-        target,
-        attachment,
-        GL.textures[texture],
-        level,
-        layer
-      );
+    function _glFramebufferTextureLayer(target, attachment, texture, level, layer) {
+      GLctx.framebufferTextureLayer(target, attachment, GL.textures[texture], level, layer);
     }
 
     var _emscripten_glFramebufferTextureLayer = _glFramebufferTextureLayer;
@@ -8244,16 +7704,12 @@ var Godot = (() => {
     var _emscripten_glGenerateMipmap = _glGenerateMipmap;
 
     function readI53FromU64(ptr) {
-      return (
-        GROWABLE_HEAP_U32()[ptr >> 2] +
-        GROWABLE_HEAP_U32()[(ptr + 4) >> 2] * 4294967296
-      );
+      return GROWABLE_HEAP_U32()[ptr >> 2] + GROWABLE_HEAP_U32()[(ptr + 4) >> 2] * 4294967296;
     }
 
     function writeI53ToI64(ptr, num) {
       GROWABLE_HEAP_U32()[ptr >> 2] = num;
-      GROWABLE_HEAP_U32()[(ptr + 4) >> 2] =
-        (num - GROWABLE_HEAP_U32()[ptr >> 2]) / 4294967296;
+      GROWABLE_HEAP_U32()[(ptr + 4) >> 2] = (num - GROWABLE_HEAP_U32()[ptr >> 2]) / 4294967296;
       var deserialized = num >= 0 ? readI53FromU64(ptr) : readI53FromI64(ptr);
       if (deserialized != num)
         warnOnce(
@@ -8536,10 +7992,7 @@ var Godot = (() => {
         var sourceLength = source ? source.length + 1 : 0;
         GROWABLE_HEAP_I32()[p >> 2] = sourceLength;
       } else {
-        GROWABLE_HEAP_I32()[p >> 2] = GLctx.getShaderParameter(
-          GL.shaders[shader],
-          pname
-        );
+        GROWABLE_HEAP_I32()[p >> 2] = GLctx.getShaderParameter(GL.shaders[shader], pname);
       }
     }
 
@@ -8572,8 +8025,7 @@ var Godot = (() => {
 
           case 7938:
             var glVersion = GLctx.getParameter(7938);
-            if (GL.currentContext.version >= 2)
-              glVersion = "OpenGL ES 3.0 (" + glVersion + ")";
+            if (GL.currentContext.version >= 2) glVersion = "OpenGL ES 3.0 (" + glVersion + ")";
             else {
               glVersion = "OpenGL ES 2.0 (" + glVersion + ")";
             }
@@ -8586,8 +8038,7 @@ var Godot = (() => {
             var ver_num = glslVersion.match(ver_re);
             if (ver_num !== null) {
               if (ver_num[1].length == 3) ver_num[1] = ver_num[1] + "0";
-              glslVersion =
-                "OpenGL ES GLSL ES " + ver_num[1] + " (" + glslVersion + ")";
+              glslVersion = "OpenGL ES GLSL ES " + ver_num[1] + " (" + glslVersion + ")";
             }
             ret = stringToNewUTF8(glslVersion);
             break;
@@ -8660,10 +8111,7 @@ var Godot = (() => {
     var _emscripten_glGetSynciv = _glGetSynciv;
 
     function _glGetUniformBlockIndex(program, uniformBlockName) {
-      return GLctx.getUniformBlockIndex(
-        GL.programs[program],
-        UTF8ToString(uniformBlockName)
-      );
+      return GLctx.getUniformBlockIndex(GL.programs[program], UTF8ToString(uniformBlockName));
     }
 
     var _emscripten_glGetUniformBlockIndex = _glGetUniformBlockIndex;
@@ -8714,8 +8162,7 @@ var Godot = (() => {
           arrayIndex += sizeAndId[1];
           if (
             (uniformLocsById[arrayIndex] =
-              uniformLocsById[arrayIndex] ||
-              GLctx.getUniformLocation(program, name))
+              uniformLocsById[arrayIndex] || GLctx.getUniformLocation(program, name))
           ) {
             return arrayIndex;
           }
@@ -8752,12 +8199,7 @@ var Godot = (() => {
 
     var _emscripten_glReadBuffer = _glReadBuffer;
 
-    function computeUnpackAlignedImageSize(
-      width,
-      height,
-      sizePerPixel,
-      alignment
-    ) {
+    function computeUnpackAlignedImageSize(width, height, sizePerPixel, alignment) {
       function roundedToNextMultipleOf(x, y) {
         return (x + y - 1) & -y;
       }
@@ -8788,13 +8230,7 @@ var Godot = (() => {
       if (type == 2) return GROWABLE_HEAP_I16();
       if (type == 4) return GROWABLE_HEAP_I32();
       if (type == 6) return GROWABLE_HEAP_F32();
-      if (
-        type == 5 ||
-        type == 28922 ||
-        type == 28520 ||
-        type == 30779 ||
-        type == 30782
-      )
+      if (type == 5 || type == 28922 || type == 28520 || type == 30779 || type == 30782)
         return GROWABLE_HEAP_U32();
       return GROWABLE_HEAP_U16();
     }
@@ -8803,24 +8239,12 @@ var Godot = (() => {
       return 31 - Math.clz32(heap.BYTES_PER_ELEMENT);
     }
 
-    function emscriptenWebGLGetTexPixelData(
-      type,
-      format,
-      width,
-      height,
-      pixels,
-      internalFormat
-    ) {
+    function emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, internalFormat) {
       var heap = heapObjectForWebGLType(type);
       var shift = heapAccessShiftForWebGLHeap(heap);
       var byteSize = 1 << shift;
       var sizePerPixel = colorChannelsInGlTextureFormat(format) * byteSize;
-      var bytes = computeUnpackAlignedImageSize(
-        width,
-        height,
-        sizePerPixel,
-        GL.unpackAlignment
-      );
+      var bytes = computeUnpackAlignedImageSize(width, height, sizePerPixel, GL.unpackAlignment);
       return heap.subarray(pixels >> shift, (pixels + bytes) >> shift);
     }
 
@@ -8843,14 +8267,7 @@ var Godot = (() => {
         }
         return;
       }
-      var pixelData = emscriptenWebGLGetTexPixelData(
-        type,
-        format,
-        width,
-        height,
-        pixels,
-        format
-      );
+      var pixelData = emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, format);
       if (!pixelData) {
         GL.recordError(1280);
         return;
@@ -8942,14 +8359,7 @@ var Godot = (() => {
         format,
         type,
         pixels
-          ? emscriptenWebGLGetTexPixelData(
-              type,
-              format,
-              width,
-              height,
-              pixels,
-              internalFormat
-            )
+          ? emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, internalFormat)
           : null
       );
     }
@@ -9094,12 +8504,7 @@ var Godot = (() => {
 
     var _emscripten_glTexSubImage3D = _glTexSubImage3D;
 
-    function _glTransformFeedbackVaryings(
-      program,
-      count,
-      varyings,
-      bufferMode
-    ) {
+    function _glTransformFeedbackVaryings(program, count, varyings, bufferMode) {
       program = GL.programs[program];
       var vars = [];
       for (var i = 0; i < count; i++)
@@ -9116,8 +8521,7 @@ var Godot = (() => {
         if (typeof webglLoc == "number") {
           p.uniformLocsById[location] = webglLoc = GLctx.getUniformLocation(
             p,
-            p.uniformArrayNamesById[location] +
-              (webglLoc > 0 ? "[" + webglLoc + "]" : "")
+            p.uniformArrayNamesById[location] + (webglLoc > 0 ? "[" + webglLoc + "]" : "")
           );
         }
         return webglLoc;
@@ -9157,10 +8561,7 @@ var Godot = (() => {
           view[i] = GROWABLE_HEAP_I32()[(value + 4 * i) >> 2];
         }
       } else {
-        var view = GROWABLE_HEAP_I32().subarray(
-          value >> 2,
-          (value + count * 4) >> 2
-        );
+        var view = GROWABLE_HEAP_I32().subarray(value >> 2, (value + count * 4) >> 2);
       }
       GLctx.uniform1iv(webglGetUniformLocation(location), view);
     }
@@ -9211,10 +8612,7 @@ var Godot = (() => {
           view[i + 1] = GROWABLE_HEAP_F32()[(value + (4 * i + 4)) >> 2];
         }
       } else {
-        var view = GROWABLE_HEAP_F32().subarray(
-          value >> 2,
-          (value + count * 8) >> 2
-        );
+        var view = GROWABLE_HEAP_F32().subarray(value >> 2, (value + count * 8) >> 2);
       }
       GLctx.uniform2fv(webglGetUniformLocation(location), view);
     }
@@ -9239,10 +8637,7 @@ var Godot = (() => {
           view[i + 1] = GROWABLE_HEAP_I32()[(value + (4 * i + 4)) >> 2];
         }
       } else {
-        var view = GROWABLE_HEAP_I32().subarray(
-          value >> 2,
-          (value + count * 8) >> 2
-        );
+        var view = GROWABLE_HEAP_I32().subarray(value >> 2, (value + count * 8) >> 2);
       }
       GLctx.uniform2iv(webglGetUniformLocation(location), view);
     }
@@ -9268,10 +8663,7 @@ var Godot = (() => {
           view[i + 2] = GROWABLE_HEAP_F32()[(value + (4 * i + 8)) >> 2];
         }
       } else {
-        var view = GROWABLE_HEAP_F32().subarray(
-          value >> 2,
-          (value + count * 12) >> 2
-        );
+        var view = GROWABLE_HEAP_F32().subarray(value >> 2, (value + count * 12) >> 2);
       }
       GLctx.uniform3fv(webglGetUniformLocation(location), view);
     }
@@ -9307,27 +8699,16 @@ var Godot = (() => {
           view[i + 3] = heap[dst + 3];
         }
       } else {
-        var view = GROWABLE_HEAP_F32().subarray(
-          value >> 2,
-          (value + count * 16) >> 2
-        );
+        var view = GROWABLE_HEAP_F32().subarray(value >> 2, (value + count * 16) >> 2);
       }
       GLctx.uniform4fv(webglGetUniformLocation(location), view);
     }
 
     var _emscripten_glUniform4fv = _glUniform4fv;
 
-    function _glUniformBlockBinding(
-      program,
-      uniformBlockIndex,
-      uniformBlockBinding
-    ) {
+    function _glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding) {
       program = GL.programs[program];
-      GLctx.uniformBlockBinding(
-        program,
-        uniformBlockIndex,
-        uniformBlockBinding
-      );
+      GLctx.uniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding);
     }
 
     var _emscripten_glUniformBlockBinding = _glUniformBlockBinding;
@@ -9368,16 +8749,9 @@ var Godot = (() => {
           view[i + 15] = heap[dst + 15];
         }
       } else {
-        var view = GROWABLE_HEAP_F32().subarray(
-          value >> 2,
-          (value + count * 64) >> 2
-        );
+        var view = GROWABLE_HEAP_F32().subarray(value >> 2, (value + count * 64) >> 2);
       }
-      GLctx.uniformMatrix4fv(
-        webglGetUniformLocation(location),
-        !!transpose,
-        view
-      );
+      GLctx.uniformMatrix4fv(webglGetUniformLocation(location), !!transpose, view);
     }
 
     var _emscripten_glUniformMatrix4fv = _glUniformMatrix4fv;
@@ -9414,14 +8788,7 @@ var Godot = (() => {
 
     var _emscripten_glVertexAttribIPointer = _glVertexAttribIPointer;
 
-    function _glVertexAttribPointer(
-      index,
-      size,
-      type,
-      normalized,
-      stride,
-      ptr
-    ) {
+    function _glVertexAttribPointer(index, size, type, normalized, stride, ptr) {
       GLctx.vertexAttribPointer(index, size, type, !!normalized, stride, ptr);
     }
 
@@ -9466,12 +8833,7 @@ var Godot = (() => {
           var arg = outerArgs[2 + i];
           GROWABLE_HEAP_F64()[b + i] = arg;
         }
-        return __emscripten_run_in_main_runtime_thread_js(
-          index,
-          serializedNumCallArgs,
-          args,
-          sync
-        );
+        return __emscripten_run_in_main_runtime_thread_js(index, serializedNumCallArgs, args, sync);
       });
     }
 
@@ -9481,8 +8843,7 @@ var Godot = (() => {
       emscripten_receive_on_main_thread_js_callArgs.length = numCallArgs;
       var b = args >> 3;
       for (var i = 0; i < numCallArgs; i++) {
-        emscripten_receive_on_main_thread_js_callArgs[i] =
-          GROWABLE_HEAP_F64()[b + i];
+        emscripten_receive_on_main_thread_js_callArgs[i] = GROWABLE_HEAP_F64()[b + i];
       }
       var func = proxiedFunctionTable[index];
       assert(
@@ -9522,14 +8883,10 @@ var Godot = (() => {
         );
         return false;
       }
-      var alignUp = (x, multiple) =>
-        x + ((multiple - (x % multiple)) % multiple);
+      var alignUp = (x, multiple) => x + ((multiple - (x % multiple)) % multiple);
       for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
         var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown);
-        overGrownHeapSize = Math.min(
-          overGrownHeapSize,
-          requestedSize + 100663296
-        );
+        overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296);
         var newSize = Math.min(
           maxHeapSize,
           alignUp(Math.max(requestedSize, overGrownHeapSize), 65536)
@@ -9539,9 +8896,7 @@ var Godot = (() => {
           return true;
         }
       }
-      err(
-        `Failed to grow the heap from ${oldSize} bytes to ${newSize} bytes, not enough memory!`
-      );
+      err(`Failed to grow the heap from ${oldSize} bytes to ${newSize} bytes, not enough memory!`);
       return false;
     }
 
@@ -9596,10 +8951,7 @@ var Godot = (() => {
         }
       },
       canPerformEventHandlerRequests: function () {
-        return (
-          JSEvents.inEventHandler &&
-          JSEvents.currentEventHandler.allowsDeferredCalls
-        );
+        return JSEvents.inEventHandler && JSEvents.currentEventHandler.allowsDeferredCalls;
       },
       runDeferredCalls: function () {
         if (!JSEvents.canPerformEventHandlerRequests()) {
@@ -9617,8 +8969,7 @@ var Godot = (() => {
         for (var i = 0; i < JSEvents.eventHandlers.length; ++i) {
           if (
             JSEvents.eventHandlers[i].target == target &&
-            (!eventTypeString ||
-              eventTypeString == JSEvents.eventHandlers[i].eventTypeString)
+            (!eventTypeString || eventTypeString == JSEvents.eventHandlers[i].eventTypeString)
           ) {
             JSEvents._removeHandler(i--);
           }
@@ -9626,11 +8977,7 @@ var Godot = (() => {
       },
       _removeHandler: function (i) {
         var h = JSEvents.eventHandlers[i];
-        h.target.removeEventListener(
-          h.eventTypeString,
-          h.eventListenerFunc,
-          h.useCapture
-        );
+        h.target.removeEventListener(h.eventTypeString, h.eventListenerFunc, h.useCapture);
         JSEvents.eventHandlers.splice(i, 1);
       },
       registerOrRemoveHandler: function (eventHandler) {
@@ -9662,8 +9009,7 @@ var Godot = (() => {
           for (var i = 0; i < JSEvents.eventHandlers.length; ++i) {
             if (
               JSEvents.eventHandlers[i].target == eventHandler.target &&
-              JSEvents.eventHandlers[i].eventTypeString ==
-                eventHandler.eventTypeString
+              JSEvents.eventHandlers[i].eventTypeString == eventHandler.eventTypeString
             ) {
               JSEvents._removeHandler(i--);
             }
@@ -9729,9 +9075,7 @@ var Godot = (() => {
       target = maybeCStringToJsString(target);
       var domElement =
         specialHTMLTargets[target] ||
-        (typeof document != "undefined"
-          ? document.querySelector(target)
-          : undefined);
+        (typeof document != "undefined" ? document.querySelector(target) : undefined);
       return domElement;
     }
 
@@ -9765,8 +9109,7 @@ var Godot = (() => {
     }
 
     function setCanvasElementSizeMainThread(target, width, height) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(36, 1, target, width, height);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(36, 1, target, width, height);
       return setCanvasElementSizeCallingThread(target, width, height);
     }
 
@@ -9788,8 +9131,7 @@ var Godot = (() => {
     }
 
     function _emscripten_webgl_destroy_context(contextHandle) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(37, 1, contextHandle);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(37, 1, contextHandle);
       if (GL.currentContext == contextHandle) GL.currentContext = 0;
       GL.deleteContext(contextHandle);
     }
@@ -9809,16 +9151,11 @@ var Godot = (() => {
     }
 
     function _emscripten_webgl_create_context_proxied(target, attributes) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(38, 1, target, attributes);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(38, 1, target, attributes);
       return _emscripten_webgl_do_create_context(target, attributes);
     }
 
-    var emscripten_webgl_power_preferences = [
-      "default",
-      "low-power",
-      "high-performance",
-    ];
+    var emscripten_webgl_power_preferences = ["default", "low-power", "high-performance"];
 
     function _emscripten_webgl_do_create_context(target, attributes) {
       assert(attributes);
@@ -9867,23 +9204,17 @@ var Godot = (() => {
     }
 
     function _emscripten_webgl_enable_extension(contextHandle, extension) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(39, 1, contextHandle, extension);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(39, 1, contextHandle, extension);
       var context = GL.getContext(contextHandle);
       var extString = UTF8ToString(extension);
       if (extString.startsWith("GL_")) extString = extString.substr(3);
-      if (extString == "ANGLE_instanced_arrays")
-        webgl_enable_ANGLE_instanced_arrays(GLctx);
-      if (extString == "OES_vertex_array_object")
-        webgl_enable_OES_vertex_array_object(GLctx);
-      if (extString == "WEBGL_draw_buffers")
-        webgl_enable_WEBGL_draw_buffers(GLctx);
+      if (extString == "ANGLE_instanced_arrays") webgl_enable_ANGLE_instanced_arrays(GLctx);
+      if (extString == "OES_vertex_array_object") webgl_enable_OES_vertex_array_object(GLctx);
+      if (extString == "WEBGL_draw_buffers") webgl_enable_WEBGL_draw_buffers(GLctx);
       if (extString == "WEBGL_draw_instanced_base_vertex_base_instance")
         webgl_enable_WEBGL_draw_instanced_base_vertex_base_instance(GLctx);
       if (extString == "WEBGL_multi_draw_instanced_base_vertex_base_instance")
-        webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(
-          GLctx
-        );
+        webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(GLctx);
       if (extString == "WEBGL_multi_draw") webgl_enable_WEBGL_multi_draw(GLctx);
       var ext = context.GLctx.getExtension(extString);
       return !!ext;
@@ -9902,13 +9233,10 @@ var Godot = (() => {
         GROWABLE_HEAP_I32()[a + (32 >> 2)] =
         GROWABLE_HEAP_I32()[a + (40 >> 2)] =
           1;
-      if (ENVIRONMENT_IS_WORKER)
-        GROWABLE_HEAP_I32()[(attributes + 48) >> 2] = 1;
+      if (ENVIRONMENT_IS_WORKER) GROWABLE_HEAP_I32()[(attributes + 48) >> 2] = 1;
     }
 
-    function _emscripten_webgl_make_context_current_calling_thread(
-      contextHandle
-    ) {
+    function _emscripten_webgl_make_context_current_calling_thread(contextHandle) {
       var success = GL.makeContextCurrent(contextHandle);
       if (success) GL.currentContextIsProxied = false;
       return success ? 0 : -5;
@@ -9924,9 +9252,7 @@ var Godot = (() => {
       if (!getEnvStrings.strings) {
         var lang =
           (
-            (typeof navigator == "object" &&
-              navigator.languages &&
-              navigator.languages[0]) ||
+            (typeof navigator == "object" && navigator.languages && navigator.languages[0]) ||
             "C"
           ).replace("-", "_") + ".UTF-8";
         var env = {
@@ -9960,8 +9286,7 @@ var Godot = (() => {
     }
 
     function _environ_get(__environ, environ_buf) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(40, 1, __environ, environ_buf);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(40, 1, __environ, environ_buf);
       var bufSize = 0;
       getEnvStrings().forEach(function (string, i) {
         var ptr = environ_buf + bufSize;
@@ -10005,13 +9330,7 @@ var Godot = (() => {
         var flags = 0;
         {
           var stream = SYSCALLS.getStreamFromFD(fd);
-          var type = stream.tty
-            ? 2
-            : FS.isDir(stream.mode)
-            ? 3
-            : FS.isLink(stream.mode)
-            ? 7
-            : 4;
+          var type = stream.tty ? 2 : FS.isDir(stream.mode) ? 3 : FS.isLink(stream.mode) ? 7 : 4;
         }
         GROWABLE_HEAP_I8()[pbuf >> 0] = type;
         GROWABLE_HEAP_I16()[(pbuf + 2) >> 1] = flags;
@@ -10021,9 +9340,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(pbuf + 8) >> 2] = tempI64[0]),
@@ -10034,9 +9351,7 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[(pbuf + 16) >> 2] = tempI64[0]),
@@ -10066,8 +9381,7 @@ var Godot = (() => {
     }
 
     function _fd_read(fd, iov, iovcnt, pnum) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(44, 1, fd, iov, iovcnt, pnum);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(44, 1, fd, iov, iovcnt, pnum);
       try {
         var stream = SYSCALLS.getStreamFromFD(fd);
         var num = doReadv(stream, iov, iovcnt);
@@ -10082,22 +9396,12 @@ var Godot = (() => {
     function convertI32PairToI53Checked(lo, hi) {
       assert(lo == lo >>> 0 || lo == (lo | 0));
       assert(hi === (hi | 0));
-      return (hi + 2097152) >>> 0 < 4194305 - !!lo
-        ? (lo >>> 0) + hi * 4294967296
-        : NaN;
+      return (hi + 2097152) >>> 0 < 4194305 - !!lo ? (lo >>> 0) + hi * 4294967296 : NaN;
     }
 
     function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          45,
-          1,
-          fd,
-          offset_low,
-          offset_high,
-          whence,
-          newOffset
-        );
+        return proxyToMainThread(45, 1, fd, offset_low, offset_high, whence, newOffset);
       try {
         var offset = convertI32PairToI53Checked(offset_low, offset_high);
         if (isNaN(offset)) return 61;
@@ -10109,15 +9413,12 @@ var Godot = (() => {
           +Math.abs(tempDouble) >= 1
             ? tempDouble > 0
               ? +Math.floor(tempDouble / 4294967296) >>> 0
-              : ~~+Math.ceil(
-                  (tempDouble - +(~~tempDouble >>> 0)) / 4294967296
-                ) >>> 0
+              : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0
             : 0),
         ]),
           (GROWABLE_HEAP_I32()[newOffset >> 2] = tempI64[0]),
           (GROWABLE_HEAP_I32()[(newOffset + 4) >> 2] = tempI64[1]);
-        if (stream.getdents && offset === 0 && whence === 0)
-          stream.getdents = null;
+        if (stream.getdents && offset === 0 && whence === 0) stream.getdents = null;
         return 0;
       } catch (e) {
         if (typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
@@ -10142,8 +9443,7 @@ var Godot = (() => {
     }
 
     function _fd_write(fd, iov, iovcnt, pnum) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(46, 1, fd, iov, iovcnt, pnum);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(46, 1, fd, iov, iovcnt, pnum);
       try {
         var stream = SYSCALLS.getStreamFromFD(fd);
         var num = doWritev(stream, iov, iovcnt);
@@ -10156,8 +9456,7 @@ var Godot = (() => {
     }
 
     function _getaddrinfo(node, service, hint, out) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(47, 1, node, service, hint, out);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(47, 1, node, service, hint, out);
       var addrs = [];
       var canon = null;
       var addr = 0;
@@ -10384,9 +9683,7 @@ var Godot = (() => {
         const size = p_strings.length;
         const c_ptr = GodotRuntime.malloc(size * 4);
         for (let i = 0; i < size; i++) {
-          GROWABLE_HEAP_I32()[(c_ptr >> 2) + i] = GodotRuntime.allocString(
-            p_strings[i]
-          );
+          GROWABLE_HEAP_I32()[(c_ptr >> 2) + i] = GodotRuntime.allocString(p_strings[i]);
         }
         return c_ptr;
       },
@@ -10504,9 +9801,7 @@ var Godot = (() => {
         return new Promise(function (resolve, reject) {
           FS.syncfs(false, function (error) {
             if (error) {
-              GodotRuntime.error(
-                `Failed to save IDB file system: ${error.message}`
-              );
+              GodotRuntime.error(`Failed to save IDB file system: ${error.message}`);
             }
             GodotFS._syncing = false;
             resolve(error);
@@ -10576,9 +9871,7 @@ var Godot = (() => {
         if (mix_rate) {
           opts["sampleRate"] = mix_rate;
         }
-        const ctx = new (window.AudioContext || window.webkitAudioContext)(
-          opts
-        );
+        const ctx = new (window.AudioContext || window.webkitAudioContext)(opts);
         GodotAudio.ctx = ctx;
         ctx.onstatechange = function () {
           let state = 0;
@@ -10633,8 +9926,7 @@ var Godot = (() => {
             });
         } else {
           if (!navigator.getUserMedia) {
-            navigator.getUserMedia =
-              navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+            navigator.getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
           }
           if (!navigator.getUserMedia) {
             GodotRuntime.error("getUserMedia not available.");
@@ -10692,30 +9984,13 @@ var Godot = (() => {
       return GodotAudio.ctx && GodotAudio.ctx.audioWorklet ? 1 : 0;
     }
 
-    function _godot_audio_init(
-      p_mix_rate,
-      p_latency,
-      p_state_change,
-      p_latency_update
-    ) {
+    function _godot_audio_init(p_mix_rate, p_latency, p_state_change, p_latency_update) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          49,
-          1,
-          p_mix_rate,
-          p_latency,
-          p_state_change,
-          p_latency_update
-        );
+        return proxyToMainThread(49, 1, p_mix_rate, p_latency, p_state_change, p_latency_update);
       const statechange = GodotRuntime.get_func(p_state_change);
       const latencyupdate = GodotRuntime.get_func(p_latency_update);
       const mix_rate = GodotRuntime.getHeapValue(p_mix_rate, "i32");
-      const channels = GodotAudio.init(
-        mix_rate,
-        p_latency,
-        statechange,
-        latencyupdate
-      );
+      const channels = GodotAudio.init(mix_rate, p_latency, statechange, latencyupdate);
       GodotRuntime.setHeapValue(p_mix_rate, GodotAudio.ctx.sampleRate, "i32");
       return channels;
     }
@@ -10760,18 +10035,12 @@ var Godot = (() => {
       ring_buffer: null,
       create: function (channels) {
         const path = GodotConfig.locate_file("godot.audio.worklet.js");
-        GodotAudioWorklet.promise = GodotAudio.ctx.audioWorklet
-          .addModule(path)
-          .then(function () {
-            GodotAudioWorklet.worklet = new AudioWorkletNode(
-              GodotAudio.ctx,
-              "godot-processor",
-              {
-                outputChannelCount: [channels],
-              }
-            );
-            return Promise.resolve();
+        GodotAudioWorklet.promise = GodotAudio.ctx.audioWorklet.addModule(path).then(function () {
+          GodotAudioWorklet.worklet = new AudioWorkletNode(GodotAudio.ctx, "godot-processor", {
+            outputChannelCount: [channels],
           });
+          return Promise.resolve();
+        });
         GodotAudio.driver = GodotAudioWorklet;
       },
       start: function (in_buf, out_buf, state) {
@@ -10804,11 +10073,7 @@ var Godot = (() => {
             if (pending_samples === 0) {
               return;
             }
-            const buffer = GodotRuntime.heapSub(
-              GROWABLE_HEAP_F32(),
-              p_out_buf,
-              p_out_size
-            );
+            const buffer = GodotRuntime.heapSub(GROWABLE_HEAP_F32(), p_out_buf, p_out_size);
             const size = buffer.length;
             const tot_sent = pending_samples;
             out_callback(wpos, pending_samples);
@@ -10819,10 +10084,7 @@ var Godot = (() => {
               wpos = 0;
             }
             if (pending_samples > 0) {
-              wbuf.set(
-                buffer.subarray(wpos, wpos + pending_samples),
-                tot_sent - pending_samples
-              );
+              wbuf.set(buffer.subarray(wpos, wpos + pending_samples), tot_sent - pending_samples);
             }
             port.postMessage({
               cmd: "chunk",
@@ -10832,11 +10094,7 @@ var Godot = (() => {
             pending_samples = 0;
           }
           this.receive = function (recv_buf) {
-            const buffer = GodotRuntime.heapSub(
-              GROWABLE_HEAP_F32(),
-              p_in_buf,
-              p_in_size
-            );
+            const buffer = GodotRuntime.heapSub(GROWABLE_HEAP_F32(), p_in_buf, p_in_size);
             const from = rpos;
             let to_write = recv_buf.length;
             let high = 0;
@@ -10860,11 +10118,7 @@ var Godot = (() => {
         GodotAudioWorklet.ring_buffer = new RingBuffer();
         GodotAudioWorklet.promise.then(function () {
           const node = GodotAudioWorklet.worklet;
-          const buffer = GodotRuntime.heapSlice(
-            GROWABLE_HEAP_F32(),
-            p_out_buf,
-            p_out_size
-          );
+          const buffer = GodotRuntime.heapSlice(GROWABLE_HEAP_F32(), p_out_buf, p_out_size);
           node.connect(GodotAudio.ctx.destination);
           node.port.postMessage({
             cmd: "start_nothreads",
@@ -10876,10 +10130,7 @@ var Godot = (() => {
             }
             if (event.data["cmd"] === "read") {
               const read = event.data["data"];
-              GodotAudioWorklet.ring_buffer.consumed(
-                read,
-                GodotAudioWorklet.worklet.port
-              );
+              GodotAudioWorklet.ring_buffer.consumed(read, GodotAudioWorklet.worklet.port);
             } else if (event.data["cmd"] === "input") {
               const buf = event.data["data"];
               if (buf.length > p_in_size) {
@@ -10930,33 +10181,11 @@ var Godot = (() => {
       return 0;
     }
 
-    function _godot_audio_worklet_start(
-      p_in_buf,
-      p_in_size,
-      p_out_buf,
-      p_out_size,
-      p_state
-    ) {
+    function _godot_audio_worklet_start(p_in_buf, p_in_size, p_out_buf, p_out_size, p_state) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          55,
-          1,
-          p_in_buf,
-          p_in_size,
-          p_out_buf,
-          p_out_size,
-          p_state
-        );
-      const out_buffer = GodotRuntime.heapSub(
-        GROWABLE_HEAP_F32(),
-        p_out_buf,
-        p_out_size
-      );
-      const in_buffer = GodotRuntime.heapSub(
-        GROWABLE_HEAP_F32(),
-        p_in_buf,
-        p_in_size
-      );
+        return proxyToMainThread(55, 1, p_in_buf, p_in_size, p_out_buf, p_out_size, p_state);
+      const out_buffer = GodotRuntime.heapSub(GROWABLE_HEAP_F32(), p_out_buf, p_out_size);
+      const in_buffer = GodotRuntime.heapSub(GROWABLE_HEAP_F32(), p_in_buf, p_in_size);
       const state = GodotRuntime.heapSub(GROWABLE_HEAP_I32(), p_state, 4);
       GodotAudioWorklet.start(in_buffer, out_buffer, state);
     }
@@ -10969,30 +10198,18 @@ var Godot = (() => {
       return Atomics.load(GROWABLE_HEAP_I32(), (p_state >> 2) + p_idx);
     }
 
-    function _godot_audio_worklet_state_wait(
-      p_state,
-      p_idx,
-      p_expected,
-      p_timeout
-    ) {
-      Atomics.wait(
-        GROWABLE_HEAP_I32(),
-        (p_state >> 2) + p_idx,
-        p_expected,
-        p_timeout
-      );
+    function _godot_audio_worklet_state_wait(p_state, p_idx, p_expected, p_timeout) {
+      Atomics.wait(GROWABLE_HEAP_I32(), (p_state >> 2) + p_idx, p_expected, p_timeout);
       return Atomics.load(GROWABLE_HEAP_I32(), (p_state >> 2) + p_idx);
     }
 
     function _godot_js_config_canvas_id_get(p_ptr, p_ptr_max) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(56, 1, p_ptr, p_ptr_max);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(56, 1, p_ptr, p_ptr_max);
       GodotRuntime.stringToHeap(`#${GodotConfig.canvas.id}`, p_ptr, p_ptr_max);
     }
 
     function _godot_js_config_locale_get(p_ptr, p_ptr_max) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(57, 1, p_ptr, p_ptr_max);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(57, 1, p_ptr, p_ptr_max);
       GodotRuntime.stringToHeap(GodotConfig.locale, p_ptr, p_ptr_max);
     }
 
@@ -11063,9 +10280,7 @@ var Godot = (() => {
           this.method = p_method;
           this.capture = p_capture;
         }
-        GodotEventListeners.handlers.push(
-          new Handler(target, event, method, capture)
-        );
+        GodotEventListeners.handlers.push(new Handler(target, event, method, capture));
         target.addEventListener(event, method, capture);
       },
       clear: function () {
@@ -11091,11 +10306,7 @@ var Godot = (() => {
         if (elem) {
           return elem === GodotConfig.canvas;
         }
-        return (
-          document.fullscreen ||
-          document.mozFullScreen ||
-          document.webkitIsFullscreen
-        );
+        return document.fullscreen || document.mozFullScreen || document.webkitIsFullscreen;
       },
       hasFullscreen: function () {
         return (
@@ -11304,9 +10515,7 @@ var Godot = (() => {
         if (!GodotDisplayVK.textinput || !GodotDisplayVK.textarea) {
           return;
         }
-        [GodotDisplayVK.textinput, GodotDisplayVK.textarea].forEach(function (
-          elem
-        ) {
+        [GodotDisplayVK.textinput, GodotDisplayVK.textarea].forEach(function (elem) {
           elem.blur();
           elem.style.display = "none";
           elem.value = "";
@@ -11418,24 +10627,13 @@ var Godot = (() => {
       p_hotspot_y
     ) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          66,
-          1,
-          p_shape,
-          p_ptr,
-          p_len,
-          p_hotspot_x,
-          p_hotspot_y
-        );
+        return proxyToMainThread(66, 1, p_shape, p_ptr, p_len, p_hotspot_x, p_hotspot_y);
       const shape = GodotRuntime.parseString(p_shape);
       const old_shape = GodotDisplayCursor.cursors[shape];
       if (p_len > 0) {
-        const png = new Blob(
-          [GodotRuntime.heapSlice(GROWABLE_HEAP_U8(), p_ptr, p_len)],
-          {
-            type: "image/png",
-          }
-        );
+        const png = new Blob([GodotRuntime.heapSlice(GROWABLE_HEAP_U8(), p_ptr, p_len)], {
+          type: "image/png",
+        });
         const url = URL.createObjectURL(png);
         GodotDisplayCursor.cursors[shape] = {
           url: url,
@@ -11473,8 +10671,7 @@ var Godot = (() => {
     }
 
     function _godot_js_display_desired_size_set(width, height) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(69, 1, width, height);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(69, 1, width, height);
       GodotDisplayScreen.desired_size = [width, height];
       GodotDisplayScreen.updateSize();
     }
@@ -11489,18 +10686,8 @@ var Godot = (() => {
         }
       }
       GodotEventListeners.add(document, "fullscreenchange", change_cb, false);
-      GodotEventListeners.add(
-        document,
-        "mozfullscreenchange",
-        change_cb,
-        false
-      );
-      GodotEventListeners.add(
-        document,
-        "webkitfullscreenchange",
-        change_cb,
-        false
-      );
+      GodotEventListeners.add(document, "mozfullscreenchange", change_cb, false);
+      GodotEventListeners.add(document, "webkitfullscreenchange", change_cb, false);
     }
 
     function _godot_js_display_fullscreen_exit() {
@@ -11519,9 +10706,7 @@ var Godot = (() => {
         return false;
       }
       try {
-        return !!document
-          .createElement("canvas")
-          .getContext(p_version === 2 ? "webgl2" : "webgl");
+        return !!document.createElement("canvas").getContext(p_version === 2 ? "webgl2" : "webgl");
       } catch (e) {}
       return false;
     }
@@ -11536,22 +10721,13 @@ var Godot = (() => {
       return 0;
     }
 
-    function _godot_js_display_notification_cb(
-      callback,
-      p_enter,
-      p_exit,
-      p_in,
-      p_out
-    ) {
+    function _godot_js_display_notification_cb(callback, p_enter, p_exit, p_in, p_out) {
       if (ENVIRONMENT_IS_PTHREAD)
         return proxyToMainThread(75, 1, callback, p_enter, p_exit, p_in, p_out);
       const canvas = GodotConfig.canvas;
       const func = GodotRuntime.get_func(callback);
       const notif = [p_enter, p_exit, p_in, p_out];
-      ["mouseover", "mouseleave", "focus", "blur"].forEach(function (
-        evt_name,
-        idx
-      ) {
+      ["mouseover", "mouseleave", "focus", "blur"].forEach(function (evt_name, idx) {
         GodotEventListeners.add(
           canvas,
           evt_name,
@@ -11574,28 +10750,15 @@ var Godot = (() => {
     }
 
     function _godot_js_display_screen_size_get(width, height) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(78, 1, width, height);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(78, 1, width, height);
       const scale = GodotDisplayScreen.getPixelRatio();
       GodotRuntime.setHeapValue(width, window.screen.width * scale, "i32");
       GodotRuntime.setHeapValue(height, window.screen.height * scale, "i32");
     }
 
-    function _godot_js_display_setup_canvas(
-      p_width,
-      p_height,
-      p_fullscreen,
-      p_hidpi
-    ) {
+    function _godot_js_display_setup_canvas(p_width, p_height, p_fullscreen, p_hidpi) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          79,
-          1,
-          p_width,
-          p_height,
-          p_fullscreen,
-          p_hidpi
-        );
+        return proxyToMainThread(79, 1, p_width, p_height, p_fullscreen, p_hidpi);
       const canvas = GodotConfig.canvas;
       GodotEventListeners.add(
         canvas,
@@ -11674,8 +10837,7 @@ var Godot = (() => {
     }
 
     function _godot_js_display_vk_show(p_text, p_type, p_start, p_end) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(86, 1, p_text, p_type, p_start, p_end);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(86, 1, p_text, p_type, p_start, p_end);
       const text = GodotRuntime.parseString(p_text);
       const start = p_start > 0 ? p_start : 0;
       const end = p_end > 0 ? p_end : start;
@@ -11706,12 +10868,9 @@ var Godot = (() => {
           link.id = "-gd-engine-icon";
           document.head.appendChild(link);
         }
-        const png = new Blob(
-          [GodotRuntime.heapSlice(GROWABLE_HEAP_U8(), p_ptr, p_len)],
-          {
-            type: "image/png",
-          }
-        );
+        const png = new Blob([GodotRuntime.heapSlice(GROWABLE_HEAP_U8(), p_ptr, p_len)], {
+          type: "image/png",
+        });
         GodotDisplay.window_icon = URL.createObjectURL(png);
         link.href = GodotDisplay.window_icon;
       } else {
@@ -11726,8 +10885,7 @@ var Godot = (() => {
     }
 
     function _godot_js_display_window_size_get(p_width, p_height) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(89, 1, p_width, p_height);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(89, 1, p_width, p_height);
       GodotRuntime.setHeapValue(p_width, GodotConfig.canvas.width, "i32");
       GodotRuntime.setHeapValue(p_height, GodotConfig.canvas.height, "i32");
     }
@@ -11767,32 +10925,21 @@ var Godot = (() => {
           return 3;
 
         case "string":
-          GodotRuntime.setHeapValue(
-            p_union_ptr,
-            GodotRuntime.allocString(eval_ret),
-            "*"
-          );
+          GodotRuntime.setHeapValue(p_union_ptr, GodotRuntime.allocString(eval_ret), "*");
           return 4;
 
         case "object":
           if (eval_ret === null) {
             break;
           }
-          if (
-            ArrayBuffer.isView(eval_ret) &&
-            !(eval_ret instanceof Uint8Array)
-          ) {
+          if (ArrayBuffer.isView(eval_ret) && !(eval_ret instanceof Uint8Array)) {
             eval_ret = new Uint8Array(eval_ret.buffer);
           } else if (eval_ret instanceof ArrayBuffer) {
             eval_ret = new Uint8Array(eval_ret);
           }
           if (eval_ret instanceof Uint8Array) {
             const func = GodotRuntime.get_func(p_callback);
-            const bytes_ptr = func(
-              p_byte_arr,
-              p_byte_arr_write,
-              eval_ret.length
-            );
+            const bytes_ptr = func(p_byte_arr, p_byte_arr_write, eval_ret.length);
             GROWABLE_HEAP_U8().set(eval_ret, bytes_ptr);
             return 29;
           }
@@ -11979,8 +11126,7 @@ var Godot = (() => {
     }
 
     function _godot_js_fetch_read_chunk(p_id, p_buf, p_buf_size) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(95, 1, p_id, p_buf, p_buf_size);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(95, 1, p_id, p_buf, p_buf_size);
       const obj = IDHandler.get(p_id);
       if (!obj || !obj.response) {
         return 0;
@@ -11990,11 +11136,7 @@ var Godot = (() => {
       while (to_read && chunks.length) {
         const chunk = obj.chunks[0];
         if (chunk.length > to_read) {
-          GodotRuntime.heapCopy(
-            GROWABLE_HEAP_I8(),
-            chunk.slice(0, to_read),
-            p_buf
-          );
+          GodotRuntime.heapCopy(GROWABLE_HEAP_I8(), chunk.slice(0, to_read), p_buf);
           chunks[0] = chunk.slice(to_read);
           to_read = 0;
         } else {
@@ -12010,8 +11152,7 @@ var Godot = (() => {
     }
 
     function _godot_js_fetch_read_headers(p_id, p_parse_cb, p_ref) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(96, 1, p_id, p_parse_cb, p_ref);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(96, 1, p_id, p_parse_cb, p_ref);
       const obj = IDHandler.get(p_id);
       if (!obj || !obj.response) {
         return 1;
@@ -12367,11 +11508,7 @@ var Godot = (() => {
         },
         false
       );
-      GodotEventListeners.add(
-        canvas,
-        "drop",
-        GodotInputDragDrop.handler(dropFiles)
-      );
+      GodotEventListeners.add(canvas, "drop", GodotInputDragDrop.handler(dropFiles));
     }
 
     function _godot_js_input_gamepad_cb(change_cb) {
@@ -12432,8 +11569,7 @@ var Godot = (() => {
     }
 
     function _godot_js_input_key_cb(callback, code, key) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(103, 1, callback, code, key);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(103, 1, callback, code, key);
       const func = GodotRuntime.get_func(callback);
       function key_cb(pressed, evt) {
         const modifiers = GodotInput.getModifiers(evt);
@@ -12442,18 +11578,8 @@ var Godot = (() => {
         func(pressed, evt.repeat, modifiers);
         evt.preventDefault();
       }
-      GodotEventListeners.add(
-        GodotConfig.canvas,
-        "keydown",
-        key_cb.bind(null, 1),
-        false
-      );
-      GodotEventListeners.add(
-        GodotConfig.canvas,
-        "keyup",
-        key_cb.bind(null, 0),
-        false
-      );
+      GodotEventListeners.add(GodotConfig.canvas, "keydown", key_cb.bind(null, 1), false);
+      GodotEventListeners.add(GodotConfig.canvas, "keyup", key_cb.bind(null, 0), false);
     }
 
     function _godot_js_input_mouse_button_cb(callback) {
@@ -12471,18 +11597,8 @@ var Godot = (() => {
           evt.preventDefault();
         }
       }
-      GodotEventListeners.add(
-        canvas,
-        "mousedown",
-        button_cb.bind(null, 1),
-        false
-      );
-      GodotEventListeners.add(
-        window,
-        "mouseup",
-        button_cb.bind(null, 0),
-        false
-      );
+      GodotEventListeners.add(canvas, "mousedown", button_cb.bind(null, 1), false);
+      GodotEventListeners.add(window, "mouseup", button_cb.bind(null, 0), false);
     }
 
     function _godot_js_input_mouse_move_cb(callback) {
@@ -12530,8 +11646,7 @@ var Godot = (() => {
     }
 
     function _godot_js_input_touch_cb(callback, ids, coords) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(108, 1, callback, ids, coords);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(108, 1, callback, ids, coords);
       const func = GodotRuntime.get_func(callback);
       const canvas = GodotConfig.canvas;
       function touch_cb(type, evt) {
@@ -12552,35 +11667,14 @@ var Godot = (() => {
           evt.preventDefault();
         }
       }
-      GodotEventListeners.add(
-        canvas,
-        "touchstart",
-        touch_cb.bind(null, 0),
-        false
-      );
-      GodotEventListeners.add(
-        canvas,
-        "touchend",
-        touch_cb.bind(null, 1),
-        false
-      );
-      GodotEventListeners.add(
-        canvas,
-        "touchcancel",
-        touch_cb.bind(null, 1),
-        false
-      );
-      GodotEventListeners.add(
-        canvas,
-        "touchmove",
-        touch_cb.bind(null, 2),
-        false
-      );
+      GodotEventListeners.add(canvas, "touchstart", touch_cb.bind(null, 0), false);
+      GodotEventListeners.add(canvas, "touchend", touch_cb.bind(null, 1), false);
+      GodotEventListeners.add(canvas, "touchcancel", touch_cb.bind(null, 1), false);
+      GodotEventListeners.add(canvas, "touchmove", touch_cb.bind(null, 2), false);
     }
 
     function _godot_js_input_vibrate_handheld(p_duration_ms) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(109, 1, p_duration_ms);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(109, 1, p_duration_ms);
       if (typeof navigator.vibrate !== "function") {
         GodotRuntime.print("This browser does not support vibration.");
       } else {
@@ -12589,8 +11683,7 @@ var Godot = (() => {
     }
 
     function _godot_js_os_download_buffer(p_ptr, p_size, p_name, p_mime) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(110, 1, p_ptr, p_size, p_name, p_mime);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(110, 1, p_ptr, p_size, p_name, p_mime);
       const buf = GodotRuntime.heapSlice(GROWABLE_HEAP_I8(), p_ptr, p_size);
       const name = GodotRuntime.parseString(p_name);
       const mime = GodotRuntime.parseString(p_mime);
@@ -12653,9 +11746,7 @@ var Godot = (() => {
         return ua.indexOf("Android") !== -1 ? 1 : 0;
       }
       if (ftr === "web_ios") {
-        return ua.indexOf("iPhone") !== -1 ||
-          ua.indexOf("iPad") !== -1 ||
-          ua.indexOf("iPod") !== -1
+        return ua.indexOf("iPhone") !== -1 || ua.indexOf("iPad") !== -1 || ua.indexOf("iPod") !== -1
           ? 1
           : 0;
       }
@@ -12715,9 +11806,7 @@ var Godot = (() => {
       if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(119, 1, p_update_cb);
       if ("serviceWorker" in navigator) {
         const cb = GodotRuntime.get_func(p_update_cb);
-        navigator.serviceWorker
-          .getRegistration()
-          .then(GodotPWA.updateState.bind(null, cb));
+        navigator.serviceWorker.getRegistration().then(GodotPWA.updateState.bind(null, cb));
       }
     }
 
@@ -12736,13 +11825,7 @@ var Godot = (() => {
     }
 
     var GodotRTCDataChannel = {
-      connect: function (
-        p_id,
-        p_on_open,
-        p_on_message,
-        p_on_error,
-        p_on_close
-      ) {
+      connect: function (p_id, p_on_open, p_on_message, p_on_error, p_on_close) {
         const ref = IDHandler.get(p_id);
         if (!ref) {
           return;
@@ -12917,8 +12000,7 @@ var Godot = (() => {
     }
 
     function _godot_js_rtc_datachannel_send(p_id, p_buffer, p_length, p_raw) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(132, 1, p_id, p_buffer, p_length, p_raw);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(132, 1, p_id, p_buffer, p_length, p_raw);
       const ref = IDHandler.get(p_id);
       if (!ref) {
         return 1;
@@ -12983,17 +12065,12 @@ var Godot = (() => {
           return 0;
         }
         const id = IDHandler.add(conn);
-        if (
-          "connectionState" in conn &&
-          conn["connectionState"] !== undefined
-        ) {
+        if ("connectionState" in conn && conn["connectionState"] !== undefined) {
           conn.onconnectionstatechange = function (event) {
             if (!IDHandler.get(id)) {
               return;
             }
-            onConnectionChange(
-              GodotRTCPeerConnection.ConnectionState[conn.connectionState] || 0
-            );
+            onConnectionChange(GodotRTCPeerConnection.ConnectionState[conn.connectionState] || 0);
           };
         } else {
           conn.oniceconnectionstatechange = function (event) {
@@ -13001,9 +12078,7 @@ var Godot = (() => {
               return;
             }
             onConnectionChange(
-              GodotRTCPeerConnection.ConnectionStateCompat[
-                conn.iceConnectionState
-              ] || 0
+              GodotRTCPeerConnection.ConnectionStateCompat[conn.iceConnectionState] || 0
             );
           };
         }
@@ -13012,17 +12087,14 @@ var Godot = (() => {
             return;
           }
           onIceGatheringChange(
-            GodotRTCPeerConnection.IceGatheringState[conn.iceGatheringState] ||
-              0
+            GodotRTCPeerConnection.IceGatheringState[conn.iceGatheringState] || 0
           );
         };
         conn.onsignalingstatechange = function (event) {
           if (!IDHandler.get(id)) {
             return;
           }
-          onSignalingChange(
-            GodotRTCPeerConnection.SignalingState[conn.signalingState] || 0
-          );
+          onSignalingChange(GodotRTCPeerConnection.SignalingState[conn.signalingState] || 0);
         };
         conn.onicecandidate = function (event) {
           if (!IDHandler.get(id)) {
@@ -13124,8 +12196,7 @@ var Godot = (() => {
     }
 
     function _godot_js_rtc_pc_datachannel_create(p_id, p_label, p_config) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(135, 1, p_id, p_label, p_config);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(135, 1, p_id, p_label, p_config);
       try {
         const ref = IDHandler.get(p_id);
         if (!ref) {
@@ -13146,12 +12217,7 @@ var Godot = (() => {
       GodotRTCPeerConnection.destroy(p_id);
     }
 
-    function _godot_js_rtc_pc_ice_candidate_add(
-      p_id,
-      p_mid_name,
-      p_mline_idx,
-      p_sdp
-    ) {
+    function _godot_js_rtc_pc_ice_candidate_add(p_id, p_mid_name, p_mline_idx, p_sdp) {
       if (ENVIRONMENT_IS_PTHREAD)
         return proxyToMainThread(137, 1, p_id, p_mid_name, p_mline_idx, p_sdp);
       const ref = IDHandler.get(p_id);
@@ -13169,23 +12235,9 @@ var Godot = (() => {
       );
     }
 
-    function _godot_js_rtc_pc_local_description_set(
-      p_id,
-      p_type,
-      p_sdp,
-      p_obj,
-      p_on_error
-    ) {
+    function _godot_js_rtc_pc_local_description_set(p_id, p_type, p_sdp, p_obj, p_on_error) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          138,
-          1,
-          p_id,
-          p_type,
-          p_sdp,
-          p_obj,
-          p_on_error
-        );
+        return proxyToMainThread(138, 1, p_id, p_type, p_sdp, p_obj, p_on_error);
       const ref = IDHandler.get(p_id);
       if (!ref) {
         return;
@@ -13203,12 +12255,7 @@ var Godot = (() => {
         });
     }
 
-    function _godot_js_rtc_pc_offer_create(
-      p_id,
-      p_obj,
-      p_on_session,
-      p_on_error
-    ) {
+    function _godot_js_rtc_pc_offer_create(p_id, p_obj, p_on_session, p_on_error) {
       if (ENVIRONMENT_IS_PTHREAD)
         return proxyToMainThread(139, 1, p_id, p_obj, p_on_session, p_on_error);
       const ref = IDHandler.get(p_id);
@@ -13236,16 +12283,7 @@ var Godot = (() => {
       p_on_error
     ) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          140,
-          1,
-          p_id,
-          p_type,
-          p_sdp,
-          p_obj,
-          p_session_created,
-          p_on_error
-        );
+        return proxyToMainThread(140, 1, p_id, p_type, p_sdp, p_obj, p_session_created, p_on_error);
       const ref = IDHandler.get(p_id);
       if (!ref) {
         return;
@@ -13253,10 +12291,7 @@ var Godot = (() => {
       const type = GodotRuntime.parseString(p_type);
       const sdp = GodotRuntime.parseString(p_sdp);
       const onerror = GodotRuntime.get_func(p_on_error).bind(null, p_obj);
-      const onsession = GodotRuntime.get_func(p_session_created).bind(
-        null,
-        p_obj
-      );
+      const onsession = GodotRuntime.get_func(p_session_created).bind(null, p_obj);
       ref
         .setRemoteDescription({
           sdp: sdp,
@@ -13344,9 +12379,7 @@ var Godot = (() => {
       function listener_bound(evt) {
         evt.currentTarget.cb(3, evt.currentTarget.id, evt.charIndex);
       }
-      const utterance = new SpeechSynthesisUtterance(
-        GodotRuntime.parseString(p_text)
-      );
+      const utterance = new SpeechSynthesisUtterance(GodotRuntime.parseString(p_text));
       utterance.rate = p_rate;
       utterance.pitch = p_pitch;
       utterance.volume = p_volume / 100;
@@ -13441,20 +12474,10 @@ var Godot = (() => {
         }
         return ref.bufferedAmount;
       },
-      create: function (
-        socket,
-        p_on_open,
-        p_on_message,
-        p_on_error,
-        p_on_close
-      ) {
+      create: function (socket, p_on_open, p_on_message, p_on_error, p_on_close) {
         const id = IDHandler.add(socket);
         socket.onopen = GodotWebSocket._onopen.bind(null, id, p_on_open);
-        socket.onmessage = GodotWebSocket._onmessage.bind(
-          null,
-          id,
-          p_on_message
-        );
+        socket.onmessage = GodotWebSocket._onmessage.bind(null, id, p_on_message);
         socket.onerror = GodotWebSocket._onerror.bind(null, id, p_on_error);
         socket.onclose = GodotWebSocket._onclose.bind(null, id, p_on_close);
         return id;
@@ -13487,8 +12510,7 @@ var Godot = (() => {
     }
 
     function _godot_js_websocket_close(p_id, p_code, p_reason) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(149, 1, p_id, p_code, p_reason);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(149, 1, p_id, p_code, p_reason);
       const code = p_code;
       const reason = GodotRuntime.parseString(p_reason);
       GodotWebSocket.close(p_id, code, reason);
@@ -13532,13 +12554,7 @@ var Godot = (() => {
         return 0;
       }
       socket.binaryType = "arraybuffer";
-      return GodotWebSocket.create(
-        socket,
-        on_open,
-        on_message,
-        on_error,
-        on_close
-      );
+      return GodotWebSocket.create(socket, on_open, on_message, on_error, on_close);
     }
 
     function _godot_js_websocket_destroy(p_id) {
@@ -13547,8 +12563,7 @@ var Godot = (() => {
     }
 
     function _godot_js_websocket_send(p_id, p_buf, p_buf_len, p_raw) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(152, 1, p_id, p_buf, p_buf_len, p_raw);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(152, 1, p_id, p_buf, p_buf_len, p_raw);
       const bytes_array = new Uint8Array(p_buf_len);
       let i = 0;
       for (i = 0; i < p_buf_len; i++) {
@@ -13616,14 +12631,10 @@ var Godot = (() => {
             return GodotRuntime.getHeapValue(val, "double");
 
           case 4:
-            return GodotRuntime.parseString(
-              GodotRuntime.getHeapValue(val, "*")
-            );
+            return GodotRuntime.parseString(GodotRuntime.getHeapValue(val, "*"));
 
           case 24:
-            return GodotJSWrapper.get_proxied_value(
-              GodotRuntime.getHeapValue(val, "i64")
-            );
+            return GodotJSWrapper.get_proxied_value(GodotRuntime.getHeapValue(val, "i64"));
 
           default:
             return undefined;
@@ -13656,8 +12667,7 @@ var Godot = (() => {
     };
 
     function _godot_js_wrapper_create_cb(p_ref, p_func) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(153, 1, p_ref, p_func);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(153, 1, p_ref, p_func);
       const func = GodotRuntime.get_func(p_func);
       let id = 0;
       const cb = function () {
@@ -13717,12 +12727,7 @@ var Godot = (() => {
         const res = new window[name](...args);
         return GodotJSWrapper.js2variant(res, p_exchange);
       } catch (e) {
-        GodotRuntime.error(
-          `Error calling constructor ${name} with args:`,
-          args,
-          "error:",
-          e
-        );
+        GodotRuntime.error(`Error calling constructor ${name} with args:`, args, "error:", e);
         return -1;
       }
     }
@@ -13779,19 +12784,13 @@ var Godot = (() => {
         const res = obj[method](...args);
         return GodotJSWrapper.js2variant(res, p_exchange);
       } catch (e) {
-        GodotRuntime.error(
-          `Error calling method ${method} on:`,
-          obj,
-          "error:",
-          e
-        );
+        GodotRuntime.error(`Error calling method ${method} on:`, obj, "error:", e);
         return -1;
       }
     }
 
     function _godot_js_wrapper_object_get(p_id, p_exchange, p_prop) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(157, 1, p_id, p_exchange, p_prop);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(157, 1, p_id, p_exchange, p_prop);
       const obj = GodotJSWrapper.get_proxied_value(p_id);
       if (obj === undefined) {
         return 0;
@@ -13809,8 +12808,7 @@ var Godot = (() => {
     }
 
     function _godot_js_wrapper_object_getvar(p_id, p_type, p_exchange) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(158, 1, p_id, p_type, p_exchange);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(158, 1, p_id, p_type, p_exchange);
       const obj = GodotJSWrapper.get_proxied_value(p_id);
       if (obj === undefined) {
         return -1;
@@ -13843,28 +12841,13 @@ var Godot = (() => {
     }
 
     function _godot_js_wrapper_object_set_cb_ret(p_val_type, p_val_ex) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(160, 1, p_val_type, p_val_ex);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(160, 1, p_val_type, p_val_ex);
       GodotJSWrapper.cb_ret = GodotJSWrapper.variant2js(p_val_type, p_val_ex);
     }
 
-    function _godot_js_wrapper_object_setvar(
-      p_id,
-      p_key_type,
-      p_key_ex,
-      p_val_type,
-      p_val_ex
-    ) {
+    function _godot_js_wrapper_object_setvar(p_id, p_key_type, p_key_ex, p_val_type, p_val_ex) {
       if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(
-          161,
-          1,
-          p_id,
-          p_key_type,
-          p_key_ex,
-          p_val_type,
-          p_val_ex
-        );
+        return proxyToMainThread(161, 1, p_id, p_key_type, p_key_ex, p_val_type, p_val_ex);
       const obj = GodotJSWrapper.get_proxied_value(p_id);
       if (obj === undefined) {
         return -1;
@@ -13931,18 +12914,11 @@ var Godot = (() => {
     }
 
     function _godot_webgl2_glGetBufferSubData(target, offset, size, data) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(164, 1, target, offset, size, data);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(164, 1, target, offset, size, data);
       const gl_context_handle = _emscripten_webgl_get_current_context();
       const gl = GL.getContext(gl_context_handle);
       if (gl) {
-        gl.GLctx["getBufferSubData"](
-          target,
-          offset,
-          GROWABLE_HEAP_U8(),
-          data,
-          size
-        );
+        gl.GLctx["getBufferSubData"](target, offset, GROWABLE_HEAP_U8(), data, size);
       }
     }
 
@@ -13990,9 +12966,7 @@ var Godot = (() => {
         }, 0);
       },
       getLayer: () => {
-        const new_view_count = GodotWebXR.pose
-          ? GodotWebXR.pose.views.length
-          : 1;
+        const new_view_count = GodotWebXR.pose ? GodotWebXR.pose.views.length : 1;
         let layer = GodotWebXR.layer;
         if (layer && GodotWebXR.view_count === new_view_count) {
           return layer;
@@ -14021,10 +12995,7 @@ var Godot = (() => {
         if (layer === null) {
           return null;
         }
-        return GodotWebXR.gl_binding.getViewSubImage(
-          layer,
-          GodotWebXR.pose.views[0]
-        );
+        return GodotWebXR.gl_binding.getViewSubImage(layer, GodotWebXR.pose.views[0]);
       },
       getTextureId: (texture) => {
         if (texture.name !== undefined) {
@@ -14154,8 +13125,7 @@ var Godot = (() => {
     }
 
     function _godot_webxr_get_projection_for_view(p_view, r_transform) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(169, 1, p_view, r_transform);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(169, 1, p_view, r_transform);
       if (!GodotWebXR.session || !GodotWebXR.pose) {
         return false;
       }
@@ -14178,12 +13148,8 @@ var Godot = (() => {
     }
 
     function _godot_webxr_get_supported_frame_rates(r_frame_rates) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(171, 1, r_frame_rates);
-      if (
-        !GodotWebXR.session ||
-        GodotWebXR.session.supportedFrameRates === undefined
-      ) {
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(171, 1, r_frame_rates);
+      if (!GodotWebXR.session || GodotWebXR.session.supportedFrameRates === undefined) {
         return 0;
       }
       const frame_rate_count = GodotWebXR.session.supportedFrameRates.length;
@@ -14192,19 +13158,14 @@ var Godot = (() => {
       }
       const buf = GodotRuntime.malloc(frame_rate_count * 4);
       for (let i = 0; i < frame_rate_count; i++) {
-        GodotRuntime.setHeapValue(
-          buf + i * 4,
-          GodotWebXR.session.supportedFrameRates[i],
-          "float"
-        );
+        GodotRuntime.setHeapValue(buf + i * 4, GodotWebXR.session.supportedFrameRates[i], "float");
       }
       GodotRuntime.setHeapValue(r_frame_rates, buf, "i32");
       return frame_rate_count;
     }
 
     function _godot_webxr_get_transform_for_view(p_view, r_transform) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(172, 1, p_view, r_transform);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(172, 1, p_view, r_transform);
       if (!GodotWebXR.session || !GodotWebXR.pose) {
         return false;
       }
@@ -14285,9 +13246,7 @@ var Godot = (() => {
         .split(",")
         .map((s) => s.trim())
         .filter((s) => s !== "");
-      const requested_reference_space_types = GodotRuntime.parseString(
-        p_requested_reference_spaces
-      )
+      const requested_reference_space_types = GodotRuntime.parseString(p_requested_reference_spaces)
         .split(",")
         .map((s) => s.trim());
       const onstarted = GodotRuntime.get_func(p_on_session_started);
@@ -14317,10 +13276,7 @@ var Godot = (() => {
             (input_event, index) => {
               session.addEventListener(input_event, function (evt) {
                 GodotWebXR.frame = evt.frame;
-                oninputevent(
-                  index,
-                  GodotWebXR.getInputSourceId(evt.inputSource)
-                );
+                oninputevent(index, GodotWebXR.getInputSourceId(evt.inputSource));
                 GodotWebXR.frame = null;
               });
             }
@@ -14338,15 +13294,10 @@ var Godot = (() => {
             .then(function () {
               GodotWebXR.gl_binding = new XRWebGLBinding(session, gl);
               GodotWebXR.getLayer();
-              function onReferenceSpaceSuccess(
-                reference_space,
-                reference_space_type
-              ) {
+              function onReferenceSpaceSuccess(reference_space, reference_space_type) {
                 GodotWebXR.space = reference_space;
                 reference_space.onreset = function (evt) {
-                  const c_str = GodotRuntime.allocString(
-                    "reference_space_reset"
-                  );
+                  const c_str = GodotRuntime.allocString("reference_space_reset");
                   onsimpleevent(c_str);
                   GodotRuntime.free(c_str);
                 };
@@ -14358,8 +13309,7 @@ var Godot = (() => {
                 }, 0);
               }
               function requestReferenceSpace() {
-                const reference_space_type =
-                  requested_reference_space_types.shift();
+                const reference_space_type = requested_reference_space_types.shift();
                 session
                   .requestReferenceSpace(reference_space_type)
                   .then((refSpace) => {
@@ -14388,27 +13338,22 @@ var Godot = (() => {
             });
         })
         .catch(function (error) {
-          const c_str = GodotRuntime.allocString(
-            `Unable to start session: ${error}`
-          );
+          const c_str = GodotRuntime.allocString(`Unable to start session: ${error}`);
           onfailed(c_str);
           GodotRuntime.free(c_str);
         });
     }
 
     function _godot_webxr_is_session_supported(p_session_mode, p_callback) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(177, 1, p_session_mode, p_callback);
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(177, 1, p_session_mode, p_callback);
       const session_mode = GodotRuntime.parseString(p_session_mode);
       const cb = GodotRuntime.get_func(p_callback);
       if (navigator.xr) {
-        navigator.xr
-          .isSessionSupported(session_mode)
-          .then(function (supported) {
-            const c_str = GodotRuntime.allocString(session_mode);
-            cb(c_str, supported ? 1 : 0);
-            GodotRuntime.free(c_str);
-          });
+        navigator.xr.isSessionSupported(session_mode).then(function (supported) {
+          const c_str = GodotRuntime.allocString(session_mode);
+          cb(c_str, supported ? 1 : 0);
+          GodotRuntime.free(c_str);
+        });
       } else {
         const c_str = GodotRuntime.allocString(session_mode);
         cb(c_str, 0);
@@ -14488,11 +13433,7 @@ var Godot = (() => {
       }
       const target_pose_matrix = target_pose.transform.matrix;
       for (let i = 0; i < 16; i++) {
-        GodotRuntime.setHeapValue(
-          r_target_pose + i * 4,
-          target_pose_matrix[i],
-          "float"
-        );
+        GodotRuntime.setHeapValue(r_target_pose + i * 4, target_pose_matrix[i], "float");
       }
       let target_ray_mode = 0;
       switch (input_source.targetRayMode) {
@@ -14511,22 +13452,14 @@ var Godot = (() => {
         default:
       }
       GodotRuntime.setHeapValue(r_target_ray_mode, target_ray_mode, "i32");
-      GodotRuntime.setHeapValue(
-        r_touch_index,
-        GodotWebXR.getTouchIndex(input_source),
-        "i32"
-      );
+      GodotRuntime.setHeapValue(r_touch_index, GodotWebXR.getTouchIndex(input_source), "i32");
       let has_grip_pose = false;
       if (input_source.gripSpace) {
         const grip_pose = frame.getPose(input_source.gripSpace, space);
         if (grip_pose) {
           const grip_pose_matrix = grip_pose.transform.matrix;
           for (let i = 0; i < 16; i++) {
-            GodotRuntime.setHeapValue(
-              r_grip_pose + i * 4,
-              grip_pose_matrix[i],
-              "float"
-            );
+            GodotRuntime.setHeapValue(r_grip_pose + i * 4, grip_pose_matrix[i], "float");
           }
           has_grip_pose = true;
         }
@@ -14549,30 +13482,18 @@ var Godot = (() => {
         }
         axes_count = Math.min(input_source.gamepad.axes.length, 10);
         for (let i = 0; i < axes_count; i++) {
-          GodotRuntime.setHeapValue(
-            r_axes + i * 4,
-            input_source.gamepad.axes[i],
-            "float"
-          );
+          GodotRuntime.setHeapValue(r_axes + i * 4, input_source.gamepad.axes[i], "float");
         }
       }
-      GodotRuntime.setHeapValue(
-        r_has_standard_mapping,
-        has_standard_mapping ? 1 : 0,
-        "i32"
-      );
+      GodotRuntime.setHeapValue(r_has_standard_mapping, has_standard_mapping ? 1 : 0, "i32");
       GodotRuntime.setHeapValue(r_button_count, button_count, "i32");
       GodotRuntime.setHeapValue(r_axes_count, axes_count, "i32");
       return true;
     }
 
     function _godot_webxr_update_target_frame_rate(p_frame_rate) {
-      if (ENVIRONMENT_IS_PTHREAD)
-        return proxyToMainThread(181, 1, p_frame_rate);
-      if (
-        !GodotWebXR.session ||
-        GodotWebXR.session.updateTargetFrameRate === undefined
-      ) {
+      if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(181, 1, p_frame_rate);
+      if (!GodotWebXR.session || GodotWebXR.session.updateTargetFrameRate === undefined) {
         return;
       }
       GodotWebXR.session.updateTargetFrameRate(p_frame_rate).then(() => {
@@ -14597,9 +13518,7 @@ var Godot = (() => {
       while (days > 0) {
         var leap = isLeapYear(newDate.getFullYear());
         var currentMonth = newDate.getMonth();
-        var daysInCurrentMonth = (leap ? MONTH_DAYS_LEAP : MONTH_DAYS_REGULAR)[
-          currentMonth
-        ];
+        var daysInCurrentMonth = (leap ? MONTH_DAYS_LEAP : MONTH_DAYS_REGULAR)[currentMonth];
         if (days > daysInCurrentMonth - newDate.getDate()) {
           days -= daysInCurrentMonth - newDate.getDate() + 1;
           newDate.setDate(1);
@@ -14672,20 +13591,9 @@ var Godot = (() => {
         "%Oy": "%y",
       };
       for (var rule in EXPANSION_RULES_1) {
-        pattern = pattern.replace(
-          new RegExp(rule, "g"),
-          EXPANSION_RULES_1[rule]
-        );
+        pattern = pattern.replace(new RegExp(rule, "g"), EXPANSION_RULES_1[rule]);
       }
-      var WEEKDAYS = [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-      ];
+      var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       var MONTHS = [
         "January",
         "February",
@@ -14747,10 +13655,7 @@ var Godot = (() => {
         }
       }
       function getWeekBasedYear(date) {
-        var thisDate = addDays(
-          new Date(date.tm_year + 1900, 0, 1),
-          date.tm_yday
-        );
+        var thisDate = addDays(new Date(date.tm_year + 1900, 0, 1), date.tm_yday);
         var janFourthThisYear = new Date(thisDate.getFullYear(), 0, 4);
         var janFourthNextYear = new Date(thisDate.getFullYear() + 1, 0, 4);
         var firstWeekStartThisYear = getFirstWeekStartDate(janFourthThisYear);
@@ -14805,9 +13710,7 @@ var Godot = (() => {
           return leadingNulls(
             date.tm_mday +
               arraySum(
-                isLeapYear(date.tm_year + 1900)
-                  ? MONTH_DAYS_LEAP
-                  : MONTH_DAYS_REGULAR,
+                isLeapYear(date.tm_year + 1900) ? MONTH_DAYS_LEAP : MONTH_DAYS_REGULAR,
                 date.tm_mon - 1
               ),
             3
@@ -14842,19 +13745,14 @@ var Godot = (() => {
           return leadingNulls(Math.floor(days / 7), 2);
         },
         "%V": function (date) {
-          var val = Math.floor(
-            (date.tm_yday + 7 - ((date.tm_wday + 6) % 7)) / 7
-          );
+          var val = Math.floor((date.tm_yday + 7 - ((date.tm_wday + 6) % 7)) / 7);
           if ((date.tm_wday + 371 - date.tm_yday - 2) % 7 <= 2) {
             val++;
           }
           if (!val) {
             val = 52;
             var dec31 = (date.tm_wday + 7 - date.tm_yday - 1) % 7;
-            if (
-              dec31 == 4 ||
-              (dec31 == 5 && isLeapYear((date.tm_year % 400) - 1))
-            ) {
+            if (dec31 == 4 || (dec31 == 5 && isLeapYear((date.tm_year % 400) - 1))) {
               val++;
             }
           } else if (val == 53) {
@@ -14893,10 +13791,7 @@ var Godot = (() => {
       pattern = pattern.replace(/%%/g, "\0\0");
       for (var rule in EXPANSION_RULES_2) {
         if (pattern.includes(rule)) {
-          pattern = pattern.replace(
-            new RegExp(rule, "g"),
-            EXPANSION_RULES_2[rule](date)
-          );
+          pattern = pattern.replace(new RegExp(rule, "g"), EXPANSION_RULES_2[rule](date));
         }
       }
       pattern = pattern.replace(/\0\0/g, "%");
@@ -14921,10 +13816,7 @@ var Godot = (() => {
 
     function getCFunc(ident) {
       var func = Module["_" + ident];
-      assert(
-        func,
-        "Cannot call unknown function " + ident + ", make sure it is exported"
-      );
+      assert(func, "Cannot call unknown function " + ident + ", make sure it is exported");
       return func;
     }
 
@@ -15162,10 +14054,7 @@ var Godot = (() => {
 
     var GLctx;
 
-    Module["requestFullscreen"] = function Module_requestFullscreen(
-      lockPointer,
-      resizeCanvas
-    ) {
+    Module["requestFullscreen"] = function Module_requestFullscreen(lockPointer, resizeCanvas) {
       Browser.requestFullscreen(lockPointer, resizeCanvas);
     };
 
@@ -15173,17 +14062,11 @@ var Godot = (() => {
       Browser.requestFullScreen();
     };
 
-    Module["requestAnimationFrame"] = function Module_requestAnimationFrame(
-      func
-    ) {
+    Module["requestAnimationFrame"] = function Module_requestAnimationFrame(func) {
       Browser.requestAnimationFrame(func);
     };
 
-    Module["setCanvasSize"] = function Module_setCanvasSize(
-      width,
-      height,
-      noUpdates
-    ) {
+    Module["setCanvasSize"] = function Module_setCanvasSize(width, height, noUpdates) {
       Browser.setCanvasSize(width, height, noUpdates);
     };
 
@@ -15205,12 +14088,7 @@ var Godot = (() => {
       setInModule,
       webGLContextAttributes
     ) {
-      return Browser.createContext(
-        canvas,
-        useWebGL,
-        setInModule,
-        webGLContextAttributes
-      );
+      return Browser.createContext(canvas, useWebGL, setInModule, webGLContextAttributes);
     };
 
     var preloadedImages = {};
@@ -15220,19 +14098,13 @@ var Godot = (() => {
     var miniTempWebGLIntBuffersStorage = new Int32Array(288);
 
     for (var i = 0; i < 288; ++i) {
-      miniTempWebGLIntBuffers[i] = miniTempWebGLIntBuffersStorage.subarray(
-        0,
-        i + 1
-      );
+      miniTempWebGLIntBuffers[i] = miniTempWebGLIntBuffersStorage.subarray(0, i + 1);
     }
 
     var miniTempWebGLFloatBuffersStorage = new Float32Array(288);
 
     for (var i = 0; i < 288; ++i) {
-      miniTempWebGLFloatBuffers[i] = miniTempWebGLFloatBuffersStorage.subarray(
-        0,
-        i + 1
-      );
+      miniTempWebGLFloatBuffers[i] = miniTempWebGLFloatBuffersStorage.subarray(0, i + 1);
     }
 
     Module["request_quit"] = function () {
@@ -15493,12 +14365,10 @@ var Godot = (() => {
       __syscall_symlink: ___syscall_symlink,
       __syscall_unlinkat: ___syscall_unlinkat,
       _emscripten_get_now_is_monotonic: __emscripten_get_now_is_monotonic,
-      _emscripten_notify_mailbox_postmessage:
-        __emscripten_notify_mailbox_postmessage,
+      _emscripten_notify_mailbox_postmessage: __emscripten_notify_mailbox_postmessage,
       _emscripten_proxied_gl_context_activated_from_main_browser_thread:
         __emscripten_proxied_gl_context_activated_from_main_browser_thread,
-      _emscripten_set_offscreencanvas_size:
-        __emscripten_set_offscreencanvas_size,
+      _emscripten_set_offscreencanvas_size: __emscripten_set_offscreencanvas_size,
       _emscripten_thread_mailbox_await: __emscripten_thread_mailbox_await,
       _emscripten_thread_set_strongref: __emscripten_thread_set_strongref,
       _emscripten_throw_longjmp: __emscripten_throw_longjmp,
@@ -15556,23 +14426,19 @@ var Godot = (() => {
       emscripten_glDepthFunc: _emscripten_glDepthFunc,
       emscripten_glDepthMask: _emscripten_glDepthMask,
       emscripten_glDisable: _emscripten_glDisable,
-      emscripten_glDisableVertexAttribArray:
-        _emscripten_glDisableVertexAttribArray,
+      emscripten_glDisableVertexAttribArray: _emscripten_glDisableVertexAttribArray,
       emscripten_glDrawArrays: _emscripten_glDrawArrays,
       emscripten_glDrawArraysInstanced: _emscripten_glDrawArraysInstanced,
       emscripten_glDrawElements: _emscripten_glDrawElements,
       emscripten_glDrawElementsInstanced: _emscripten_glDrawElementsInstanced,
       emscripten_glEnable: _emscripten_glEnable,
-      emscripten_glEnableVertexAttribArray:
-        _emscripten_glEnableVertexAttribArray,
+      emscripten_glEnableVertexAttribArray: _emscripten_glEnableVertexAttribArray,
       emscripten_glEndTransformFeedback: _emscripten_glEndTransformFeedback,
       emscripten_glFenceSync: _emscripten_glFenceSync,
       emscripten_glFinish: _emscripten_glFinish,
-      emscripten_glFramebufferRenderbuffer:
-        _emscripten_glFramebufferRenderbuffer,
+      emscripten_glFramebufferRenderbuffer: _emscripten_glFramebufferRenderbuffer,
       emscripten_glFramebufferTexture2D: _emscripten_glFramebufferTexture2D,
-      emscripten_glFramebufferTextureLayer:
-        _emscripten_glFramebufferTextureLayer,
+      emscripten_glFramebufferTextureLayer: _emscripten_glFramebufferTextureLayer,
       emscripten_glFrontFace: _emscripten_glFrontFace,
       emscripten_glGenBuffers: _emscripten_glGenBuffers,
       emscripten_glGenFramebuffers: _emscripten_glGenFramebuffers,
@@ -15605,8 +14471,7 @@ var Godot = (() => {
       emscripten_glTexParameteri: _emscripten_glTexParameteri,
       emscripten_glTexStorage2D: _emscripten_glTexStorage2D,
       emscripten_glTexSubImage3D: _emscripten_glTexSubImage3D,
-      emscripten_glTransformFeedbackVaryings:
-        _emscripten_glTransformFeedbackVaryings,
+      emscripten_glTransformFeedbackVaryings: _emscripten_glTransformFeedbackVaryings,
       emscripten_glUniform1f: _emscripten_glUniform1f,
       emscripten_glUniform1i: _emscripten_glUniform1i,
       emscripten_glUniform1iv: _emscripten_glUniform1iv,
@@ -15628,8 +14493,7 @@ var Godot = (() => {
       emscripten_glVertexAttribPointer: _emscripten_glVertexAttribPointer,
       emscripten_glViewport: _emscripten_glViewport,
       emscripten_num_logical_cores: _emscripten_num_logical_cores,
-      emscripten_receive_on_main_thread_js:
-        _emscripten_receive_on_main_thread_js,
+      emscripten_receive_on_main_thread_js: _emscripten_receive_on_main_thread_js,
       emscripten_resize_heap: _emscripten_resize_heap,
       emscripten_set_canvas_element_size: _emscripten_set_canvas_element_size,
       emscripten_set_main_loop: _emscripten_set_main_loop,
@@ -15638,8 +14502,7 @@ var Godot = (() => {
       emscripten_webgl_do_commit_frame: _emscripten_webgl_do_commit_frame,
       emscripten_webgl_do_create_context: _emscripten_webgl_do_create_context,
       emscripten_webgl_enable_extension: _emscripten_webgl_enable_extension,
-      emscripten_webgl_init_context_attributes:
-        _emscripten_webgl_init_context_attributes,
+      emscripten_webgl_init_context_attributes: _emscripten_webgl_init_context_attributes,
       emscripten_webgl_make_context_current_calling_thread:
         _emscripten_webgl_make_context_current_calling_thread,
       environ_get: _environ_get,
@@ -15673,8 +14536,7 @@ var Godot = (() => {
       godot_js_display_cursor_is_hidden: _godot_js_display_cursor_is_hidden,
       godot_js_display_cursor_is_locked: _godot_js_display_cursor_is_locked,
       godot_js_display_cursor_lock_set: _godot_js_display_cursor_lock_set,
-      godot_js_display_cursor_set_custom_shape:
-        _godot_js_display_cursor_set_custom_shape,
+      godot_js_display_cursor_set_custom_shape: _godot_js_display_cursor_set_custom_shape,
       godot_js_display_cursor_set_shape: _godot_js_display_cursor_set_shape,
       godot_js_display_cursor_set_visible: _godot_js_display_cursor_set_visible,
       godot_js_display_desired_size_set: _godot_js_display_desired_size_set,
@@ -15689,8 +14551,7 @@ var Godot = (() => {
       godot_js_display_screen_size_get: _godot_js_display_screen_size_get,
       godot_js_display_setup_canvas: _godot_js_display_setup_canvas,
       godot_js_display_size_update: _godot_js_display_size_update,
-      godot_js_display_touchscreen_is_available:
-        _godot_js_display_touchscreen_is_available,
+      godot_js_display_touchscreen_is_available: _godot_js_display_touchscreen_is_available,
       godot_js_display_tts_available: _godot_js_display_tts_available,
       godot_js_display_vk_available: _godot_js_display_vk_available,
       godot_js_display_vk_cb: _godot_js_display_vk_cb,
@@ -15734,32 +14595,25 @@ var Godot = (() => {
       godot_js_rtc_datachannel_close: _godot_js_rtc_datachannel_close,
       godot_js_rtc_datachannel_connect: _godot_js_rtc_datachannel_connect,
       godot_js_rtc_datachannel_destroy: _godot_js_rtc_datachannel_destroy,
-      godot_js_rtc_datachannel_get_buffered_amount:
-        _godot_js_rtc_datachannel_get_buffered_amount,
+      godot_js_rtc_datachannel_get_buffered_amount: _godot_js_rtc_datachannel_get_buffered_amount,
       godot_js_rtc_datachannel_id_get: _godot_js_rtc_datachannel_id_get,
-      godot_js_rtc_datachannel_is_negotiated:
-        _godot_js_rtc_datachannel_is_negotiated,
+      godot_js_rtc_datachannel_is_negotiated: _godot_js_rtc_datachannel_is_negotiated,
       godot_js_rtc_datachannel_is_ordered: _godot_js_rtc_datachannel_is_ordered,
       godot_js_rtc_datachannel_label_get: _godot_js_rtc_datachannel_label_get,
       godot_js_rtc_datachannel_max_packet_lifetime_get:
         _godot_js_rtc_datachannel_max_packet_lifetime_get,
-      godot_js_rtc_datachannel_max_retransmits_get:
-        _godot_js_rtc_datachannel_max_retransmits_get,
-      godot_js_rtc_datachannel_protocol_get:
-        _godot_js_rtc_datachannel_protocol_get,
-      godot_js_rtc_datachannel_ready_state_get:
-        _godot_js_rtc_datachannel_ready_state_get,
+      godot_js_rtc_datachannel_max_retransmits_get: _godot_js_rtc_datachannel_max_retransmits_get,
+      godot_js_rtc_datachannel_protocol_get: _godot_js_rtc_datachannel_protocol_get,
+      godot_js_rtc_datachannel_ready_state_get: _godot_js_rtc_datachannel_ready_state_get,
       godot_js_rtc_datachannel_send: _godot_js_rtc_datachannel_send,
       godot_js_rtc_pc_close: _godot_js_rtc_pc_close,
       godot_js_rtc_pc_create: _godot_js_rtc_pc_create,
       godot_js_rtc_pc_datachannel_create: _godot_js_rtc_pc_datachannel_create,
       godot_js_rtc_pc_destroy: _godot_js_rtc_pc_destroy,
       godot_js_rtc_pc_ice_candidate_add: _godot_js_rtc_pc_ice_candidate_add,
-      godot_js_rtc_pc_local_description_set:
-        _godot_js_rtc_pc_local_description_set,
+      godot_js_rtc_pc_local_description_set: _godot_js_rtc_pc_local_description_set,
       godot_js_rtc_pc_offer_create: _godot_js_rtc_pc_offer_create,
-      godot_js_rtc_pc_remote_description_set:
-        _godot_js_rtc_pc_remote_description_set,
+      godot_js_rtc_pc_remote_description_set: _godot_js_rtc_pc_remote_description_set,
       godot_js_tts_get_voices: _godot_js_tts_get_voices,
       godot_js_tts_is_paused: _godot_js_tts_is_paused,
       godot_js_tts_is_speaking: _godot_js_tts_is_speaking,
@@ -15782,8 +14636,7 @@ var Godot = (() => {
       godot_js_wrapper_object_set_cb_ret: _godot_js_wrapper_object_set_cb_ret,
       godot_js_wrapper_object_setvar: _godot_js_wrapper_object_setvar,
       godot_js_wrapper_object_unref: _godot_js_wrapper_object_unref,
-      godot_webgl2_glFramebufferTextureMultiviewOVR:
-        _godot_webgl2_glFramebufferTextureMultiviewOVR,
+      godot_webgl2_glFramebufferTextureMultiviewOVR: _godot_webgl2_glFramebufferTextureMultiviewOVR,
       godot_webgl2_glGetBufferSubData: _godot_webgl2_glGetBufferSubData,
       godot_webxr_get_bounds_geometry: _godot_webxr_get_bounds_geometry,
       godot_webxr_get_color_texture: _godot_webxr_get_color_texture,
@@ -15791,8 +14644,7 @@ var Godot = (() => {
       godot_webxr_get_frame_rate: _godot_webxr_get_frame_rate,
       godot_webxr_get_projection_for_view: _godot_webxr_get_projection_for_view,
       godot_webxr_get_render_target_size: _godot_webxr_get_render_target_size,
-      godot_webxr_get_supported_frame_rates:
-        _godot_webxr_get_supported_frame_rates,
+      godot_webxr_get_supported_frame_rates: _godot_webxr_get_supported_frame_rates,
       godot_webxr_get_transform_for_view: _godot_webxr_get_transform_for_view,
       godot_webxr_get_velocity_texture: _godot_webxr_get_velocity_texture,
       godot_webxr_get_view_count: _godot_webxr_get_view_count,
@@ -15802,8 +14654,7 @@ var Godot = (() => {
       godot_webxr_is_supported: _godot_webxr_is_supported,
       godot_webxr_uninitialize: _godot_webxr_uninitialize,
       godot_webxr_update_input_source: _godot_webxr_update_input_source,
-      godot_webxr_update_target_frame_rate:
-        _godot_webxr_update_target_frame_rate,
+      godot_webxr_update_target_frame_rate: _godot_webxr_update_target_frame_rate,
       invoke_ii: invoke_ii,
       invoke_iii: invoke_iii,
       invoke_iiii: invoke_iiii,
@@ -15825,9 +14676,7 @@ var Godot = (() => {
 
     var ___wasm_call_ctors = createExportWrapper("__wasm_call_ctors");
 
-    var _emscripten_webgl_commit_frame = createExportWrapper(
-      "emscripten_webgl_commit_frame"
-    );
+    var _emscripten_webgl_commit_frame = createExportWrapper("emscripten_webgl_commit_frame");
 
     var _free = createExportWrapper("free");
 
@@ -15851,32 +14700,34 @@ var Godot = (() => {
     var __emwebxr_on_input_event = (Module["__emwebxr_on_input_event"] =
       createExportWrapper("_emwebxr_on_input_event"));
 
-    var __emwebxr_on_simple_event = (Module["__emwebxr_on_simple_event"] =
-      createExportWrapper("_emwebxr_on_simple_event"));
+    var __emwebxr_on_simple_event = (Module["__emwebxr_on_simple_event"] = createExportWrapper(
+      "_emwebxr_on_simple_event"
+    ));
 
     var __emscripten_tls_init = (Module["__emscripten_tls_init"] =
       createExportWrapper("_emscripten_tls_init"));
 
     var _pthread_self = (Module["_pthread_self"] = function () {
-      return (_pthread_self = Module["_pthread_self"] =
-        Module["asm"]["pthread_self"]).apply(null, arguments);
+      return (_pthread_self = Module["_pthread_self"] = Module["asm"]["pthread_self"]).apply(
+        null,
+        arguments
+      );
     });
 
     var _emscripten_webgl_get_current_context = createExportWrapper(
       "emscripten_webgl_get_current_context"
     );
 
-    var _emscripten_dispatch_to_thread_ = createExportWrapper(
-      "emscripten_dispatch_to_thread_"
-    );
+    var _emscripten_dispatch_to_thread_ = createExportWrapper("emscripten_dispatch_to_thread_");
 
     var ___funcs_on_exit = createExportWrapper("__funcs_on_exit");
 
     var __emscripten_thread_init = (Module["__emscripten_thread_init"] =
       createExportWrapper("_emscripten_thread_init"));
 
-    var __emscripten_thread_crashed = (Module["__emscripten_thread_crashed"] =
-      createExportWrapper("_emscripten_thread_crashed"));
+    var __emscripten_thread_crashed = (Module["__emscripten_thread_crashed"] = createExportWrapper(
+      "_emscripten_thread_crashed"
+    ));
 
     var _emscripten_main_thread_process_queued_calls = createExportWrapper(
       "emscripten_main_thread_process_queued_calls"
@@ -15891,42 +14742,51 @@ var Godot = (() => {
     );
 
     var _emscripten_stack_get_base = function () {
-      return (_emscripten_stack_get_base =
-        Module["asm"]["emscripten_stack_get_base"]).apply(null, arguments);
+      return (_emscripten_stack_get_base = Module["asm"]["emscripten_stack_get_base"]).apply(
+        null,
+        arguments
+      );
     };
 
     var _emscripten_stack_get_end = function () {
-      return (_emscripten_stack_get_end =
-        Module["asm"]["emscripten_stack_get_end"]).apply(null, arguments);
+      return (_emscripten_stack_get_end = Module["asm"]["emscripten_stack_get_end"]).apply(
+        null,
+        arguments
+      );
     };
 
-    var __emscripten_thread_free_data = createExportWrapper(
-      "_emscripten_thread_free_data"
-    );
+    var __emscripten_thread_free_data = createExportWrapper("_emscripten_thread_free_data");
 
     var __emscripten_thread_exit = (Module["__emscripten_thread_exit"] =
       createExportWrapper("_emscripten_thread_exit"));
 
     var __emscripten_timeout = createExportWrapper("_emscripten_timeout");
 
-    var __emscripten_check_mailbox = (Module["__emscripten_check_mailbox"] =
-      createExportWrapper("_emscripten_check_mailbox"));
+    var __emscripten_check_mailbox = (Module["__emscripten_check_mailbox"] = createExportWrapper(
+      "_emscripten_check_mailbox"
+    ));
 
     var _setThrew = createExportWrapper("setThrew");
 
     var _emscripten_stack_init = function () {
-      return (_emscripten_stack_init =
-        Module["asm"]["emscripten_stack_init"]).apply(null, arguments);
+      return (_emscripten_stack_init = Module["asm"]["emscripten_stack_init"]).apply(
+        null,
+        arguments
+      );
     };
 
     var _emscripten_stack_set_limits = function () {
-      return (_emscripten_stack_set_limits =
-        Module["asm"]["emscripten_stack_set_limits"]).apply(null, arguments);
+      return (_emscripten_stack_set_limits = Module["asm"]["emscripten_stack_set_limits"]).apply(
+        null,
+        arguments
+      );
     };
 
     var _emscripten_stack_get_free = function () {
-      return (_emscripten_stack_get_free =
-        Module["asm"]["emscripten_stack_get_free"]).apply(null, arguments);
+      return (_emscripten_stack_get_free = Module["asm"]["emscripten_stack_get_free"]).apply(
+        null,
+        arguments
+      );
     };
 
     var stackSave = createExportWrapper("stackSave");
@@ -15936,8 +14796,10 @@ var Godot = (() => {
     var stackAlloc = createExportWrapper("stackAlloc");
 
     var _emscripten_stack_get_current = function () {
-      return (_emscripten_stack_get_current =
-        Module["asm"]["emscripten_stack_get_current"]).apply(null, arguments);
+      return (_emscripten_stack_get_current = Module["asm"]["emscripten_stack_get_current"]).apply(
+        null,
+        arguments
+      );
     };
 
     var ___cxa_increment_exception_refcount = createExportWrapper(
@@ -15946,84 +14808,62 @@ var Godot = (() => {
 
     var ___cxa_is_pointer_type = createExportWrapper("__cxa_is_pointer_type");
 
-    var dynCall_vjiii = (Module["dynCall_vjiii"] =
-      createExportWrapper("dynCall_vjiii"));
+    var dynCall_vjiii = (Module["dynCall_vjiii"] = createExportWrapper("dynCall_vjiii"));
 
-    var dynCall_viiiiji = (Module["dynCall_viiiiji"] =
-      createExportWrapper("dynCall_viiiiji"));
+    var dynCall_viiiiji = (Module["dynCall_viiiiji"] = createExportWrapper("dynCall_viiiiji"));
 
-    var dynCall_viiiiij = (Module["dynCall_viiiiij"] =
-      createExportWrapper("dynCall_viiiiij"));
+    var dynCall_viiiiij = (Module["dynCall_viiiiij"] = createExportWrapper("dynCall_viiiiij"));
 
-    var dynCall_viiiij = (Module["dynCall_viiiij"] =
-      createExportWrapper("dynCall_viiiij"));
+    var dynCall_viiiij = (Module["dynCall_viiiij"] = createExportWrapper("dynCall_viiiij"));
 
     var dynCall_ji = (Module["dynCall_ji"] = createExportWrapper("dynCall_ji"));
 
-    var dynCall_viiijii = (Module["dynCall_viiijii"] =
-      createExportWrapper("dynCall_viiijii"));
+    var dynCall_viiijii = (Module["dynCall_viiijii"] = createExportWrapper("dynCall_viiijii"));
 
-    var dynCall_vijiii = (Module["dynCall_vijiii"] =
-      createExportWrapper("dynCall_vijiii"));
+    var dynCall_vijiii = (Module["dynCall_vijiii"] = createExportWrapper("dynCall_vijiii"));
 
-    var dynCall_jij = (Module["dynCall_jij"] =
-      createExportWrapper("dynCall_jij"));
+    var dynCall_jij = (Module["dynCall_jij"] = createExportWrapper("dynCall_jij"));
 
-    var dynCall_iiij = (Module["dynCall_iiij"] =
-      createExportWrapper("dynCall_iiij"));
+    var dynCall_iiij = (Module["dynCall_iiij"] = createExportWrapper("dynCall_iiij"));
 
-    var dynCall_iij = (Module["dynCall_iij"] =
-      createExportWrapper("dynCall_iij"));
+    var dynCall_iij = (Module["dynCall_iij"] = createExportWrapper("dynCall_iij"));
 
-    var dynCall_viij = (Module["dynCall_viij"] =
-      createExportWrapper("dynCall_viij"));
+    var dynCall_viij = (Module["dynCall_viij"] = createExportWrapper("dynCall_viij"));
 
-    var dynCall_jiij = (Module["dynCall_jiij"] =
-      createExportWrapper("dynCall_jiij"));
+    var dynCall_jiij = (Module["dynCall_jiij"] = createExportWrapper("dynCall_jiij"));
 
-    var dynCall_jiii = (Module["dynCall_jiii"] =
-      createExportWrapper("dynCall_jiii"));
+    var dynCall_jiii = (Module["dynCall_jiii"] = createExportWrapper("dynCall_jiii"));
 
-    var dynCall_jiiiiiii = (Module["dynCall_jiiiiiii"] =
-      createExportWrapper("dynCall_jiiiiiii"));
+    var dynCall_jiiiiiii = (Module["dynCall_jiiiiiii"] = createExportWrapper("dynCall_jiiiiiii"));
 
-    var dynCall_jiiiii = (Module["dynCall_jiiiii"] =
-      createExportWrapper("dynCall_jiiiii"));
+    var dynCall_jiiiii = (Module["dynCall_jiiiii"] = createExportWrapper("dynCall_jiiiii"));
 
     var dynCall_ij = (Module["dynCall_ij"] = createExportWrapper("dynCall_ij"));
 
     var dynCall_jiiiiiiiiii = (Module["dynCall_jiiiiiiiiii"] =
       createExportWrapper("dynCall_jiiiiiiiiii"));
 
-    var dynCall_jiiiiii = (Module["dynCall_jiiiiii"] =
-      createExportWrapper("dynCall_jiiiiii"));
+    var dynCall_jiiiiii = (Module["dynCall_jiiiiii"] = createExportWrapper("dynCall_jiiiiii"));
 
     var dynCall_jiiiiiiii = (Module["dynCall_jiiiiiiii"] =
       createExportWrapper("dynCall_jiiiiiiii"));
 
-    var dynCall_jii = (Module["dynCall_jii"] =
-      createExportWrapper("dynCall_jii"));
+    var dynCall_jii = (Module["dynCall_jii"] = createExportWrapper("dynCall_jii"));
 
-    var dynCall_vij = (Module["dynCall_vij"] =
-      createExportWrapper("dynCall_vij"));
+    var dynCall_vij = (Module["dynCall_vij"] = createExportWrapper("dynCall_vij"));
 
-    var dynCall_viiij = (Module["dynCall_viiij"] =
-      createExportWrapper("dynCall_viiij"));
+    var dynCall_viiij = (Module["dynCall_viiij"] = createExportWrapper("dynCall_viiij"));
 
     var dynCall_viiiiiiij = (Module["dynCall_viiiiiiij"] =
       createExportWrapper("dynCall_viiiiiiij"));
 
-    var dynCall_jiji = (Module["dynCall_jiji"] =
-      createExportWrapper("dynCall_jiji"));
+    var dynCall_jiji = (Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji"));
 
-    var dynCall_jiiifi = (Module["dynCall_jiiifi"] =
-      createExportWrapper("dynCall_jiiifi"));
+    var dynCall_jiiifi = (Module["dynCall_jiiifi"] = createExportWrapper("dynCall_jiiifi"));
 
-    var dynCall_jiifff = (Module["dynCall_jiifff"] =
-      createExportWrapper("dynCall_jiifff"));
+    var dynCall_jiifff = (Module["dynCall_jiifff"] = createExportWrapper("dynCall_jiifff"));
 
-    var dynCall_vijf = (Module["dynCall_vijf"] =
-      createExportWrapper("dynCall_vijf"));
+    var dynCall_vijf = (Module["dynCall_vijf"] = createExportWrapper("dynCall_vijf"));
 
     var dynCall_viiiiifiijii = (Module["dynCall_viiiiifiijii"] =
       createExportWrapper("dynCall_viiiiifiijii"));
@@ -16037,41 +14877,31 @@ var Godot = (() => {
     var dynCall_viiiiifiiiijjii = (Module["dynCall_viiiiifiiiijjii"] =
       createExportWrapper("dynCall_viiiiifiiiijjii"));
 
-    var dynCall_vijiiii = (Module["dynCall_vijiiii"] =
-      createExportWrapper("dynCall_vijiiii"));
+    var dynCall_vijiiii = (Module["dynCall_vijiiii"] = createExportWrapper("dynCall_vijiiii"));
 
-    var dynCall_vijii = (Module["dynCall_vijii"] =
-      createExportWrapper("dynCall_vijii"));
+    var dynCall_vijii = (Module["dynCall_vijii"] = createExportWrapper("dynCall_vijii"));
 
     var dynCall_viijiiiiiiiii = (Module["dynCall_viijiiiiiiiii"] =
       createExportWrapper("dynCall_viijiiiiiiiii"));
 
-    var dynCall_viiiiiji = (Module["dynCall_viiiiiji"] =
-      createExportWrapper("dynCall_viiiiiji"));
+    var dynCall_viiiiiji = (Module["dynCall_viiiiiji"] = createExportWrapper("dynCall_viiiiiji"));
 
-    var dynCall_vijj = (Module["dynCall_vijj"] =
-      createExportWrapper("dynCall_vijj"));
+    var dynCall_vijj = (Module["dynCall_vijj"] = createExportWrapper("dynCall_vijj"));
 
     var dynCall_vijiiiiiidddd = (Module["dynCall_vijiiiiiidddd"] =
       createExportWrapper("dynCall_vijiiiiiidddd"));
 
-    var dynCall_jiiii = (Module["dynCall_jiiii"] =
-      createExportWrapper("dynCall_jiiii"));
+    var dynCall_jiiii = (Module["dynCall_jiiii"] = createExportWrapper("dynCall_jiiii"));
 
-    var dynCall_jiijiiii = (Module["dynCall_jiijiiii"] =
-      createExportWrapper("dynCall_jiijiiii"));
+    var dynCall_jiijiiii = (Module["dynCall_jiijiiii"] = createExportWrapper("dynCall_jiijiiii"));
 
-    var dynCall_jiiji = (Module["dynCall_jiiji"] =
-      createExportWrapper("dynCall_jiiji"));
+    var dynCall_jiiji = (Module["dynCall_jiiji"] = createExportWrapper("dynCall_jiiji"));
 
-    var dynCall_jiiiji = (Module["dynCall_jiiiji"] =
-      createExportWrapper("dynCall_jiiiji"));
+    var dynCall_jiiiji = (Module["dynCall_jiiiji"] = createExportWrapper("dynCall_jiiiji"));
 
-    var dynCall_jiijii = (Module["dynCall_jiijii"] =
-      createExportWrapper("dynCall_jiijii"));
+    var dynCall_jiijii = (Module["dynCall_jiijii"] = createExportWrapper("dynCall_jiijii"));
 
-    var dynCall_iijiiij = (Module["dynCall_iijiiij"] =
-      createExportWrapper("dynCall_iijiiij"));
+    var dynCall_iijiiij = (Module["dynCall_iijiiij"] = createExportWrapper("dynCall_iijiiij"));
 
     var dynCall_jijjjiiiiijii = (Module["dynCall_jijjjiiiiijii"] =
       createExportWrapper("dynCall_jijjjiiiiijii"));
@@ -16082,53 +14912,38 @@ var Godot = (() => {
     var dynCall_viijiiiiiifiii = (Module["dynCall_viijiiiiiifiii"] =
       createExportWrapper("dynCall_viijiiiiiifiii"));
 
-    var dynCall_viji = (Module["dynCall_viji"] =
-      createExportWrapper("dynCall_viji"));
+    var dynCall_viji = (Module["dynCall_viji"] = createExportWrapper("dynCall_viji"));
 
-    var dynCall_viiji = (Module["dynCall_viiji"] =
-      createExportWrapper("dynCall_viiji"));
+    var dynCall_viiji = (Module["dynCall_viiji"] = createExportWrapper("dynCall_viiji"));
 
-    var dynCall_vijji = (Module["dynCall_vijji"] =
-      createExportWrapper("dynCall_vijji"));
+    var dynCall_vijji = (Module["dynCall_vijji"] = createExportWrapper("dynCall_vijji"));
 
-    var dynCall_vijjii = (Module["dynCall_vijjii"] =
-      createExportWrapper("dynCall_vijjii"));
+    var dynCall_vijjii = (Module["dynCall_vijjii"] = createExportWrapper("dynCall_vijjii"));
 
-    var dynCall_fij = (Module["dynCall_fij"] =
-      createExportWrapper("dynCall_fij"));
+    var dynCall_fij = (Module["dynCall_fij"] = createExportWrapper("dynCall_fij"));
 
     var dynCall_vijiffifff = (Module["dynCall_vijiffifff"] =
       createExportWrapper("dynCall_vijiffifff"));
 
-    var dynCall_vijff = (Module["dynCall_vijff"] =
-      createExportWrapper("dynCall_vijff"));
+    var dynCall_vijff = (Module["dynCall_vijff"] = createExportWrapper("dynCall_vijff"));
 
-    var dynCall_vijiffff = (Module["dynCall_vijiffff"] =
-      createExportWrapper("dynCall_vijiffff"));
+    var dynCall_vijiffff = (Module["dynCall_vijiffff"] = createExportWrapper("dynCall_vijiffff"));
 
-    var dynCall_vijjf = (Module["dynCall_vijjf"] =
-      createExportWrapper("dynCall_vijjf"));
+    var dynCall_vijjf = (Module["dynCall_vijjf"] = createExportWrapper("dynCall_vijjf"));
 
-    var dynCall_vijij = (Module["dynCall_vijij"] =
-      createExportWrapper("dynCall_vijij"));
+    var dynCall_vijij = (Module["dynCall_vijij"] = createExportWrapper("dynCall_vijij"));
 
-    var dynCall_vijif = (Module["dynCall_vijif"] =
-      createExportWrapper("dynCall_vijif"));
+    var dynCall_vijif = (Module["dynCall_vijif"] = createExportWrapper("dynCall_vijif"));
 
-    var dynCall_vijiiifi = (Module["dynCall_vijiiifi"] =
-      createExportWrapper("dynCall_vijiiifi"));
+    var dynCall_vijiiifi = (Module["dynCall_vijiiifi"] = createExportWrapper("dynCall_vijiiifi"));
 
-    var dynCall_vijiifi = (Module["dynCall_vijiifi"] =
-      createExportWrapper("dynCall_vijiifi"));
+    var dynCall_vijiifi = (Module["dynCall_vijiifi"] = createExportWrapper("dynCall_vijiifi"));
 
-    var dynCall_vijiif = (Module["dynCall_vijiif"] =
-      createExportWrapper("dynCall_vijiif"));
+    var dynCall_vijiif = (Module["dynCall_vijiif"] = createExportWrapper("dynCall_vijiif"));
 
-    var dynCall_vijifi = (Module["dynCall_vijifi"] =
-      createExportWrapper("dynCall_vijifi"));
+    var dynCall_vijifi = (Module["dynCall_vijifi"] = createExportWrapper("dynCall_vijifi"));
 
-    var dynCall_vijijiii = (Module["dynCall_vijijiii"] =
-      createExportWrapper("dynCall_vijijiii"));
+    var dynCall_vijijiii = (Module["dynCall_vijijiii"] = createExportWrapper("dynCall_vijijiii"));
 
     var dynCall_vijijiiii = (Module["dynCall_vijijiiii"] =
       createExportWrapper("dynCall_vijijiiii"));
@@ -16136,116 +14951,83 @@ var Godot = (() => {
     var dynCall_vijijiiiff = (Module["dynCall_vijijiiiff"] =
       createExportWrapper("dynCall_vijijiiiff"));
 
-    var dynCall_vijijii = (Module["dynCall_vijijii"] =
-      createExportWrapper("dynCall_vijijii"));
+    var dynCall_vijijii = (Module["dynCall_vijijii"] = createExportWrapper("dynCall_vijijii"));
 
     var dynCall_vijiijiiiiii = (Module["dynCall_vijiijiiiiii"] =
       createExportWrapper("dynCall_vijiijiiiiii"));
 
-    var dynCall_vijiiij = (Module["dynCall_vijiiij"] =
-      createExportWrapper("dynCall_vijiiij"));
+    var dynCall_vijiiij = (Module["dynCall_vijiiij"] = createExportWrapper("dynCall_vijiiij"));
 
     var dynCall_vijiiiiiiji = (Module["dynCall_vijiiiiiiji"] =
       createExportWrapper("dynCall_vijiiiiiiji"));
 
-    var dynCall_vijjj = (Module["dynCall_vijjj"] =
-      createExportWrapper("dynCall_vijjj"));
+    var dynCall_vijjj = (Module["dynCall_vijjj"] = createExportWrapper("dynCall_vijjj"));
 
-    var dynCall_vijdddd = (Module["dynCall_vijdddd"] =
-      createExportWrapper("dynCall_vijdddd"));
+    var dynCall_vijdddd = (Module["dynCall_vijdddd"] = createExportWrapper("dynCall_vijdddd"));
 
-    var dynCall_vijififi = (Module["dynCall_vijififi"] =
-      createExportWrapper("dynCall_vijififi"));
+    var dynCall_vijififi = (Module["dynCall_vijififi"] = createExportWrapper("dynCall_vijififi"));
 
-    var dynCall_iijji = (Module["dynCall_iijji"] =
-      createExportWrapper("dynCall_iijji"));
+    var dynCall_iijji = (Module["dynCall_iijji"] = createExportWrapper("dynCall_iijji"));
 
-    var dynCall_viijj = (Module["dynCall_viijj"] =
-      createExportWrapper("dynCall_viijj"));
+    var dynCall_viijj = (Module["dynCall_viijj"] = createExportWrapper("dynCall_viijj"));
 
-    var dynCall_iiiij = (Module["dynCall_iiiij"] =
-      createExportWrapper("dynCall_iiiij"));
+    var dynCall_iiiij = (Module["dynCall_iiiij"] = createExportWrapper("dynCall_iiiij"));
 
-    var dynCall_dij = (Module["dynCall_dij"] =
-      createExportWrapper("dynCall_dij"));
+    var dynCall_dij = (Module["dynCall_dij"] = createExportWrapper("dynCall_dij"));
 
-    var dynCall_vijd = (Module["dynCall_vijd"] =
-      createExportWrapper("dynCall_vijd"));
+    var dynCall_vijd = (Module["dynCall_vijd"] = createExportWrapper("dynCall_vijd"));
 
-    var dynCall_viijiiii = (Module["dynCall_viijiiii"] =
-      createExportWrapper("dynCall_viijiiii"));
+    var dynCall_viijiiii = (Module["dynCall_viijiiii"] = createExportWrapper("dynCall_viijiiii"));
 
-    var dynCall_viijiii = (Module["dynCall_viijiii"] =
-      createExportWrapper("dynCall_viijiii"));
+    var dynCall_viijiii = (Module["dynCall_viijiii"] = createExportWrapper("dynCall_viijiii"));
 
-    var dynCall_iiji = (Module["dynCall_iiji"] =
-      createExportWrapper("dynCall_iiji"));
+    var dynCall_iiji = (Module["dynCall_iiji"] = createExportWrapper("dynCall_iiji"));
 
-    var dynCall_iiiijf = (Module["dynCall_iiiijf"] =
-      createExportWrapper("dynCall_iiiijf"));
+    var dynCall_iiiijf = (Module["dynCall_iiiijf"] = createExportWrapper("dynCall_iiiijf"));
 
-    var dynCall_vijiiiii = (Module["dynCall_vijiiiii"] =
-      createExportWrapper("dynCall_vijiiiii"));
+    var dynCall_vijiiiii = (Module["dynCall_vijiiiii"] = createExportWrapper("dynCall_vijiiiii"));
 
-    var dynCall_viijd = (Module["dynCall_viijd"] =
-      createExportWrapper("dynCall_viijd"));
+    var dynCall_viijd = (Module["dynCall_viijd"] = createExportWrapper("dynCall_viijd"));
 
-    var dynCall_diij = (Module["dynCall_diij"] =
-      createExportWrapper("dynCall_diij"));
+    var dynCall_diij = (Module["dynCall_diij"] = createExportWrapper("dynCall_diij"));
 
-    var dynCall_viiiji = (Module["dynCall_viiiji"] =
-      createExportWrapper("dynCall_viiiji"));
+    var dynCall_viiiji = (Module["dynCall_viiiji"] = createExportWrapper("dynCall_viiiji"));
 
-    var dynCall_viiijj = (Module["dynCall_viiijj"] =
-      createExportWrapper("dynCall_viiijj"));
+    var dynCall_viiijj = (Module["dynCall_viiijj"] = createExportWrapper("dynCall_viiijj"));
 
-    var dynCall_viijji = (Module["dynCall_viijji"] =
-      createExportWrapper("dynCall_viijji"));
+    var dynCall_viijji = (Module["dynCall_viijji"] = createExportWrapper("dynCall_viijji"));
 
-    var dynCall_jiiij = (Module["dynCall_jiiij"] =
-      createExportWrapper("dynCall_jiiij"));
+    var dynCall_jiiij = (Module["dynCall_jiiij"] = createExportWrapper("dynCall_jiiij"));
 
-    var dynCall_viijii = (Module["dynCall_viijii"] =
-      createExportWrapper("dynCall_viijii"));
+    var dynCall_viijii = (Module["dynCall_viijii"] = createExportWrapper("dynCall_viijii"));
 
-    var dynCall_jiijjj = (Module["dynCall_jiijjj"] =
-      createExportWrapper("dynCall_jiijjj"));
+    var dynCall_jiijjj = (Module["dynCall_jiijjj"] = createExportWrapper("dynCall_jiijjj"));
 
-    var dynCall_jiijj = (Module["dynCall_jiijj"] =
-      createExportWrapper("dynCall_jiijj"));
+    var dynCall_jiijj = (Module["dynCall_jiijj"] = createExportWrapper("dynCall_jiijj"));
 
-    var dynCall_viiijiji = (Module["dynCall_viiijiji"] =
-      createExportWrapper("dynCall_viiijiji"));
+    var dynCall_viiijiji = (Module["dynCall_viiijiji"] = createExportWrapper("dynCall_viiijiji"));
 
     var dynCall_viiijjiji = (Module["dynCall_viiijjiji"] =
       createExportWrapper("dynCall_viiijjiji"));
 
-    var dynCall_viijiji = (Module["dynCall_viijiji"] =
-      createExportWrapper("dynCall_viijiji"));
+    var dynCall_viijiji = (Module["dynCall_viijiji"] = createExportWrapper("dynCall_viijiji"));
 
     var dynCall_iiiiijiii = (Module["dynCall_iiiiijiii"] =
       createExportWrapper("dynCall_iiiiijiii"));
 
-    var dynCall_iiiiiijd = (Module["dynCall_iiiiiijd"] =
-      createExportWrapper("dynCall_iiiiiijd"));
+    var dynCall_iiiiiijd = (Module["dynCall_iiiiiijd"] = createExportWrapper("dynCall_iiiiiijd"));
 
-    var dynCall_diidj = (Module["dynCall_diidj"] =
-      createExportWrapper("dynCall_diidj"));
+    var dynCall_diidj = (Module["dynCall_diidj"] = createExportWrapper("dynCall_diidj"));
 
-    var dynCall_viiiijij = (Module["dynCall_viiiijij"] =
-      createExportWrapper("dynCall_viiiijij"));
+    var dynCall_viiiijij = (Module["dynCall_viiiijij"] = createExportWrapper("dynCall_viiiijij"));
 
-    var dynCall_viiidjj = (Module["dynCall_viiidjj"] =
-      createExportWrapper("dynCall_viiidjj"));
+    var dynCall_viiidjj = (Module["dynCall_viiidjj"] = createExportWrapper("dynCall_viiidjj"));
 
-    var dynCall_viidj = (Module["dynCall_viidj"] =
-      createExportWrapper("dynCall_viidj"));
+    var dynCall_viidj = (Module["dynCall_viidj"] = createExportWrapper("dynCall_viidj"));
 
-    var dynCall_iiijj = (Module["dynCall_iiijj"] =
-      createExportWrapper("dynCall_iiijj"));
+    var dynCall_iiijj = (Module["dynCall_iiijj"] = createExportWrapper("dynCall_iiijj"));
 
-    var dynCall_jiid = (Module["dynCall_jiid"] =
-      createExportWrapper("dynCall_jiid"));
+    var dynCall_jiid = (Module["dynCall_jiid"] = createExportWrapper("dynCall_jiid"));
 
     var dynCall_viiiiddji = (Module["dynCall_viiiiddji"] =
       createExportWrapper("dynCall_viiiiddji"));
@@ -16259,45 +15041,34 @@ var Godot = (() => {
     var dynCall_vijiiifii = (Module["dynCall_vijiiifii"] =
       createExportWrapper("dynCall_vijiiifii"));
 
-    var dynCall_viijfii = (Module["dynCall_viijfii"] =
-      createExportWrapper("dynCall_viijfii"));
+    var dynCall_viijfii = (Module["dynCall_viijfii"] = createExportWrapper("dynCall_viijfii"));
 
-    var dynCall_viiiiiiiiiiijjjjjjifiiiiii = (Module[
-      "dynCall_viiiiiiiiiiijjjjjjifiiiiii"
-    ] = createExportWrapper("dynCall_viiiiiiiiiiijjjjjjifiiiiii"));
+    var dynCall_viiiiiiiiiiijjjjjjifiiiiii = (Module["dynCall_viiiiiiiiiiijjjjjjifiiiiii"] =
+      createExportWrapper("dynCall_viiiiiiiiiiijjjjjjifiiiiii"));
 
-    var dynCall_vijifff = (Module["dynCall_vijifff"] =
-      createExportWrapper("dynCall_vijifff"));
+    var dynCall_vijifff = (Module["dynCall_vijifff"] = createExportWrapper("dynCall_vijifff"));
 
-    var dynCall_fiji = (Module["dynCall_fiji"] =
-      createExportWrapper("dynCall_fiji"));
+    var dynCall_fiji = (Module["dynCall_fiji"] = createExportWrapper("dynCall_fiji"));
 
     var dynCall_vijiiffifffi = (Module["dynCall_vijiiffifffi"] =
       createExportWrapper("dynCall_vijiiffifffi"));
 
-    var dynCall_iijj = (Module["dynCall_iijj"] =
-      createExportWrapper("dynCall_iijj"));
+    var dynCall_iijj = (Module["dynCall_iijj"] = createExportWrapper("dynCall_iijj"));
 
-    var dynCall_iijjfj = (Module["dynCall_iijjfj"] =
-      createExportWrapper("dynCall_iijjfj"));
+    var dynCall_iijjfj = (Module["dynCall_iijjfj"] = createExportWrapper("dynCall_iijjfj"));
 
-    var dynCall_vijiji = (Module["dynCall_vijiji"] =
-      createExportWrapper("dynCall_vijiji"));
+    var dynCall_vijiji = (Module["dynCall_vijiji"] = createExportWrapper("dynCall_vijiji"));
 
-    var dynCall_jijii = (Module["dynCall_jijii"] =
-      createExportWrapper("dynCall_jijii"));
+    var dynCall_jijii = (Module["dynCall_jijii"] = createExportWrapper("dynCall_jijii"));
 
-    var dynCall_vijid = (Module["dynCall_vijid"] =
-      createExportWrapper("dynCall_vijid"));
+    var dynCall_vijid = (Module["dynCall_vijid"] = createExportWrapper("dynCall_vijid"));
 
     var dynCall_vijiiiiii = (Module["dynCall_vijiiiiii"] =
       createExportWrapper("dynCall_vijiiiiii"));
 
-    var dynCall_vijiff = (Module["dynCall_vijiff"] =
-      createExportWrapper("dynCall_vijiff"));
+    var dynCall_vijiff = (Module["dynCall_vijiff"] = createExportWrapper("dynCall_vijiff"));
 
-    var dynCall_vijjjj = (Module["dynCall_vijjjj"] =
-      createExportWrapper("dynCall_vijjjj"));
+    var dynCall_vijjjj = (Module["dynCall_vijjjj"] = createExportWrapper("dynCall_vijjjj"));
 
     var dynCall_vijiiiiiii = (Module["dynCall_vijiiiiiii"] =
       createExportWrapper("dynCall_vijiiiiiii"));
@@ -16323,14 +15094,11 @@ var Godot = (() => {
     var dynCall_vijiiifiiiijjii = (Module["dynCall_vijiiifiiiijjii"] =
       createExportWrapper("dynCall_vijiiifiiiijjii"));
 
-    var dynCall_fijiiii = (Module["dynCall_fijiiii"] =
-      createExportWrapper("dynCall_fijiiii"));
+    var dynCall_fijiiii = (Module["dynCall_fijiiii"] = createExportWrapper("dynCall_fijiiii"));
 
-    var dynCall_fijiiiii = (Module["dynCall_fijiiiii"] =
-      createExportWrapper("dynCall_fijiiiii"));
+    var dynCall_fijiiiii = (Module["dynCall_fijiiiii"] = createExportWrapper("dynCall_fijiiiii"));
 
-    var dynCall_iijii = (Module["dynCall_iijii"] =
-      createExportWrapper("dynCall_iijii"));
+    var dynCall_iijii = (Module["dynCall_iijii"] = createExportWrapper("dynCall_iijii"));
 
     var dynCall_iijiijiiiii = (Module["dynCall_iijiijiiiii"] =
       createExportWrapper("dynCall_iijiijiiiii"));
@@ -16338,62 +15106,48 @@ var Godot = (() => {
     var dynCall_iijijiiiii = (Module["dynCall_iijijiiiii"] =
       createExportWrapper("dynCall_iijijiiiii"));
 
-    var dynCall_vijijj = (Module["dynCall_vijijj"] =
-      createExportWrapper("dynCall_vijijj"));
+    var dynCall_vijijj = (Module["dynCall_vijijj"] = createExportWrapper("dynCall_vijijj"));
 
-    var dynCall_vijiiijj = (Module["dynCall_vijiiijj"] =
-      createExportWrapper("dynCall_vijiiijj"));
+    var dynCall_vijiiijj = (Module["dynCall_vijiiijj"] = createExportWrapper("dynCall_vijiiijj"));
 
-    var dynCall_vijiijj = (Module["dynCall_vijiijj"] =
-      createExportWrapper("dynCall_vijiijj"));
+    var dynCall_vijiijj = (Module["dynCall_vijiijj"] = createExportWrapper("dynCall_vijiijj"));
 
-    var dynCall_vijjiji = (Module["dynCall_vijjiji"] =
-      createExportWrapper("dynCall_vijjiji"));
+    var dynCall_vijjiji = (Module["dynCall_vijjiji"] = createExportWrapper("dynCall_vijjiji"));
 
     var dynCall_vijjiijii = (Module["dynCall_vijjiijii"] =
       createExportWrapper("dynCall_vijjiijii"));
 
-    var dynCall_fijii = (Module["dynCall_fijii"] =
-      createExportWrapper("dynCall_fijii"));
+    var dynCall_fijii = (Module["dynCall_fijii"] = createExportWrapper("dynCall_fijii"));
 
-    var dynCall_iiiiiiij = (Module["dynCall_iiiiiiij"] =
-      createExportWrapper("dynCall_iiiiiiij"));
+    var dynCall_iiiiiiij = (Module["dynCall_iiiiiiij"] = createExportWrapper("dynCall_iiiiiiij"));
 
-    var dynCall_vijiiiij = (Module["dynCall_vijiiiij"] =
-      createExportWrapper("dynCall_vijiiiij"));
+    var dynCall_vijiiiij = (Module["dynCall_vijiiiij"] = createExportWrapper("dynCall_vijiiiij"));
 
-    var dynCall_jijj = (Module["dynCall_jijj"] =
-      createExportWrapper("dynCall_jijj"));
+    var dynCall_jijj = (Module["dynCall_jijj"] = createExportWrapper("dynCall_jijj"));
 
-    var dynCall_jiiif = (Module["dynCall_jiiif"] =
-      createExportWrapper("dynCall_jiiif"));
+    var dynCall_jiiif = (Module["dynCall_jiiif"] = createExportWrapper("dynCall_jiiif"));
 
-    var dynCall_vijfff = (Module["dynCall_vijfff"] =
-      createExportWrapper("dynCall_vijfff"));
+    var dynCall_vijfff = (Module["dynCall_vijfff"] = createExportWrapper("dynCall_vijfff"));
 
-    var dynCall_vijfiff = (Module["dynCall_vijfiff"] =
-      createExportWrapper("dynCall_vijfiff"));
+    var dynCall_vijfiff = (Module["dynCall_vijfiff"] = createExportWrapper("dynCall_vijfiff"));
 
-    var dynCall_vijfi = (Module["dynCall_vijfi"] =
-      createExportWrapper("dynCall_vijfi"));
+    var dynCall_vijfi = (Module["dynCall_vijfi"] = createExportWrapper("dynCall_vijfi"));
 
-    var dynCall_vijffffi = (Module["dynCall_vijffffi"] =
-      createExportWrapper("dynCall_vijffffi"));
+    var dynCall_vijffffi = (Module["dynCall_vijffffi"] = createExportWrapper("dynCall_vijffffi"));
 
-    var dynCall_vijiiffi = (Module["dynCall_vijiiffi"] =
-      createExportWrapper("dynCall_vijiiffi"));
+    var dynCall_vijiiffi = (Module["dynCall_vijiiffi"] = createExportWrapper("dynCall_vijiiffi"));
 
     var dynCall_vijiifffffff = (Module["dynCall_vijiifffffff"] =
       createExportWrapper("dynCall_vijiifffffff"));
 
-    var dynCall_vijifiifffffifff = (Module["dynCall_vijifiifffffifff"] =
-      createExportWrapper("dynCall_vijifiifffffifff"));
+    var dynCall_vijifiifffffifff = (Module["dynCall_vijifiifffffifff"] = createExportWrapper(
+      "dynCall_vijifiifffffifff"
+    ));
 
     var dynCall_vijiiffffiffffj = (Module["dynCall_vijiiffffiffffj"] =
       createExportWrapper("dynCall_vijiiffffiffffj"));
 
-    var dynCall_vijiifff = (Module["dynCall_vijiifff"] =
-      createExportWrapper("dynCall_vijiifff"));
+    var dynCall_vijiifff = (Module["dynCall_vijiifff"] = createExportWrapper("dynCall_vijiifff"));
 
     var dynCall_vijiffffffff = (Module["dynCall_vijiffffffff"] =
       createExportWrapper("dynCall_vijiffffffff"));
@@ -16407,23 +15161,17 @@ var Godot = (() => {
     var dynCall_viijjjiifjii = (Module["dynCall_viijjjiifjii"] =
       createExportWrapper("dynCall_viijjjiifjii"));
 
-    var dynCall_vijjjii = (Module["dynCall_vijjjii"] =
-      createExportWrapper("dynCall_vijjjii"));
+    var dynCall_vijjjii = (Module["dynCall_vijjjii"] = createExportWrapper("dynCall_vijjjii"));
 
-    var dynCall_fijj = (Module["dynCall_fijj"] =
-      createExportWrapper("dynCall_fijj"));
+    var dynCall_fijj = (Module["dynCall_fijj"] = createExportWrapper("dynCall_fijj"));
 
-    var dynCall_iijjiii = (Module["dynCall_iijjiii"] =
-      createExportWrapper("dynCall_iijjiii"));
+    var dynCall_iijjiii = (Module["dynCall_iijjiii"] = createExportWrapper("dynCall_iijjiii"));
 
-    var dynCall_iiiiij = (Module["dynCall_iiiiij"] =
-      createExportWrapper("dynCall_iiiiij"));
+    var dynCall_iiiiij = (Module["dynCall_iiiiij"] = createExportWrapper("dynCall_iiiiij"));
 
-    var dynCall_iiiiijj = (Module["dynCall_iiiiijj"] =
-      createExportWrapper("dynCall_iiiiijj"));
+    var dynCall_iiiiijj = (Module["dynCall_iiiiijj"] = createExportWrapper("dynCall_iiiiijj"));
 
-    var dynCall_iiiiiijj = (Module["dynCall_iiiiiijj"] =
-      createExportWrapper("dynCall_iiiiiijj"));
+    var dynCall_iiiiiijj = (Module["dynCall_iiiiiijj"] = createExportWrapper("dynCall_iiiiiijj"));
 
     function invoke_vii(index, a1, a2) {
       var sp = stackSave();
@@ -16982,8 +15730,7 @@ var Godot = (() => {
     }
 
     if (Module["preInit"]) {
-      if (typeof Module["preInit"] == "function")
-        Module["preInit"] = [Module["preInit"]];
+      if (typeof Module["preInit"] == "function") Module["preInit"] = [Module["preInit"]];
       while (Module["preInit"].length > 0) {
         Module["preInit"].pop()();
       }
@@ -16998,8 +15745,7 @@ var Godot = (() => {
     return Godot.ready;
   };
 })();
-if (typeof exports === "object" && typeof module === "object")
-  module.exports = Godot;
+if (typeof exports === "object" && typeof module === "object") module.exports = Godot;
 else if (typeof define === "function" && define["amd"])
   define([], function () {
     return Godot;
@@ -17017,9 +15763,7 @@ const Features = {
    */
   isWebGLAvailable: function (majorVersion = 1) {
     try {
-      return !!document
-        .createElement("canvas")
-        .getContext(["webgl", "webgl2"][majorVersion - 1]);
+      return !!document.createElement("canvas").getContext(["webgl", "webgl2"][majorVersion - 1]);
     } catch (e) {
       /* Not available */
     }
@@ -17033,11 +15777,7 @@ const Features = {
    * @function Engine.isFetchAvailable
    */
   isFetchAvailable: function () {
-    return (
-      "fetch" in window &&
-      "Response" in window &&
-      "body" in window.Response.prototype
-    );
+    return "fetch" in window && "Response" in window && "body" in window.Response.prototype;
   },
 
   /**
@@ -17093,17 +15833,13 @@ const Features = {
   getMissingFeatures: function () {
     const missing = [];
     if (!Features.isWebGLAvailable(2)) {
-      missing.push(
-        "WebGL2 - Check web browser configuration and hardware support"
-      );
+      missing.push("WebGL2 - Check web browser configuration and hardware support");
     }
     if (!Features.isFetchAvailable()) {
       missing.push("Fetch - Check web browser version");
     }
     if (!Features.isSecureContext()) {
-      missing.push(
-        "Secure Context - Check web server configuration (use HTTPS)"
-      );
+      missing.push("Secure Context - Check web server configuration (use HTTPS)");
     }
     if (!Features.isCrossOriginIsolated()) {
       missing.push(
@@ -17111,9 +15847,7 @@ const Features = {
       );
     }
     if (!Features.isSharedArrayBufferAvailable()) {
-      missing.push(
-        "SharedArrayBuffer - Check web server configuration (send correct headers)"
-      );
+      missing.push("SharedArrayBuffer - Check web server configuration (send correct headers)");
     }
     // Audio is normally optional since we have a dummy fallback.
     return missing;
@@ -17158,9 +15892,7 @@ const Preloader = /** @constructor */ function () {
       loaded: 0,
       done: false,
     };
-    return fetch(`https://play.yian.dev/helloDot/${file}`).then(function (
-      response
-    ) {
+    return fetch(`https://play.yian.dev/helloDot/${file}`).then(function (response) {
       if (!response.ok) {
         return Promise.reject(new Error(`Failed loading file '${file}'`));
       }
@@ -17231,10 +15963,7 @@ const Preloader = /** @constructor */ function () {
   };
 
   this.loadPromise = function (file, fileSize, raw = false) {
-    return retry(
-      loadFetch.bind(null, file, loadingFiles, fileSize, raw),
-      DOWNLOAD_ATTEMPTS_MAX
-    );
+    return retry(loadFetch.bind(null, file, loadingFiles, fileSize, raw), DOWNLOAD_ATTEMPTS_MAX);
   };
 
   this.preloadedFiles = [];
@@ -17519,10 +16248,7 @@ const InternalConfig = function (initConfig) {
     this.executable = parse("executable", this.executable);
     this.mainPack = parse("mainPack", this.mainPack);
     this.locale = parse("locale", this.locale);
-    this.canvasResizePolicy = parse(
-      "canvasResizePolicy",
-      this.canvasResizePolicy
-    );
+    this.canvasResizePolicy = parse("canvasResizePolicy", this.canvasResizePolicy);
     this.persistentPaths = parse("persistentPaths", this.persistentPaths);
     this.persistentDrops = parse("persistentDrops", this.persistentDrops);
     this.experimentalVK = parse("experimentalVK", this.experimentalVK);
@@ -17553,9 +16279,7 @@ const InternalConfig = function (initConfig) {
           onSuccess(result["instance"], result["module"]);
         }
         if (typeof WebAssembly.instantiateStreaming !== "undefined") {
-          WebAssembly.instantiateStreaming(Promise.resolve(r), imports).then(
-            done
-          );
+          WebAssembly.instantiateStreaming(Promise.resolve(r), imports).then(done);
         } else {
           r.arrayBuffer().then(function (buffer) {
             WebAssembly.instantiate(buffer, imports).then(done);
@@ -17607,9 +16331,7 @@ const InternalConfig = function (initConfig) {
     // Browser locale, or custom one if defined.
     let locale = this.locale;
     if (!locale) {
-      locale = navigator.languages
-        ? navigator.languages[0]
-        : navigator.language;
+      locale = navigator.languages ? navigator.languages[0] : navigator.language;
       locale = locale.split(".")[0];
     }
     locale = locale.replace("-", "_");
@@ -17737,9 +16459,7 @@ const Engine = (function () {
               const cloned = new Response(response.clone().body, {
                 headers: [["content-type", "application/wasm"]],
               });
-              Godot(me.config.getModuleConfig(loadPath, cloned)).then(function (
-                module
-              ) {
+              Godot(me.config.getModuleConfig(loadPath, cloned)).then(function (module) {
                 const paths = me.config.persistentPaths;
                 module["initFS"](paths).then(function (err) {
                   me.rtenv = module;
@@ -17795,9 +16515,7 @@ const Engine = (function () {
         return me.init().then(function () {
           if (!me.rtenv) {
             return Promise.reject(
-              new Error(
-                "The engine must be initialized before it can be started"
-              )
+              new Error("The engine must be initialized before it can be started")
             );
           }
 
@@ -17814,10 +16532,7 @@ const Engine = (function () {
 
           // Preload GDExtension libraries.
           const libs = [];
-          if (
-            me.config.gdextensionLibs.length > 0 &&
-            !me.rtenv["loadDynamicLibrary"]
-          ) {
+          if (me.config.gdextensionLibs.length > 0 && !me.rtenv["loadDynamicLibrary"]) {
             return Promise.reject(
               new Error(
                 "GDExtension libraries are not supported by this engine version. " +
@@ -17866,11 +16581,9 @@ const Engine = (function () {
         this.config.args = ["--main-pack", pack].concat(this.config.args);
         // Start and init with execName as loadPath if not inited.
         const me = this;
-        return Promise.all([this.init(exe), this.preloadFile(pack, pack)]).then(
-          function () {
-            return me.start.apply(me);
-          }
-        );
+        return Promise.all([this.init(exe), this.preloadFile(pack, pack)]).then(function () {
+          return me.start.apply(me);
+        });
       },
 
       /**
@@ -17923,8 +16636,7 @@ const Engine = (function () {
   SafeEngine["isFetchAvailable"] = Features.isFetchAvailable;
   SafeEngine["isSecureContext"] = Features.isSecureContext;
   SafeEngine["isCrossOriginIsolated"] = Features.isCrossOriginIsolated;
-  SafeEngine["isSharedArrayBufferAvailable"] =
-    Features.isSharedArrayBufferAvailable;
+  SafeEngine["isSharedArrayBufferAvailable"] = Features.isSharedArrayBufferAvailable;
   SafeEngine["isAudioWorkletAvailable"] = Features.isAudioWorkletAvailable;
   SafeEngine["getMissingFeatures"] = Features.getMissingFeatures;
 

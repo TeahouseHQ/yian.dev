@@ -5,10 +5,7 @@ import { useState } from "react";
 
 import Game from "#/components/playnow/Game";
 
-const GameProvider = dynamic(
-  () => import("#/components/playnow/GameProvider"),
-  { ssr: false }
-);
+const GameProvider = dynamic(() => import("#/components/playnow/GameProvider"), { ssr: false });
 
 export default function Index() {
   return (

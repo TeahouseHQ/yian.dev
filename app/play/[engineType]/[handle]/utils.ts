@@ -19,10 +19,7 @@ declare global {
   }
 }
 
-export const createUnityInstance = (
-  targetElm: Element | null,
-  bundleId: string
-) => {
+export const createUnityInstance = (targetElm: Element | null, bundleId: string) => {
   if (!targetElm || !bundleId) {
     console.error("Invalid target element or bundle metadata");
     return;

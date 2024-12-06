@@ -14,9 +14,7 @@ export default function UnityRenderer({ handle }: PageProps): JSX.Element {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (isMobile) {
-      const canvas = document.getElementById(
-        "unity-canvas"
-      ) as HTMLCanvasElement;
+      const canvas = document.getElementById("unity-canvas") as HTMLCanvasElement;
       canvas.style.width = "100%";
       canvas.style.height = "100%";
       canvas.style.position = "fixed";
@@ -27,10 +25,7 @@ export default function UnityRenderer({ handle }: PageProps): JSX.Element {
 
   return (
     <>
-      <Script
-        src="https://play.yian.dev/WebGL.loader.js"
-        strategy="beforeInteractive"
-      />
+      <Script src="https://play.yian.dev/WebGL.loader.js" strategy="beforeInteractive" />
       <canvas
         id="unity-canvas"
         width="500"

@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import type Author from "types/author";
 
 import Avatar from "./avatar";
@@ -14,14 +15,7 @@ interface Props {
   slug: string;
 }
 
-const HeroPost = ({
-  title,
-  coverImage,
-  date,
-  excerpt,
-  author,
-  slug,
-}: Props): JSX.Element => {
+const HeroPost = ({ title, coverImage, date, excerpt, author, slug }: Props): JSX.Element => {
   return (
     <section>
       <div className="mb-8 md:mb-16">

@@ -1,5 +1,6 @@
 import { Metadata, ResolvingMetadata } from "next";
 import Script from "next/script";
+
 import type PostType from "types/post";
 
 import CommentsBox from "../../../components/comments-box";
@@ -23,10 +24,7 @@ type Props = {
   params: Params;
 };
 
-export async function generateMetadata(
-  { params }: Props,
-  _: ResolvingMetadata
-): Promise<Metadata> {
+export async function generateMetadata({ params }: Props, _: ResolvingMetadata): Promise<Metadata> {
   const { slug } = params;
 
   // fetch data
@@ -41,11 +39,7 @@ export async function generateMetadata(
   };
 }
 
-export default async function Page({
-  params,
-}: {
-  params: Params;
-}): Promise<JSX.Element> {
+export default async function Page({ params }: { params: Params }): Promise<JSX.Element> {
   const post = await getPost(params);
 
   return (

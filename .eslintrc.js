@@ -5,7 +5,7 @@ module.exports = {
     es2021: true,
     node: true,
   },
-  extends: ["next"],
+  extends: ["next", "prettier", "plugin:prettier/recommended"],
   ignorePatterns: [
     "node_modules/",
     "build/",
@@ -15,29 +15,26 @@ module.exports = {
     ".eslintrc.js",
     "tailwind.config.js",
     "next.config.js",
+    ".mypy_cache/",
   ],
   parserOptions: {
     ecmaVersion: "latest",
     sourceType: "module",
     project: "./tsconfig.json",
   },
-  plugins: ["@typescript-eslint", "import"],
+  plugins: ["@typescript-eslint", "prettier"],
   rules: {
     "@typescript-eslint/prefer-nullish-coalescing": 0,
     "@typescript-eslint/strict-boolean-expressions": 0,
     "@typescript-eslint/explicit-function-return-type": 0,
-    "import/order": [
-      "error",
-      {
-        groups: [
-          "builtin",
-          "external",
-          "internal",
-          ["parent", "sibling", "index"],
-        ],
-        "newlines-between": "always",
-        alphabetize: { order: "asc", caseInsensitive: true },
-      },
-    ],
+    "prettier/prettier": "error",
+    // "import/order": [
+    //   "error",
+    //   {
+    //     groups: ["builtin", "external", "internal", ["parent", "sibling", "index"]],
+    //     "newlines-between": "always",
+    //     alphabetize: { order: "asc", caseInsensitive: true },
+    //   },
+    // ],
   },
 };

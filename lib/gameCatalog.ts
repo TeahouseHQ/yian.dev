@@ -52,9 +52,7 @@ export const GameBundles: Record<string, BundleMetadata> = {
   },
 };
 
-export const getBundleMetadata = (
-  handle: string
-): BundleMetadata | undefined => {
+export const getBundleMetadata = (handle: string): BundleMetadata | undefined => {
   return GameBundles[handle];
 };
 

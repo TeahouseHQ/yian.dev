@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
-import { GameContextType, Tile, TileValue } from "types/game";
 
 import { mulberry32 } from "#/lib/random";
+import { GameContextType, Tile, TileValue } from "types/game";
 
 export const GameContext = createContext<GameContextType>({
   grid: [],

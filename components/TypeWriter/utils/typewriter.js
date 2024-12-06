@@ -17,7 +17,7 @@ function Typewriter(element) {
   this._completionCallback = null;
 
   // Convert jQuery object to plain DOM object.
-  if (typeof jQuery != 'undefined' && element instanceof jQuery) {
+  if (typeof jQuery != "undefined" && element instanceof jQuery) {
     element = element[0];
   }
 
@@ -32,17 +32,17 @@ function Typewriter(element) {
   }
 
   if (!this._textNode) {
-    this._textNode = document.createTextNode('');
+    this._textNode = document.createTextNode("");
     element.appendChild(this._textNode);
   }
 
   // Create the caret.
-  this._caretElement = document.createElement('span');
-  this._caretTextNode = document.createTextNode('');
+  this._caretElement = document.createElement("span");
+  this._caretTextNode = document.createTextNode("");
   this._caretElement.appendChild(this._caretTextNode);
   element.appendChild(this._caretElement);
 
-  this.setCaret('|');
+  this.setCaret("|");
   this.setCaretPeriod(1000);
 
   // Initialize the delay distribution.
@@ -73,7 +73,7 @@ function Typewriter(element) {
  * in the sequence. The {callback} function will be called as soon as the
  * text is finished displaying.
  */
-Typewriter.prototype.playSequence = function(sequence) {
+Typewriter.prototype.playSequence = function (sequence) {
   this._playSequenceAtIndex(sequence, 0);
 };
 
@@ -84,7 +84,7 @@ Typewriter.prototype.playSequence = function(sequence) {
  *
  * Pass a blank string to effectively hide the caret.
  */
-Typewriter.prototype.setCaret = function(character) {
+Typewriter.prototype.setCaret = function (character) {
   this._caretTextNode.nodeValue = character;
 };
 
@@ -95,7 +95,7 @@ Typewriter.prototype.setCaret = function(character) {
  *
  * Pass zero to disable flashing.
  */
-Typewriter.prototype.setCaretPeriod = function(period) {
+Typewriter.prototype.setCaretPeriod = function (period) {
   const that = this;
 
   if (this._caretInterval) {
@@ -104,14 +104,14 @@ Typewriter.prototype.setCaretPeriod = function(period) {
 
   if (period) {
     this._caretInterval = setInterval(() => {
-      if (that._caretElement.style.display == 'none') {
-        that._caretElement.style.display = '';
+      if (that._caretElement.style.display == "none") {
+        that._caretElement.style.display = "";
       } else {
-        that._caretElement.style.display = 'none';
+        that._caretElement.style.display = "none";
       }
     }, period);
   } else {
-    that._caretElement.style.display = '';
+    that._caretElement.style.display = "";
   }
 };
 
@@ -120,7 +120,7 @@ Typewriter.prototype.setCaretPeriod = function(period) {
  *
  * @param {Function} callback Called after each character is typed.
  */
-Typewriter.prototype.setCharacterCallback = function(callback) {
+Typewriter.prototype.setCharacterCallback = function (callback) {
   this._characterCallback = callback;
 };
 
@@ -129,7 +129,7 @@ Typewriter.prototype.setCharacterCallback = function(callback) {
  *
  * @param {Function} callback Called after all characters have been typed.
  */
-Typewriter.prototype.setCompletionCallback = function(callback) {
+Typewriter.prototype.setCompletionCallback = function (callback) {
   this._completionCallback = callback;
 };
 
@@ -138,7 +138,7 @@ Typewriter.prototype.setCompletionCallback = function(callback) {
  *
  * @param {Function} callback Called after all sequences have been typed.
  */
-Typewriter.prototype.setSeqCompletionCallback = function(callback) {
+Typewriter.prototype.setSeqCompletionCallback = function (callback) {
   this._seqCompletionCallback = callback;
 };
 
@@ -151,7 +151,7 @@ Typewriter.prototype.setSeqCompletionCallback = function(callback) {
  * For example, with mean = 200 and variance = 50, each delay will
  * be sampled from the uniform distribution over [150, 250).
  */
-Typewriter.prototype.setDelay = function(mean, variance) {
+Typewriter.prototype.setDelay = function (mean, variance) {
   this._delayMean = mean;
   this._delayVariance = variance;
 };
@@ -162,8 +162,8 @@ Typewriter.prototype.setDelay = function(mean, variance) {
  * @param {string} text The text to be typed.
  * @param {boolean} [instant=false] If true, ignore the currently configured delay and don't use character callback.
  */
-Typewriter.prototype.typeText = function(text, instant) {
-  if (typeof instant === 'undefined') {
+Typewriter.prototype.typeText = function (text, instant) {
+  if (typeof instant === "undefined") {
     instant = false;
   }
 
@@ -184,7 +184,7 @@ Typewriter.prototype.typeText = function(text, instant) {
  * @param  {Array} sequence A sequence of animations.
  * @param  {int} index The index of the animation to play.
  */
-Typewriter.prototype._playSequenceAtIndex = function(sequence, index) {
+Typewriter.prototype._playSequenceAtIndex = function (sequence, index) {
   const that = this;
 
   // Check if we're at the end of the sequence.
@@ -219,7 +219,7 @@ Typewriter.prototype._playSequenceAtIndex = function(sequence, index) {
  *
  * @return {int} Sampled from delay mean and variance.
  */
-Typewriter.prototype._sampleDelay = function() {
+Typewriter.prototype._sampleDelay = function () {
   const lower_bound = this._delayMean - this._delayVariance;
   const range = this._delayVariance * 2;
 
@@ -234,7 +234,7 @@ Typewriter.prototype._sampleDelay = function() {
  * @param {Function} [characterCallback] Called after every character has been typed.
  * @param {Function} [completionCallback] Called after _all_ characters have been typed.
  */
-Typewriter.prototype._typeTextAtIndex = function(text, index) {
+Typewriter.prototype._typeTextAtIndex = function (text, index) {
   const that = this;
 
   // Are we at the end of the text?
@@ -248,7 +248,7 @@ Typewriter.prototype._typeTextAtIndex = function(text, index) {
   // Type the character.
   const character = text.charAt(index);
 
-  if (character === '\b') {
+  if (character === "\b") {
     // This is a delete character: _remove_ the last character.
     const newLength = this._textNode.nodeValue.length - 1;
     this._textNode.nodeValue = this._textNode.nodeValue.substring(0, newLength);

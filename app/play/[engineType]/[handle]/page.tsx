@@ -18,11 +18,7 @@ export const dynamicParams = false;
 export default function Index({ params }: PageProps): JSX.Element {
   const { handle, engineType } = params;
 
-  return engineType === "g" ? (
-    <GodotRenderer handle={handle} />
-  ) : (
-    <UnityRenderer handle={handle} />
-  );
+  return engineType === "g" ? <GodotRenderer handle={handle} /> : <UnityRenderer handle={handle} />;
 }
 
 export async function generateStaticParams(): Promise<Params[]> {

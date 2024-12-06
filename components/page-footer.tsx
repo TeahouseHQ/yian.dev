@@ -12,10 +12,7 @@ const PageFooter = (): JSX.Element => {
           <Link href="/">Home</Link>
         </li>
         <li>
-          <Link
-            href="https://www.linkedin.com/in/yi-an-lai-andrew/"
-            target="_blank"
-          >
+          <Link href="https://www.linkedin.com/in/yi-an-lai-andrew/" target="_blank">
             LinkedIn
           </Link>
         </li>
@@ -25,9 +22,7 @@ const PageFooter = (): JSX.Element => {
           </Link>
         </li>
       </ul>
-      <p className="text-center text-brand-200">
-        Pedal Powered Dev - {new Date().getFullYear()}
-      </p>
+      <p className="text-center text-brand-200">Pedal Powered Dev - {new Date().getFullYear()}</p>
     </div>
   );
 };

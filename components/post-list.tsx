@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import Post from "types/post";
 
 import DateFormatter from "./date-formatter";
@@ -18,11 +19,7 @@ const PostList = ({ posts }: Props): JSX.Element => {
               {post.title}
             </Link>
           </h3>
-          <div
-            className={`mb-4 ${
-              post.excerpt ? "text-gray-700" : "text-gray-400"
-            }`}
-          >
+          <div className={`mb-4 ${post.excerpt ? "text-gray-700" : "text-gray-400"}`}>
             {post.excerpt || "No excerpt available for this post."}
           </div>
           <div className="mb-4 text-gray-500">

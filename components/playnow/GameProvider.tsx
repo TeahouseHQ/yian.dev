@@ -8,13 +8,8 @@ interface GameProviderProps {
   initialSeed?: number;
 }
 
-export default function GameProvider({
-  children,
-  initialSeed,
-}: GameProviderProps) {
-  const [seed, setSeed] = useState<number>(
-    initialSeed || Math.floor(Math.random() * Date.now())
-  );
+export default function GameProvider({ children, initialSeed }: GameProviderProps) {
+  const [seed, setSeed] = useState<number>(initialSeed || Math.floor(Math.random() * Date.now()));
   const [grid, setGrid] = useState<Tile[][]>(createInitialGrid(seed));
   const [isGameOver, setIsGameOver] = useState(false);
   const [score, setScore] = useState(1);
@@ -53,9 +48,7 @@ export default function GameProvider({
   };
 
   return (
-    <GameContext.Provider
-      value={{ grid, revealTile, seed, isGameOver, resetGame, score }}
-    >
+    <GameContext.Provider value={{ grid, revealTile, seed, isGameOver, resetGame, score }}>
       {children}
     </GameContext.Provider>
   );

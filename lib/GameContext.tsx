@@ -6,6 +6,7 @@ import { mulberry32 } from "#/lib/random";
 export const GameContext = createContext<GameContextType>({
   grid: [],
   revealTile: () => {},
+  resetGame: () => {},
   seed: 0,
   isGameOver: false,
 });

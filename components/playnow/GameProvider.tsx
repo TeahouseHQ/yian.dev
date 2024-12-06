@@ -5,10 +5,16 @@ import { GameContext, createInitialGrid } from "#/lib/GameContext";
 
 interface GameProviderProps {
   children: ReactNode;
-  seed: number;
+  initialSeed?: number;
 }
 
-export default function GameProvider({ children, seed }: GameProviderProps) {
+export default function GameProvider({
+  children,
+  initialSeed,
+}: GameProviderProps) {
+  const [seed, setSeed] = useState<number>(
+    initialSeed || Math.floor(Math.random() * Date.now())
+  );
   const [grid, setGrid] = useState<Tile[][]>(createInitialGrid(seed));
   const [isGameOver, setIsGameOver] = useState(false);
 
@@ -34,8 +40,17 @@ export default function GameProvider({ children, seed }: GameProviderProps) {
     });
   };
 
+  const resetGame = () => {
+    const newSeed = Math.floor(Math.random() * Date.now());
+    setSeed(newSeed);
+    setGrid(createInitialGrid(newSeed));
+    setIsGameOver(false);
+  };
+
   return (
-    <GameContext.Provider value={{ grid, revealTile, seed, isGameOver }}>
+    <GameContext.Provider
+      value={{ grid, revealTile, seed, isGameOver, resetGame }}
+    >
       {children}
     </GameContext.Provider>
   );

@@ -8,22 +8,56 @@ interface TileProps {
   tile: TileType;
 }
 
-const TileValue = ({ value }: { value: TileValue }) => {
+const TileValue = ({
+  value,
+  isRevealed,
+  forceReveal = false,
+}: {
+  value: TileValue;
+  isRevealed: boolean;
+  forceReveal?: boolean;
+}) => {
   if (value === 0) {
-    return <div className="animate-explode">💣</div>;
+    return (
+      <div className={`${isRevealed && forceReveal ? "animate-explode" : ""}`}>
+        {isRevealed || forceReveal ? "💣" : ""}
+      </div>
+    );
   }
 
-  return <div>{value}</div>;
+  return <div>{isRevealed ? value : ""}</div>;
 };
 
 const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
-  const { revealTile } = useGame();
+  const { revealTile, isGameOver } = useGame();
 
   const handleClick = () => {
     if (!tile.isRevealed) {
       revealTile(rowIndex, colIndex);
     }
   };
+
+  if (isGameOver) {
+    return (
+      <div
+        className={`
+        w-16 h-16
+        flex items-center justify-center
+        text-2xl rounded
+        transition-colors duration-200
+        opacity-60
+        ${tile.isRevealed ? "bg-white" : "bg-gray-200"}
+      `}
+        onClick={handleClick}
+      >
+        <TileValue
+          value={tile.value}
+          isRevealed={tile.isRevealed}
+          forceReveal
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -40,7 +74,7 @@ const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
       `}
       onClick={handleClick}
     >
-      {tile.isRevealed ? <TileValue value={tile.value} /> : "?"}
+      <TileValue value={tile.value} isRevealed={tile.isRevealed} />
     </div>
   );
 };

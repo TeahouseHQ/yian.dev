@@ -11,12 +11,8 @@ const GameProvider = dynamic(
 );
 
 export default function Index() {
-  const [seed, setSeed] = useState<number>(
-    Math.floor(Math.random() * Date.now())
-  );
-
   return (
-    <GameProvider seed={seed}>
+    <GameProvider>
       <Game />
     </GameProvider>
   );

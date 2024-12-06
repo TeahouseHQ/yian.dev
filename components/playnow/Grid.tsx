@@ -10,10 +10,10 @@ const calculateRowStats = (
   row: { value: TileValue; isRevealed: boolean }[]
 ) => {
   const sum = row.reduce((acc, tile) => {
-    return acc + (tile.value === "bomb" ? 0 : (tile.value as number));
+    return acc + tile.value;
   }, 0);
 
-  const bombCount = row.filter((tile) => tile.value === "bomb").length;
+  const bombCount = row.filter((tile) => tile.value === 0).length;
 
   return { sum, bombCount };
 };

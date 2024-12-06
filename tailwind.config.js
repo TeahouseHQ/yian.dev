@@ -48,10 +48,36 @@ module.exports = {
             transform: "scaleY(0.1)",
           },
         },
+        "reveal-tile": {
+          "0%": {
+            opacity: "0",
+            transform: "scale(0.95)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "scale(1)",
+          },
+        },
+        explode: {
+          "0%": {
+            transform: "scale(0.5) rotate(0deg)",
+            opacity: "0",
+          },
+          "50%": {
+            transform: "scale(2.5) rotate(180deg)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "scale(1) rotate(360deg)",
+            opacity: "1",
+          },
+        },
       },
       animation: {
         tick: "tick 180s steps(60) infinite",
         blink: "blink 5s ease-out infinite",
+        "reveal-tile": "reveal-tile 0.3s ease-out forwards",
+        explode: "explode 0.5s ease-out forwards",
       },
     },
   },

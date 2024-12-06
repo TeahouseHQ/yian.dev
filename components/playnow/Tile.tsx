@@ -1,4 +1,4 @@
-import { Tile as TileType } from "types/game";
+import { Tile as TileType, TileValue } from "types/game";
 
 import { useGame } from "#/lib/GameContext";
 
@@ -7,6 +7,14 @@ interface TileProps {
   colIndex: number;
   tile: TileType;
 }
+
+const TileValue = ({ value }: { value: TileValue }) => {
+  if (value === 0) {
+    return <div className="animate-explode">💣</div>;
+  }
+
+  return <div>{value}</div>;
+};
 
 const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
   const { revealTile } = useGame();
@@ -26,13 +34,13 @@ const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
         transition-colors duration-200
         ${
           tile.isRevealed
-            ? "bg-white cursor-default"
+            ? "bg-white cursor-default animate-reveal-tile"
             : "bg-gray-200 hover:bg-gray-300 cursor-pointer"
         }
       `}
       onClick={handleClick}
     >
-      {tile.isRevealed ? tile.value : "?"}
+      {tile.isRevealed ? <TileValue value={tile.value} /> : "?"}
     </div>
   );
 };

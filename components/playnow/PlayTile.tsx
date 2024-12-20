@@ -19,7 +19,7 @@ const TileValue = ({
 }) => {
   if (value === 0) {
     return (
-      <div className={`${isRevealed && forceReveal ? "animate-explode" : ""}`}>
+      <div className={`${isRevealed ? "animate-explode" : ""}`}>
         {isRevealed || forceReveal ? "💣" : ""}
       </div>
     );

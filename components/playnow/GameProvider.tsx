@@ -28,10 +28,12 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
         isRevealed: true,
       };
 
-      if (tile.value === 0) {
-        setIsGameOver(true);
-      }
       setScore((currentScore) => currentScore * tile.value);
+      if (tile.value === 0) {
+        setTimeout(() => {
+          setIsGameOver(true);
+        }, 600);
+      }
 
       return newGrid;
     });

@@ -29,10 +29,10 @@ const Grid = () => {
   const { grid } = useGame();
 
   return (
-    <div className="flex flex-col gap-1 p-4">
+    <div className="flex flex-col gap-1 p-1 sm:p-4 max-w-full">
       {/* Main grid with row summaries */}
       {grid.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex gap-1">
+        <div key={rowIndex} className="flex gap-1 min-w-fit">
           {row.map((tile, colIndex) => (
             <PlayTile
               key={`${rowIndex}-${colIndex}`}
@@ -47,7 +47,7 @@ const Grid = () => {
       ))}
 
       {/* Column summaries row */}
-      <div className="flex gap-1">
+      <div className="flex gap-1 min-w-fit">
         {grid[0].map((_, colIndex) => (
           <SummaryTile key={`summary-col-${colIndex}`} {...calculateColStats(grid, colIndex)} />
         ))}

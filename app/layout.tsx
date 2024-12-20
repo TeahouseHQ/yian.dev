@@ -56,6 +56,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
           </>
         )}
         <Script src="https://kit.fontawesome.com/87445c11d6.js" strategy="beforeInteractive" />
+        <Script
+          src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js"
+          strategy="beforeInteractive"
+        />
       </head>
       <body>{children}</body>
     </html>

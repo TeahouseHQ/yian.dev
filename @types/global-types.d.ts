@@ -6,6 +6,15 @@ declare global {
   interface Window {
     DISQUS?: any;
     disqus_config?: any;
+
+    confetti: {
+      (options?: {
+        particleCount?: number;
+        spread?: number;
+        origin?: { y: number };
+        [key: string]: any;
+      }): void;
+    };
   }
 }
 

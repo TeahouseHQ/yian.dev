@@ -1,7 +1,8 @@
 import { useGame } from "#/lib/GameContext";
-import { Tile as TileType, TileValue } from "types/game";
+import { Tile as TileType, TileValue as TileValueType } from "types/game";
+import BaseTile from "./BaseTile";
 
-interface TileProps {
+interface PlayTileProps {
   rowIndex: number;
   colIndex: number;
   tile: TileType;
@@ -12,7 +13,7 @@ const TileValue = ({
   isRevealed,
   forceReveal = false,
 }: {
-  value: TileValue;
+  value: TileValueType;
   isRevealed: boolean;
   forceReveal?: boolean;
 }) => {
@@ -27,11 +28,10 @@ const TileValue = ({
   return <div>{isRevealed ? value : ""}</div>;
 };
 
-const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
+const PlayTile = ({ rowIndex, colIndex, tile }: PlayTileProps) => {
   const { revealTile, isGameOver } = useGame();
 
   const handleClick = () => {
-    console.log("handleClick", rowIndex, colIndex);
     if (!tile.isRevealed) {
       revealTile(rowIndex, colIndex);
     }
@@ -39,28 +39,24 @@ const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
 
   if (isGameOver) {
     return (
-      <div
+      <BaseTile
         className={`
-        w-16 h-16
-        flex items-center justify-center
-        text-2xl rounded
-        transition-colors duration-200
-        opacity-60
-        ${tile.isRevealed ? "bg-white" : "bg-gray-200"}
-      `}
+          text-2xl
+          transition-colors duration-200
+          opacity-60
+          ${tile.isRevealed ? "bg-white" : "bg-gray-200"}
+        `}
         onClick={handleClick}
       >
         <TileValue value={tile.value} isRevealed={tile.isRevealed} forceReveal />
-      </div>
+      </BaseTile>
     );
   }
 
   return (
-    <div
+    <BaseTile
       className={`
-        w-16 h-16
-        flex items-center justify-center
-        text-2xl rounded
+        text-2xl
         transition-colors duration-200
         ${
           tile.isRevealed
@@ -71,8 +67,8 @@ const Tile = ({ rowIndex, colIndex, tile }: TileProps) => {
       onClick={handleClick}
     >
       <TileValue value={tile.value} isRevealed={tile.isRevealed} />
-    </div>
+    </BaseTile>
   );
 };
 
-export default Tile;
+export default PlayTile;

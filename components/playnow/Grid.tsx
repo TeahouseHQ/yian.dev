@@ -2,7 +2,8 @@ import { useGame } from "#/lib/GameContext";
 import { TileValue } from "types/game";
 
 import SummaryTile from "./SummaryTile";
-import Tile from "./Tile";
+import PlayTile from "./PlayTile";
+import BaseTile from "./BaseTile";
 
 // Helper function to calculate row statistics
 const calculateRowStats = (row: { value: TileValue; isRevealed: boolean }[]) => {
@@ -33,7 +34,7 @@ const Grid = () => {
       {grid.map((row, rowIndex) => (
         <div key={rowIndex} className="flex gap-1">
           {row.map((tile, colIndex) => (
-            <Tile
+            <PlayTile
               key={`${rowIndex}-${colIndex}`}
               rowIndex={rowIndex}
               colIndex={colIndex}
@@ -46,10 +47,11 @@ const Grid = () => {
       ))}
 
       {/* Column summaries row */}
-      <div className="flex gap-1 mt-1">
+      <div className="flex gap-1">
         {grid[0].map((_, colIndex) => (
           <SummaryTile key={`summary-col-${colIndex}`} {...calculateColStats(grid, colIndex)} />
         ))}
+        <BaseTile />
       </div>
     </div>
   );

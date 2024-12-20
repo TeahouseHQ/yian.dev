@@ -15,13 +15,11 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
   const [score, setScore] = useState(1);
 
   const revealTile = (rowIndex: number, colIndex: number) => {
-    console.log("revealTile", rowIndex, colIndex);
     if (isGameOver) {
       return;
     }
 
     setGrid((prevGrid) => {
-      console.log("prevGrid", prevGrid);
       const newGrid = [...prevGrid];
       newGrid[rowIndex] = [...newGrid[rowIndex]];
       const tile = newGrid[rowIndex][colIndex];
@@ -45,6 +43,12 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
     setGrid(createInitialGrid(newSeed));
     setIsGameOver(false);
     setScore(1);
+
+    window.confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+    });
   };
 
   return (

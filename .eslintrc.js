@@ -28,13 +28,5 @@ module.exports = {
     "@typescript-eslint/strict-boolean-expressions": 0,
     "@typescript-eslint/explicit-function-return-type": 0,
     "prettier/prettier": "error",
-    // "import/order": [
-    //   "error",
-    //   {
-    //     groups: ["builtin", "external", "internal", ["parent", "sibling", "index"]],
-    //     "newlines-between": "always",
-    //     alphabetize: { order: "asc", caseInsensitive: true },
-    //   },
-    // ],
   },
 };

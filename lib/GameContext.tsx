@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 
 import { mulberry32 } from "#/lib/random";
 import { GameContextType, Tile, TileValue } from "types/game";
+import { IS_LOCAL_DEV } from "./constants";
 
 export const GameContext = createContext<GameContextType>({
   grid: [],
@@ -9,6 +10,7 @@ export const GameContext = createContext<GameContextType>({
   resetGame: () => {},
   seed: 0,
   isGameOver: false,
+  isWinner: false,
   score: 1,
 });
 
@@ -28,6 +30,10 @@ export const createInitialGrid = (seed: number): Tile[][] => {
       });
     }
     grid.push(row);
+  }
+
+  if (IS_LOCAL_DEV) {
+    console.log(grid);
   }
   return grid;
 };

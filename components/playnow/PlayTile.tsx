@@ -25,7 +25,7 @@ const TileValue = ({
     );
   }
 
-  return <div>{isRevealed ? value : ""}</div>;
+  return <div>{isRevealed || forceReveal ? value : ""}</div>;
 };
 
 const PlayTile = ({ rowIndex, colIndex, tile }: PlayTileProps) => {
@@ -43,7 +43,6 @@ const PlayTile = ({ rowIndex, colIndex, tile }: PlayTileProps) => {
         className={`
           text-2xl
           transition-colors duration-200
-          opacity-60
           ${tile.isRevealed ? "bg-white" : "bg-gray-200"}
         `}
         onClick={handleClick}

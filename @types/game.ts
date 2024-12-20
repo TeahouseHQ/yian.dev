@@ -10,6 +10,7 @@ export interface GameContextType {
   seed: number;
   score: number;
   isGameOver: boolean;
+  isWinner: boolean;
   revealTile: (rowIndex: number, colIndex: number) => void;
   resetGame: () => void;
 }

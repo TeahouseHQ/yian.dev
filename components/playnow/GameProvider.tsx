@@ -12,10 +12,23 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
   const [seed, setSeed] = useState<number>(initialSeed || Math.floor(Math.random() * Date.now()));
   const [grid, setGrid] = useState<Tile[][]>(createInitialGrid(seed));
   const [isGameOver, setIsGameOver] = useState(false);
+  const [isWinner, setIsWinner] = useState(false);
   const [score, setScore] = useState(1);
 
+  const checkWinCondition = (currentGrid: Tile[][]) => {
+    // Check if all tiles with value > 1 are revealed
+    for (let row of currentGrid) {
+      for (let tile of row) {
+        if (tile.value > 1 && !tile.isRevealed) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   const revealTile = (rowIndex: number, colIndex: number) => {
-    if (isGameOver) {
+    if (isGameOver || isWinner) {
       return;
     }
 
@@ -29,10 +42,21 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
       };
 
       setScore((currentScore) => currentScore * tile.value);
+
       if (tile.value === 0) {
         setTimeout(() => {
           setIsGameOver(true);
         }, 600);
+      } else if (checkWinCondition(newGrid)) {
+        setTimeout(() => {
+          setIsWinner(true);
+          setIsGameOver(true);
+          window.confetti({
+            particleCount: 200,
+            spread: 90,
+            origin: { y: 0.6 },
+          });
+        }, 100);
       }
 
       return newGrid;
@@ -44,17 +68,22 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
     setSeed(newSeed);
     setGrid(createInitialGrid(newSeed));
     setIsGameOver(false);
+    setIsWinner(false);
     setScore(1);
-
-    window.confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
   };
 
   return (
-    <GameContext.Provider value={{ grid, revealTile, seed, isGameOver, resetGame, score }}>
+    <GameContext.Provider
+      value={{
+        grid,
+        revealTile,
+        seed,
+        isGameOver,
+        isWinner,
+        resetGame,
+        score,
+      }}
+    >
       {children}
     </GameContext.Provider>
   );

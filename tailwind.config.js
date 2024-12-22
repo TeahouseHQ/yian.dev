@@ -1,7 +1,19 @@
 /** @type {import('tailwindcss').Config} */
+const colors = require('tailwindcss/colors');
+
 module.exports = {
   content: ["./components/**/*.tsx", "./pages/**/*.tsx", "./app/**/*.tsx"],
   theme: {
+    colors: {
+      transparent: "transparent",
+      currentColor: "currentColor",
+      black: colors.black,
+      white: colors.white,
+      gray: colors.gray,
+      blue: "#475B69",
+      red: "#A15D5D",
+      green: "#4ade80",
+    },
     extend: {
       colors: {
         brand: {

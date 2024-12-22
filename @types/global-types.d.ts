@@ -7,6 +7,8 @@ declare global {
     DISQUS?: any;
     disqus_config?: any;
 
+    __DEBUG_MODE__?: boolean;
+
     confetti: {
       (options?: {
         particleCount?: number;

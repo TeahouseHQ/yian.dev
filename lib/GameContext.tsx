@@ -32,7 +32,7 @@ export const createInitialGrid = (seed: number): Tile[][] => {
     grid.push(row);
   }
 
-  if (IS_LOCAL_DEV) {
+  if (IS_LOCAL_DEV || !!window.__DEBUG_MODE__) {
     console.log(grid);
   }
   return grid;

@@ -10,7 +10,7 @@
 }
 
 .markdown a {
-  @apply text-brand-600 underline;
+  @apply underline;
 }
 
 .markdown h2 {

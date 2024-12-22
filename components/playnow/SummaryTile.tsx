@@ -11,7 +11,7 @@ const SummaryTile = ({ sum, bombCount, className = "" }: SummaryTileProps) => {
     <BaseTile className={`bg-gray-200 ${className}`}>
       <div className="text-sm text-center">
         <div>{sum}</div>
-        <div className="text-red-500">{bombCount}</div>
+        <div className="text-red">{bombCount}</div>
       </div>
     </BaseTile>
   );

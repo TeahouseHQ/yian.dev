@@ -1,16 +1,43 @@
 import { useState, ReactNode } from "react";
 import { Tile } from "types/game";
 
-import { GameContext, createInitialGrid } from "#/lib/GameContext";
+import { GameContext, createInitialGrid, CONSTRAINTS } from "#/lib/GameContext";
+import { IS_LOCAL_DEV } from "#/lib/constants";
 
 interface GameProviderProps {
   children: ReactNode;
   initialSeed?: number;
 }
 
+function gameWonConfetti() {
+  const baseConfetti = {
+    spread: 360,
+    ticks: 50,
+    gravity: 0,
+    decay: 0.94,
+    startVelocity: 30,
+    origin: { y: 0.45 },
+  };
+
+  window.confetti({
+    ...baseConfetti,
+    particleCount: 80,
+  });
+  setTimeout(() => {
+    window.confetti({
+      ...baseConfetti,
+      particleCount: 100,
+    });
+  }, 200);
+}
+
+if (IS_LOCAL_DEV) {
+  window.gameWonConfetti = gameWonConfetti;
+}
+
 export default function GameProvider({ children, initialSeed }: GameProviderProps) {
   const [seed, setSeed] = useState<number>(initialSeed || Math.floor(Math.random() * Date.now()));
-  const [grid, setGrid] = useState<Tile[][]>(createInitialGrid(seed));
+  const [grid, setGrid] = useState<Tile[][]>(createInitialGrid(seed, CONSTRAINTS.easy));
   const [isGameOver, setIsGameOver] = useState(false);
   const [isWinner, setIsWinner] = useState(false);
   const [score, setScore] = useState(1);
@@ -51,11 +78,7 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
         setTimeout(() => {
           setIsWinner(true);
           setIsGameOver(true);
-          window.confetti({
-            particleCount: 200,
-            spread: 90,
-            origin: { y: 0.6 },
-          });
+          gameWonConfetti();
         }, 100);
       }
 
@@ -66,7 +89,7 @@ export default function GameProvider({ children, initialSeed }: GameProviderProp
   const resetGame = () => {
     const newSeed = Math.floor(Math.random() * Date.now());
     setSeed(newSeed);
-    setGrid(createInitialGrid(newSeed));
+    setGrid(createInitialGrid(newSeed, CONSTRAINTS.easy));
     setIsGameOver(false);
     setIsWinner(false);
     setScore(1);

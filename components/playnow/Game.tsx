@@ -7,7 +7,7 @@ export default function Game() {
   return (
     <div className="relative flex flex-col items-center gap-4 min-h-screen p-4">
       <div className={`text-2xl font-bold`}>
-        {isGameOver && isWinner && `You did it! ${score} 🎉`}
+        {isGameOver && isWinner && `You did it! Score:${score} 🎉`}
         {isGameOver && !isWinner && "Game Over 😓"}
         {!isGameOver && `Score: ${score}`}
       </div>
@@ -17,7 +17,7 @@ export default function Game() {
       {isGameOver && (
         <>
           <button
-            className="px-6 py-3 text-xl bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="px-6 py-3 text-xl bg-blue text-white rounded-lg hover:scale-105 transition-transform"
             onClick={resetGame}
           >
             Start Over

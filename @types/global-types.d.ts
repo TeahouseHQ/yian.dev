@@ -17,6 +17,8 @@ declare global {
         [key: string]: any;
       }): void;
     };
+
+    gameWonConfetti?: () => void;
   }
 }
 

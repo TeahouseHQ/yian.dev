@@ -11,6 +11,7 @@ const BaseTile = ({ children, onClick, className = "" }: BaseTileProps) => {
         w-12 h-12 sm:w-16 sm:h-16
         flex items-center justify-center
         rounded
+        select-none
         ${className}
       `}
       onClick={onClick}

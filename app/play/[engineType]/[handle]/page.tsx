@@ -9,15 +9,10 @@ interface Params {
   handle: string;
 }
 
-type PageProps = {
-  params: Params;
-};
-
 export const dynamicParams = false;
 
-export default async function Index(props: PageProps): Promise<JSX.Element> {
-  const params = await props.params;
-  const { handle, engineType } = params;
+export default async function Index(props: { params: Promise<Params> }): Promise<JSX.Element> {
+  const { handle, engineType } = await props.params;
 
   return engineType === "g" ? <GodotRenderer handle={handle} /> : <UnityRenderer handle={handle} />;
 }

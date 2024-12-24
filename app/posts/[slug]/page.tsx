@@ -20,11 +20,10 @@ interface Params {
   slug: string;
 }
 
-type Props = {
-  params: Params;
-};
-
-export async function generateMetadata(props: Props, _: ResolvingMetadata): Promise<Metadata> {
+export async function generateMetadata(
+  props: { params: Promise<Params> },
+  _: ResolvingMetadata
+): Promise<Metadata> {
   const params = await props.params;
   const { slug } = params;
 

@@ -24,7 +24,8 @@ type Props = {
   params: Params;
 };
 
-export async function generateMetadata({ params }: Props, _: ResolvingMetadata): Promise<Metadata> {
+export async function generateMetadata(props: Props, _: ResolvingMetadata): Promise<Metadata> {
+  const params = await props.params;
   const { slug } = params;
 
   // fetch data
@@ -39,7 +40,8 @@ export async function generateMetadata({ params }: Props, _: ResolvingMetadata):
   };
 }
 
-export default async function Page({ params }: { params: Params }): Promise<JSX.Element> {
+export default async function Page(props: { params: Promise<Params> }): Promise<JSX.Element> {
+  const params = await props.params;
   const post = await getPost(params);
 
   return (

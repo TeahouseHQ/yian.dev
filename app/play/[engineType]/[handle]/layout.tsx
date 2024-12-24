@@ -5,10 +5,10 @@ import { Suffix } from "../../../../lib/constants";
 import { getBundleMetadata } from "../../../../lib/gameCatalog";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     engineType: "g" | "u";
     handle: string;
-  };
+  }>;
 };
 
 export const viewport: Viewport = {
@@ -19,10 +19,8 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export async function generateMetadata(
-  { params }: PageProps,
-  _: ResolvingMetadata
-): Promise<Metadata> {
+export async function generateMetadata(props: PageProps, _: ResolvingMetadata): Promise<Metadata> {
+  const params = await props.params;
   const { handle } = params;
 
   // fetch data

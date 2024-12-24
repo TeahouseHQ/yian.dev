@@ -15,7 +15,8 @@ type PageProps = {
 
 export const dynamicParams = false;
 
-export default function Index({ params }: PageProps): JSX.Element {
+export default async function Index(props: PageProps): Promise<JSX.Element> {
+  const params = await props.params;
   const { handle, engineType } = params;
 
   return engineType === "g" ? <GodotRenderer handle={handle} /> : <UnityRenderer handle={handle} />;

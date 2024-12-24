@@ -39,12 +39,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
 
         {!IS_LOCAL_DEV && (
           <>
-            <Script
-              async
-              src="https://www.googletagmanager.com/gtag/js?id=G-P9MJR96YXY"
-              strategy="beforeInteractive"
-            />
-            <Script id="ga" strategy="beforeInteractive">
+            <Script async src="https://www.googletagmanager.com/gtag/js?id=G-P9MJR96YXY" />
+            <Script id="ga">
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
@@ -55,11 +51,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
             </Script>
           </>
         )}
-        <Script src="https://kit.fontawesome.com/87445c11d6.js" strategy="beforeInteractive" />
-        <Script
-          src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js"
-          strategy="beforeInteractive"
-        />
+        <Script src="https://kit.fontawesome.com/87445c11d6.js" />
+        <Script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js" />
       </head>
       <body>{children}</body>
     </html>

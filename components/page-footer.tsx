@@ -2,27 +2,46 @@ import Link from "next/link";
 
 import styles from "../styles/styles.module.css";
 
-const PageFooter = (): JSX.Element => {
-  return (
-    <div className={`max-w-4xl mx-auto mb-28 ${styles.footer}`}>
-      <hr />
+const FooterLinks = [
+  {
+    name: "Home",
+    href: "/",
+  },
+  {
+    name: "LinkedIn",
+    href: "https://www.linkedin.com/in/yi-an-lai-andrew/",
+    target: "_blank",
+  },
+  {
+    name: "GitHub",
+    href: "https://github.com/yianL",
+    target: "_blank",
+  },
+  {
+    name: "Strava",
+    href: "https://www.strava.com/athletes/yianlai",
+    target: "_blank",
+  },
+  {
+    name: "Play",
+    href: "/play",
+  },
+];
 
-      <ul className="flex justify-center list-none my-4">
-        <li>
-          <Link href="/">Home</Link>
-        </li>
-        <li>
-          <Link href="https://www.linkedin.com/in/yi-an-lai-andrew/" target="_blank">
-            LinkedIn
-          </Link>
-        </li>
-        <li>
-          <Link href="https://www.strava.com/athletes/yianlai" target="_blank">
-            Strava
-          </Link>
-        </li>
+const PageFooter = ({ className }: { className?: string }): JSX.Element => {
+  return (
+    <div className={`max-w-4xl mx-auto mb-28 ${styles.footer} ${className}`}>
+      <hr className="w-full border-t-2 border-foreground/40 my-16" />
+      <ul className="flex flex-wrap justify-center list-none my-4">
+        {FooterLinks.map((link) => (
+          <li key={link.name} className="mx-2 my-1">
+            <Link href={link.href} target={link.target}>
+              {link.name}
+            </Link>
+          </li>
+        ))}
       </ul>
-      <p className="text-center text-brand-200">Pedal Powered Dev - {new Date().getFullYear()}</p>
+      <p className="text-center">yian.dev - {new Date().getFullYear()}</p>
     </div>
   );
 };

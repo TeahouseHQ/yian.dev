@@ -4,5 +4,5 @@
 }
 
 .cardOverlay {
-  background-image: linear-gradient(transparent 25%, theme(colors.brand.950) 90%);
+  background-image: linear-gradient(transparent 25%, theme(colors.background) 90%);
 }

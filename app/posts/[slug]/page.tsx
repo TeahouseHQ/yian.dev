@@ -46,8 +46,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
   return (
     <Layout>
       <Container>
-        <PageHeader />
-        <article className="mb-24">
+        <article className="mb-24 pt-16">
           <PostHeader
             title={post.title}
             coverImage={post.coverImage}

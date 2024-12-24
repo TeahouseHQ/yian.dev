@@ -6,7 +6,7 @@ coverImage: "/assets/blog/hello-world/helloworld.jpg"
 date: "2024-02-19T01:28:48Z"
 author:
   name: Yian
-  picture: "/assets/blog/authors/yian.png"
+  picture: "/assets/blog/authors/yian-genmoji.png"
 ogImage:
   url: "/assets/blog/hello-world/helloworld.jpg"
 ---

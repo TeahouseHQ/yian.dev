@@ -10,19 +10,19 @@ interface Props {
 
 const PostList = ({ posts }: Props): JSX.Element => {
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       {posts.map((post) => (
-        <div key={post.slug}>
+        <div key={post.slug} className="mb-16 md:mb-8">
           <h3 className="mb-4 text-3xl font-bold leading-tight tracking-tight">
             <Link href={`/posts/${post.slug}`}>
               {post.isDraft ? "[Draft-local-only] " : ""}
               {post.title}
             </Link>
           </h3>
-          <div className={`mb-4 ${post.excerpt ? "text-gray-700" : "text-gray-400"}`}>
+          <div className={`mb-4 text-foreground`}>
             {post.excerpt || "No excerpt available for this post."}
           </div>
-          <div className="mb-4 text-gray-500">
+          <div className="mb-4 text-green">
             <DateFormatter isoDateString={post.date} />
           </div>
         </div>

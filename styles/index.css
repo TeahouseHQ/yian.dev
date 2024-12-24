@@ -4,7 +4,11 @@
 
 @layer base {
   body {
-    @apply bg-brand-50 text-brand-400 relative;
+    @apply bg-background text-foreground relative;
+  }
+
+  ::selection {
+    @apply bg-selection text-foreground;
   }
 
   a {

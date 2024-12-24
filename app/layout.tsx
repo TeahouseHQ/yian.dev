@@ -1,7 +1,7 @@
-import { Noto_Sans } from "next/font/google";
 import Script from "next/script";
 
 import { SiteTitle, SiteDescription, IS_LOCAL_DEV, BaseUrl } from "../lib/constants";
+import { noto, sourceCodePro } from "./fonts";
 
 import "../styles/index.css";
 
@@ -11,15 +11,9 @@ export const metadata = {
   description: SiteDescription,
 };
 
-const noto = Noto_Sans({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-});
-
 export default function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <html lang="en" className={noto.className}>
+    <html lang="en" className={sourceCodePro.className}>
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=202403" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=202403" />

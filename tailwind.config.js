@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-const colors = require('tailwindcss/colors');
+const colors = require("tailwindcss/colors");
 
 module.exports = {
   content: ["./components/**/*.tsx", "./pages/**/*.tsx", "./app/**/*.tsx"],
@@ -10,26 +10,20 @@ module.exports = {
       black: colors.black,
       white: colors.white,
       gray: colors.gray,
-      blue: "#475B69",
-      red: "#A15D5D",
-      green: "#4ade80",
+      foreground: "#c5c8c6",
+      background: "#1d1f21",
+      selection: "#373b41",
+      line: "#282a2e",
+      comment: "#969896",
+      red: "#cc6666",
+      orange: "#de935f",
+      yellow: "#f0c674",
+      green: "#b5bd68",
+      aqua: "#8abeb7",
+      blue: "#81a2be",
+      purple: "#b294bb",
     },
     extend: {
-      colors: {
-        brand: {
-          50: "#f6f7f6",
-          100: "#e2e6e1",
-          200: "#c6ccc3",
-          300: "#a1aa9e",
-          400: "#7d897a",
-          500: "#616d5f",
-          600: "#4c574a",
-          700: "#40473e",
-          800: "#353b34",
-          900: "#2e332e",
-          950: "#181b18",
-        },
-      },
       letterSpacing: {
         tighter: "-.04em",
       },

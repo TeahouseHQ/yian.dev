@@ -24,7 +24,7 @@ export default function Index(): JSX.Element {
             }}
           >
             <div className={`w-full flex-grow ${styles.cardOverlay}`}>
-              <div className="absolute flex items-center w-full bottom-0 left-0 min-h-[100px] p-5 text-brand-200">
+              <div className="absolute flex items-center w-full bottom-0 left-0 min-h-[100px] p-5">
                 <div className="flex flex-col flex-grow">
                   <h2 className="text-3xl">
                     {GameBundles[handle].name}

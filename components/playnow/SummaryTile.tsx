@@ -8,7 +8,7 @@ interface SummaryTileProps {
 
 const SummaryTile = ({ sum, bombCount, className = "" }: SummaryTileProps) => {
   return (
-    <BaseTile className={`bg-gray-200 ${className}`}>
+    <BaseTile className={`bg-gray-600 ${className}`}>
       <div className="text-sm text-center">
         <div>{sum}</div>
         <div className="text-red">{bombCount}</div>

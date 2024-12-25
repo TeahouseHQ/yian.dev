@@ -24,7 +24,7 @@ const PpdLogo = ({ width = 240, height = 240, backgroundMode = false }): JSX.Ele
         <g
           id="g7"
           transform="matrix(0.92055838,0,0,0.92055838,30.248456,12.31775)"
-          className="fill-selection stroke-selection"
+          className="fill-foreground/15 stroke-foreground/15"
         >
           <g id="g3" transform="matrix(1.1048517,0,0,1.1048517,-49.227483,-28.348541)">
             <path

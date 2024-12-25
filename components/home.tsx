@@ -17,22 +17,27 @@ const Home = ({ posts }: Props): JSX.Element => {
         <Link href={"/play"}>
           <Logo />
         </Link>
-        <h1 className="text-4xl">Yian Lai</h1>
-        <div className="flex flex-row items-center justify-center gap-2 text-2xl min-h-[40px]">
-          <span>
-            <a href="https://github.com/yianL" target="_blank">
-              {">"}
-            </a>
-          </span>
+        <div className="text-2xl w-[280px] text-left">
+          yian-lai
+          <span className="text-gray-600">{"@"}</span>
+          <a href="https://github.com/yianL" target="_blank" className="text-foreground">
+            dev
+          </a>
+          <span className="text-gray-600">{":"}</span>
+        </div>
+        <div className="text-2xl w-[280px] text-left">
+          <span>{"> "}</span>
           <a href="https://www.linkedin.com/in/yi-an-lai-andrew/" target="_blank">
             fullstack
           </a>
+          <span> </span>
           <a href="https://www.strava.com/athletes/yianlai" target="_blank">
             roadie
           </a>
+          <span className="cursor-blink">_</span>
         </div>
       </div>
-      <hr className="w-full border-t-2 border-foreground/40 md:hidden my-16" />
+      <hr className="w-full border-t-2 border-foreground/20 md:hidden my-16" />
       <div className="flex flex-col items-center xl:w-9/12 md:w-7/12 p-4">
         <PostList posts={posts} />
       </div>

@@ -20,7 +20,7 @@ const Avatar = ({ name, picture, date }: Props): JSX.Element => {
       />
       <div>
         <div className="text-xl font-bold">{name}</div>
-        <div className="text-green">{date && <DateFormatter isoDateString={date} />}</div>
+        <div className="text-red">{date && <DateFormatter isoDateString={date} />}</div>
       </div>
     </div>
   );

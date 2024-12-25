@@ -12,7 +12,7 @@ module.exports = {
       gray: colors.gray,
       foreground: "#c5c8c6",
       background: "#1d1f21",
-      selection: "#373b41",
+      selection: "#f0c674",
       line: "#282a2e",
       comment: "#969896",
       red: "#cc6666",

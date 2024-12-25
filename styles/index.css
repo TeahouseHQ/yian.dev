@@ -8,7 +8,7 @@
   }
 
   ::selection {
-    @apply bg-selection text-foreground;
+    @apply bg-selection text-background;
   }
 
   a {
@@ -51,4 +51,18 @@
   i {
     @apply opacity-0;
   }
+}
+
+@keyframes cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
 }

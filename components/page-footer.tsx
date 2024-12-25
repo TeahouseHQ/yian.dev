@@ -31,7 +31,7 @@ const FooterLinks = [
 const PageFooter = ({ className }: { className?: string }): JSX.Element => {
   return (
     <div className={`max-w-4xl mx-auto mb-28 ${styles.footer} ${className}`}>
-      <hr className="w-full border-t-2 border-foreground/40 my-16" />
+      <hr className="w-full border-t-2 border-foreground/20 my-16" />
       <ul className="flex flex-wrap justify-center list-none my-4">
         {FooterLinks.map((link) => (
           <li key={link.name} className="mx-2 my-1">

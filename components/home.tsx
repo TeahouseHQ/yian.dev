@@ -19,11 +19,7 @@ const Home = ({ posts }: Props): JSX.Element => {
         </Link>
         <div className="text-2xl w-[280px] text-left">
           yian-lai
-          <span className="text-gray-600">{"@"}</span>
-          <a href="https://github.com/yianL" target="_blank" className="text-foreground">
-            dev
-          </a>
-          <span className="text-gray-600">{":"}</span>
+          <span className="text-gray-600">{"@"}</span>~<span className="text-gray-600">{":"}</span>
         </div>
         <div className="text-2xl w-[280px] text-left">
           <span>{"> "}</span>

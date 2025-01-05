@@ -7,7 +7,6 @@ import CommentsBox from "../../../components/comments-box";
 import Container from "../../../components/container";
 import Layout from "../../../components/layout";
 import PageFooter from "../../../components/page-footer";
-import PageHeader from "../../../components/page-header";
 import PostBody from "../../../components/post-body";
 import PostHeader from "../../../components/post-header";
 import { getAllPosts, getPostBySlug } from "../../../lib/api";
@@ -60,7 +59,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
           pageId={post.id}
           enabled={post.commentsEnabled}
         />
-        <PageFooter />
+        <PageFooter showMenu />
         <Script src="/assets/js/copy.js" />
       </Container>
     </Layout>

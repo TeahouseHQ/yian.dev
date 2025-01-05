@@ -10,7 +10,7 @@ interface Props {
 
 const PostList = ({ posts }: Props): JSX.Element => {
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       {posts.map((post) => (
         <div key={post.slug} className="mb-16 md:mb-8">
           <h3 className="mb-4 text-3xl font-bold leading-tight tracking-tight">

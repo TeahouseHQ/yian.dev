@@ -5,6 +5,7 @@ import PostType from "types/post";
 import PostList from "./post-list";
 import Logo from "./ppd-logo";
 import PageFooter from "./page-footer";
+import Menu from "./menu";
 
 type Props = {
   posts: PostType[];
@@ -37,6 +38,7 @@ const Home = ({ posts }: Props): JSX.Element => {
       <div className="flex flex-col items-center xl:w-9/12 md:w-7/12 p-4">
         <PostList posts={posts} />
       </div>
+      <Menu />
       <PageFooter className="md:hidden" />
     </div>
   );

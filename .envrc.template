@@ -1,0 +1,29 @@
+# .envrc — Git Worktree Isolation (managed by direnv)
+#
+# Setup:
+#   cp .envrc.template .envrc   # (in new worktrees)
+#   direnv allow
+#
+# Each worktree gets a unique port derived from its path hash.
+# This prevents port conflicts when running multiple dev servers.
+
+# Use .nvmrc if available
+use_nvm() {
+    local node_version
+    node_version="$(cat .nvmrc 2>/dev/null || echo "")"
+    if [ -n "$node_version" ]; then
+        local nvm_path="$HOME/.nvm/versions/node/v$node_version/bin"
+        if [ -d "$nvm_path" ]; then
+            PATH_add "$nvm_path"
+        fi
+    fi
+}
+
+use_nvm
+
+# Derive unique port from worktree path (3030-3999 range)
+WORKTREE_HASH=$(echo "$PWD" | md5sum | cut -c1-3)
+export PORT=$((3030 + 0x$WORKTREE_HASH % 970))
+
+# direnv shows this on cd
+log_status "Dev server port: $PORT"

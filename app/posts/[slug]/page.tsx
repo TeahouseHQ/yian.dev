@@ -30,9 +30,22 @@ export async function generateMetadata(
   const post = getPostBySlug(slug, ["title", "excerpt", "ogImage"]);
 
   return {
-    title: `${post.title}${Suffix}`,
+    title: post.title,
     description: post.excerpt,
+    alternates: {
+      canonical: `/posts/${slug}`,
+    },
     openGraph: {
+      title: post.title,
+      description: post.excerpt,
+      url: `/posts/${slug}`,
+      type: "article",
+      images: [post.ogImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.excerpt,
       images: [post.ogImage],
     },
   };

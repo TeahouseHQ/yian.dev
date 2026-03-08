@@ -5,10 +5,41 @@ import { noto, sourceCodePro } from "./fonts";
 
 import "../styles/index.css";
 
+const seoDescription =
+  "Yi-An Lai is a fullstack software engineer and cyclist based in the Bay Area. Writing about game development, cycling adventures, and software engineering.";
+
 export const metadata = {
   metadataBase: new URL(BaseUrl),
-  title: SiteTitle,
-  description: SiteDescription,
+  title: {
+    default: SiteTitle,
+    template: `%s | Pedal Powered Dev`,
+  },
+  description: seoDescription,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: SiteTitle,
+    description: seoDescription,
+    url: BaseUrl,
+    siteName: "Pedal Powered Dev",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1424,
+        height: 751,
+        alt: "Pedal Powered Dev - Mountains with cyclist",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SiteTitle,
+    description: seoDescription,
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {

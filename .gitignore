@@ -31,8 +31,7 @@ next-env.d.ts
 .env.production.local
 
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+pnpm-debug.log*
 
 # temporary files
 public-old

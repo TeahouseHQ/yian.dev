@@ -1,5 +1,6 @@
 {
   "private": true,
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "next dev -p ${PORT:-3030}",
     "build": "next build",

@@ -3,6 +3,7 @@ import Script from "next/script";
 
 import type PostType from "types/post";
 
+import { BlogPostJsonLd } from "#/components/JsonLd";
 import CommentsBox from "../../../components/comments-box";
 import Container from "../../../components/container";
 import Layout from "../../../components/layout";
@@ -57,6 +58,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
 
   return (
     <Layout>
+      <BlogPostJsonLd title={post.title} date={post.date} slug={post.slug} excerpt={post.excerpt} />
       <Container>
         <article className="mb-24 pt-16">
           <PostHeader
@@ -95,6 +97,7 @@ async function getPost(params): Promise<PostType> {
     "slug",
     "author",
     "content",
+    "excerpt",
     "ogImage",
     "coverImage",
   ]);

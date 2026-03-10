@@ -1,5 +1,6 @@
 import Script from "next/script";
 
+import { PersonJsonLd } from "#/components/JsonLd";
 import { SiteTitle, SiteDescription, IS_LOCAL_DEV, BaseUrl } from "../lib/constants";
 import { noto, sourceCodePro } from "./fonts";
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html lang="en" className={sourceCodePro.className}>
       <head>
+        <PersonJsonLd />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=202403" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=202403" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=202403" />

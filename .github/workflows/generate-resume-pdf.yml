@@ -40,14 +40,13 @@ jobs:
           echo "Waiting for server..."
           timeout 30 bash -c 'until curl -s http://localhost:3000 > /dev/null; do sleep 1; done'
 
+          # Give it a moment to fully initialize
+          sleep 2
+
           # Generate PDF using Playwright
           pnpm exec playwright pdf http://localhost:3000/resume resume.pdf \
-            --wait-until networkidle \
-            --format A4 \
-            --margin-top 0.5in \
-            --margin-bottom 0.5in \
-            --margin-left 0.5in \
-            --margin-right 0.5in
+            --paper-format A4 \
+            --wait-for-timeout 3000
 
           # Cleanup
           kill $SERVER_PID || true

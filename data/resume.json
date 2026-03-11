@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "version": "2026-03-10",
+    "lastUpdated": "2026-03-10T00:00:00Z"
+  },
+  "contact": {
+    "name": "Yi-An Lai",
+    "phone": "(310) 694-1147",
+    "email": "hello@yian.dev",
+    "linkedin": "/in/yi-an-lai-andrew",
+    "location": "San Francisco Bay Area, CA"
+  },
+  "summary": "Technical leader who scaled teams 2x and cut API timeouts 80% at high-growth startups. Fullstack engineer passionate about infrastructure, platform, and developer experience — building tools that delight both customers and engineers.",
+  "skills": [
+    "Fullstack Web Development",
+    "Python",
+    "Javascript",
+    "Typescript",
+    "AWS RDS",
+    "SQS",
+    "Postgres",
+    "Elastic Search",
+    "GraphQL",
+    "React.js",
+    "Chrome Extension",
+    "Java",
+    "Spring Boot",
+    "Kubernetes",
+    "Helm",
+    "Docker"
+  ],
+  "experience": [
+    {
+      "company": "Gem",
+      "title": "Software Engineer - Tech Lead Manager",
+      "startDate": "2023-08",
+      "endDate": null,
+      "highlights": [
+        "Scaled engineering team 2x: Onboarded and integrated a remote team in Bulgaria. Ran weekly syncs, set quarterly OKRs, and established cross-timezone collaboration workflows.",
+        "Reduced API timeouts 80%: Led quarter-long performance initiatives including query tuning, index optimization, and read-replica utilization. Refactored data ingestion pipelines to meet SLAs for high-volume enterprise customers.",
+        "Delivered enterprise features: Shipped SAML SSO, RBAC, SCIM, audit logging, and OAuth-based API integrations for $150K+ ARR customers. Partnered with the PM to prioritize roadmaps.",
+        "Standardized observability: Implemented OpenTelemetry (OTel) across frontend and backend services, reducing vendor lock-in and unifying monitoring practices org-wide."
+      ]
+    },
+    {
+      "company": "Gem",
+      "title": "Software Engineer",
+      "startDate": "2022-05",
+      "endDate": "2023-08",
+      "highlights": [
+        "Completed MV3 migration: Directed a team to complete a time-sensitive migration of Gem's Chrome extension (20,000 active users) to MV3 with minimal customer disruption. Migrated the codebase to TypeScript and modernized the observability stack to enhance developer experience.",
+        "Shipped Talent Marketing suite: Built forms, landing pages, and event management from scratch — enabling recruiters to run campaigns without marketing team dependencies. Drove $300K in new ARR."
+      ]
+    },
+    {
+      "company": "MuleSoft",
+      "title": "Senior - Lead MTS",
+      "startDate": "2017-04",
+      "endDate": "2022-05",
+      "highlights": [
+        "Built Kubernetes lifecycle agent: Developed tooling to manage Mule application deployments in Kubernetes clusters. Designed event-stream architecture enabling reliable monitoring for 1000+ deployments per cluster with minimal resource overhead.",
+        "Led EKS migration: Migrated from legacy EC2 infrastructure to Amazon EKS, improving scalability and reducing costs. Achieved 99.99% uptime, cut application startup times 30%, and increased deployment density."
+      ]
+    },
+    {
+      "company": "MuleSoft",
+      "title": "Member of Technical Staff (MTS)",
+      "startDate": "2015-04",
+      "endDate": "2017-04",
+      "highlights": [
+        "Pioneered React component library: Built reusable UI components for CloudHub (MuleSoft's PaaS), later adopted company-wide. Developed and maintained core frontend features serving enterprise deployment workflows."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "UCLA, Los Angeles",
+      "degree": "MS, Computer Science",
+      "startDate": "2013-09",
+      "endDate": "2015-03"
+    },
+    {
+      "institution": "National Taiwan University, Taipei",
+      "degree": "BS, Electrical Engineering",
+      "startDate": "2007-09",
+      "endDate": "2011-06"
+    }
+  ]
+}

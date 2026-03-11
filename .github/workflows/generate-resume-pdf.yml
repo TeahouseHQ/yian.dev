@@ -1,0 +1,70 @@
+name: Generate Resume PDF
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  generate-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright
+        run: pnpm exec playwright install chromium
+
+      - name: Build site
+        run: pnpm build
+
+      - name: Start server and generate PDF
+        run: |
+          # Start production server in background
+          pnpm start &
+          SERVER_PID=$!
+
+          # Wait for server to be ready
+          echo "Waiting for server..."
+          timeout 30 bash -c 'until curl -s http://localhost:3000 > /dev/null; do sleep 1; done'
+
+          # Generate PDF using Playwright
+          pnpm exec playwright pdf http://localhost:3000/resume resume.pdf \
+            --wait-until networkidle \
+            --format A4 \
+            --margin-top 0.5in \
+            --margin-bottom 0.5in \
+            --margin-left 0.5in \
+            --margin-right 0.5in
+
+          # Cleanup
+          kill $SERVER_PID || true
+
+      - name: Upload PDF to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: resume.pdf
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload PDF as Artifact (for workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resume-pdf
+          path: resume.pdf

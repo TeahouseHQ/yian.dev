@@ -1,0 +1,34 @@
+import type { ResumeData } from "types/resume";
+
+interface Props {
+  contact: ResumeData["contact"];
+}
+
+export function ResumeHeader({ contact }: Props) {
+  return (
+    <header className="mb-6 border-b-2 border-black pb-4">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
+        <h1 className="text-4xl font-bold tracking-tight">{contact.name}</h1>
+        <div className="text-sm md:text-right space-y-1">
+          <div>{contact.phone}</div>
+          <div>
+            <a href={`mailto:${contact.email}`} className="hover:underline">
+              {contact.email}
+            </a>
+          </div>
+          <div>
+            <a
+              href={`https://linkedin.com${contact.linkedin}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              linkedin.com{contact.linkedin}
+            </a>
+          </div>
+          <div>{contact.location}</div>
+        </div>
+      </div>
+    </header>
+  );
+}

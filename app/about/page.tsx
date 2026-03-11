@@ -1,3 +1,4 @@
+import Link from "next/link";
 import HomeLayout from "#/components/home-layout";
 
 export default function AboutPage() {
@@ -10,6 +11,19 @@ export default function AboutPage() {
             {/* Add your about content here */}
             This is the about page. You can add your personal information, background, skills, and
             interests here.
+          </p>
+
+          <h2>Resume</h2>
+          <p>
+            View my{" "}
+            <Link href="/resume" className="underline">
+              resume online
+            </Link>{" "}
+            or{" "}
+            <a href="/Resume_YiAn_Lai_2026.pdf" download className="underline">
+              download the PDF
+            </a>
+            .
           </p>
         </div>
       </div>

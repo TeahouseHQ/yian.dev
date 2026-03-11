@@ -66,3 +66,52 @@
 .cursor-blink {
   animation: cursor-blink 1s step-end infinite;
 }
+
+/* Print styles for resume */
+@media print {
+  /* Hide navigation, footer, and download buttons */
+  nav,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Reset page margins */
+  @page {
+    margin: 0.5in;
+    size: letter;
+  }
+
+  /* Ensure clean background */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  /* Prevent awkward page breaks */
+  h1,
+  h2,
+  h3 {
+    page-break-after: avoid;
+  }
+
+  section {
+    page-break-inside: avoid;
+  }
+
+  /* Make links readable in print */
+  a {
+    color: black !important;
+    text-decoration: none !important;
+  }
+
+  /* Ensure full width */
+  main,
+  article {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}

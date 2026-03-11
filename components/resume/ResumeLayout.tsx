@@ -15,7 +15,7 @@ export function ResumeLayout({ data }: Props) {
     <div className="min-h-screen bg-white">
       <div className="max-w-4xl mx-auto px-6 py-8 print:px-0 print:py-0 print:max-w-none">
         <ResumeDownload />
-        <article className="bg-white text-black">
+        <article className="bg-white text-black font-sans">
           <ResumeHeader contact={data.contact} />
           <ResumeSummary summary={data.summary} />
           <ResumeSkills skills={data.skills} />

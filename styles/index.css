@@ -97,7 +97,8 @@
     page-break-after: avoid;
   }
 
-  section {
+  /* Keep individual job/education entries together, but allow sections to span pages */
+  .resume-entry {
     page-break-inside: avoid;
   }
 

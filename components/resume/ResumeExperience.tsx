@@ -32,7 +32,7 @@ export function ResumeExperience({ experience }: Props) {
       </h2>
       <div className="space-y-4">
         {experience.map((job, index) => (
-          <div key={index}>
+          <div key={index} className="resume-entry">
             <div className="flex flex-col md:flex-row md:justify-between md:items-baseline">
               <div>
                 <span className="font-bold">{job.company}</span>

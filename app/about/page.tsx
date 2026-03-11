@@ -20,7 +20,11 @@ export default function AboutPage() {
               resume online
             </Link>{" "}
             or{" "}
-            <a href="/Resume_YiAn_Lai_2026.pdf" download className="underline">
+            <a
+              href="https://github.com/yianL/yian.dev/releases/latest/download/resume.pdf"
+              download
+              className="underline"
+            >
               download the PDF
             </a>
             .

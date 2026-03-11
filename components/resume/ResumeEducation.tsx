@@ -7,8 +7,18 @@ interface Props {
 function formatDate(dateStr: string): string {
   const [year, month] = dateStr.split("-");
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
   return `${monthNames[parseInt(month) - 1]} ${year}`;
 }

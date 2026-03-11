@@ -1,7 +1,6 @@
 "use client";
 
-const RESUME_PDF_URL =
-  "https://github.com/yianL/yian.dev/releases/latest/download/resume.pdf";
+const RESUME_PDF_URL = "https://github.com/yianL/yian.dev/releases/latest/download/resume.pdf";
 
 export function ResumeDownload() {
   const handlePrint = () => {

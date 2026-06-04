@@ -20,19 +20,19 @@ jobs:
           SHA="${{ github.event.deployment.sha }}"
           SHORT_SHA="${SHA:0:7}"
           DEPLOY_URL="${{ github.event.deployment_status.target_url }}"
-          
+
           MESSAGE="❌ *Build Failed*
-          
+
           📦 \`${REPO}\`
           🌿 Branch: \`${BRANCH}\`
           🔗 Commit: [${SHORT_SHA}](https://github.com/${REPO}/commit/${SHA})
           🔍 [View Deployment](${DEPLOY_URL})"
-          
+
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="Markdown" \
             -d text="${MESSAGE}"
-          
+
           echo "Notification sent!"
 
   notify-success:
@@ -49,12 +49,12 @@ jobs:
           DEPLOY_URL="${{ github.event.deployment_status.environment_url }}"
           SHORT_SHA="${{ github.event.deployment.sha }}"
           SHORT_SHA="${SHORT_SHA:0:7}"
-          
+
           MESSAGE="✅ *Deploy Successful*
-          
+
           📦 \`${REPO}\`
           🚀 [${SHORT_SHA}](${DEPLOY_URL})"
-          
+
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="Markdown" \

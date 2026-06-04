@@ -57,6 +57,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
         <meta name="msapplication-TileColor" content="#4c574a" />
         <meta name="theme-color" content="#c6ccc3" />
 
+        {/* RSS Feed autodiscovery */}
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="RSS Feed for Pedal Powered Dev"
+          href="/feed.xml"
+        />
+
         {/* Theme for highlight.js */}
         {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link

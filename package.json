@@ -10,7 +10,8 @@
     "typecheck": "tsc",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "node scripts/link-git-hooks.js"
   },
   "dependencies": {
     "classnames": "^2.3.1",

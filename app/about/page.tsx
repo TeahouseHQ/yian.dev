@@ -21,7 +21,7 @@ export default function AboutPage() {
             </Link>{" "}
             or{" "}
             <a
-              href="https://github.com/yianL/yian.dev/releases/latest/download/resume.pdf"
+              href="https://github.com/TeahouseHQ/yian.dev/releases/latest/download/resume.pdf"
               download
               className="underline"
             >

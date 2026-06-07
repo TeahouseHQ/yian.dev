@@ -31,7 +31,10 @@ export function ResumeEducation({ education }: Props) {
       </h2>
       <div className="space-y-2">
         {education.map((edu, index) => (
-          <div key={index} className="resume-entry flex flex-col md:flex-row md:justify-between print:flex-row print:justify-between">
+          <div
+            key={index}
+            className="resume-entry flex flex-col md:flex-row md:justify-between print:flex-row print:justify-between"
+          >
             <div>
               <span className="font-bold">{edu.institution}</span>
               <span className="text-black/60"> - </span>

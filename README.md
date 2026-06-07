@@ -29,15 +29,15 @@ The port can be overridden with the `PORT` environment variable (default: `3030`
 
 ### Other Commands
 
-| Command            | Description                     |
-| ------------------ | ------------------------------- |
-| `pnpm build`       | Production build (+ sitemap)    |
-| `pnpm start`       | Start production server         |
-| `pnpm lint`        | Run ESLint                      |
-| `pnpm typecheck`   | TypeScript type checking        |
-| `pnpm format`      | Format code with Prettier       |
-| `pnpm test`        | Run tests (Vitest)              |
-| `pnpm test:watch`  | Run tests in watch mode         |
+| Command           | Description                  |
+| ----------------- | ---------------------------- |
+| `pnpm build`      | Production build (+ sitemap) |
+| `pnpm start`      | Start production server      |
+| `pnpm lint`       | Run ESLint                   |
+| `pnpm typecheck`  | TypeScript type checking     |
+| `pnpm format`     | Format code with Prettier    |
+| `pnpm test`       | Run tests (Vitest)           |
+| `pnpm test:watch` | Run tests in watch mode      |
 
 ## Workflows
 

@@ -35,10 +35,10 @@
       "startDate": "2023-08",
       "endDate": null,
       "highlights": [
+        "Automated on-call triage: Engineered a self-hosted system that orchestrates AI coding agents to triage bug reports using static code and production data. Reduced manual triage time by 20 hours per on-call engineer per week.",
         "Reduced API timeouts 80%: Led quarter-long performance initiatives including query tuning, index optimization, and read-replica utilization. Refactored data ingestion pipelines to meet SLAs for high-volume enterprise customers.",
         "Delivered enterprise features: Shipped SAML SSO, RBAC, SCIM, audit logging, and OAuth-based API integrations for $150K+ ARR customers. Partnered with the PM to prioritize roadmaps.",
-        "Standardized observability: Implemented OpenTelemetry (OTel) across frontend and backend services, reducing vendor lock-in and unifying monitoring practices org-wide.",
-        "Automated on-call triage: Engineered a self-hosted system that orchestrates AI coding agents to triage bug reports using static code and production data. Reduced manual triage time by 20 hours per on-call engineer per week."
+        "Standardized observability: Implemented OpenTelemetry (OTel) across frontend and backend services, reducing vendor lock-in and unifying monitoring practices org-wide."
       ]
     },
     {

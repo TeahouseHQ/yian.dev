@@ -99,3 +99,22 @@ pnpm dev
 ## Deployment
 
 Deployed to Vercel. Google Analytics (GA4) loads only in production. `IS_LOCAL_DEV` flag in `lib/constants.ts` controls dev-only behavior like showing draft posts.
+
+### Releasing a New Resume PDF
+
+The `generate-resume-pdf.yml` GitHub Actions workflow generates a PDF from the `/resume` page using Playwright and attaches it to a GitHub Release.
+
+**To release:**
+
+1. Create and publish a new GitHub Release (e.g. tag `v1.0.3`)
+2. The workflow triggers automatically on `release: published`, builds the site, generates the PDF, and uploads `resume.pdf` as a release asset
+3. The `/resume` page links to `https://github.com/yianL/yian.dev/releases/latest/download/resume.pdf` — it always points to the latest release
+
+**To generate a PDF without releasing** (e.g. for preview), run the workflow manually via `workflow_dispatch`. The PDF is uploaded as a GitHub Actions artifact instead.
+
+## Git Hooks
+
+Pre-commit and pre-push hooks are version-controlled in `scripts/` and auto-linked via the `prepare` npm script (runs on `pnpm install`):
+
+- **pre-commit** (`scripts/pre-commit`): runs `pnpm format` and auto-stages formatting changes
+- **pre-push** (`scripts/pre-push`): runs `pnpm build` and blocks push on failure

@@ -10,7 +10,7 @@
     "linkedin": "/in/yi-an-lai-andrew",
     "location": "San Francisco Bay Area, CA"
   },
-  "summary": "Technical leader who scaled teams 2x and cut API timeouts 80% at high-growth startups. Fullstack engineer passionate about infrastructure, platform, and developer experience — building tools that delight both customers and engineers.",
+  "summary": "Technical leader and fullstack engineer passionate about product and developer experience. I build tools that delight both customers and engineers.",
   "skills": [
     "Fullstack Web Development",
     "Python",
@@ -19,7 +19,6 @@
     "AWS RDS",
     "SQS",
     "Postgres",
-    "Elastic Search",
     "GraphQL",
     "React.js",
     "Chrome Extension",
@@ -36,10 +35,10 @@
       "startDate": "2023-08",
       "endDate": null,
       "highlights": [
-        "Scaled engineering team 2x: Onboarded and integrated a remote team in Bulgaria. Ran weekly syncs, set quarterly OKRs, and established cross-timezone collaboration workflows.",
         "Reduced API timeouts 80%: Led quarter-long performance initiatives including query tuning, index optimization, and read-replica utilization. Refactored data ingestion pipelines to meet SLAs for high-volume enterprise customers.",
         "Delivered enterprise features: Shipped SAML SSO, RBAC, SCIM, audit logging, and OAuth-based API integrations for $150K+ ARR customers. Partnered with the PM to prioritize roadmaps.",
-        "Standardized observability: Implemented OpenTelemetry (OTel) across frontend and backend services, reducing vendor lock-in and unifying monitoring practices org-wide."
+        "Standardized observability: Implemented OpenTelemetry (OTel) across frontend and backend services, reducing vendor lock-in and unifying monitoring practices org-wide.",
+        "Automated on-call triage: Engineered a self-hosted system that orchestrates AI coding agents to triage bug reports using static code and production data. Reduced manual triage time by 20 hours per on-call engineer per week."
       ]
     },
     {

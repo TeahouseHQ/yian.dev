@@ -107,3 +107,17 @@ The `generate-resume-pdf.yml` GitHub Actions workflow generates a PDF from the `
 2. The workflow triggers automatically on `release: published`, builds the site, generates the PDF, and uploads `resume.pdf` as a release asset
 
 **To generate a PDF without releasing** (e.g. for preview), run the workflow manually via `workflow_dispatch`. The PDF is uploaded as a GitHub Actions artifact instead.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues (teahouseHQ/yian.dev) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage roles map 1:1 to default label names (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

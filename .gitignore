@@ -42,7 +42,4 @@ src-old
 public/robots.txt
 public/sitemap*.xml
 
-# docs
-/docs
-
 .playwright-cli/

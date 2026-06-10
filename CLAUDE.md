@@ -12,7 +12,7 @@ pnpm typecheck    # TypeScript type checking (tsc)
 pnpm format       # Prettier formatting
 ```
 
-Node version: 20.18.1 (see .nvmrc). Tests use [Vitest](https://vitest.dev/) (`pnpm test` / `pnpm test:watch`).
+Node version: 22.22.2 (see .nvmrc). Tests use [Vitest](https://vitest.dev/) (`pnpm test` / `pnpm test:watch`).
 
 ## Architecture
 

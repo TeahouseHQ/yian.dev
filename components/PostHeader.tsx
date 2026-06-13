@@ -1,8 +1,8 @@
 import type Author from "types/author";
 
-import Avatar from "./avatar";
-import CoverImage from "./cover-image";
-import PostTitle from "./post-title";
+import Avatar from "./Avatar";
+import CoverImage from "./CoverImage";
+import PostTitle from "./PostTitle";
 
 interface Props {
   title: string;

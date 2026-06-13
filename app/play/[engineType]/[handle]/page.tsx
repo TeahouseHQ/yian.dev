@@ -1,7 +1,7 @@
 import React from "react";
 
-import GodotRenderer from "./components/godotRenderer";
-import UnityRenderer from "./components/unityRenderer";
+import GodotRenderer from "./components/GodotRenderer";
+import UnityRenderer from "./components/UnityRenderer";
 import { GameBundles } from "../../../../lib/gameCatalog";
 
 interface Params {

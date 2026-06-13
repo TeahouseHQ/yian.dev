@@ -4,12 +4,12 @@ import Script from "next/script";
 import type PostType from "types/post";
 
 import { BlogPostJsonLd } from "#/components/JsonLd";
-import CommentsBox from "../../../components/comments-box";
-import Container from "../../../components/container";
-import Layout from "../../../components/layout";
-import PageFooter from "../../../components/page-footer";
-import PostBody from "../../../components/post-body";
-import PostHeader from "../../../components/post-header";
+import CommentsBox from "../../../components/CommentsBox";
+import Container from "../../../components/Container";
+import Layout from "../../../components/Layout";
+import PageFooter from "../../../components/PageFooter";
+import PostBody from "../../../components/PostBody";
+import PostHeader from "../../../components/PostHeader";
 import { getAllPosts, getPostBySlug } from "../../../lib/api";
 import { BaseUrl, Suffix } from "../../../lib/constants";
 import markdownToHtml from "../../../lib/markdownToHtml";

@@ -1,7 +1,7 @@
 import { useState, ReactNode } from "react";
 import { Tile } from "types/game";
 
-import { GameContext, createInitialGrid, CONSTRAINTS } from "#/lib/GameContext";
+import { GameContext, createInitialGrid, CONSTRAINTS } from "#/lib/gameContext";
 import { IS_LOCAL_DEV } from "#/lib/constants";
 
 interface GameProviderProps {

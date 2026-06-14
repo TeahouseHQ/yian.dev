@@ -1,9 +1,9 @@
 import Link from "next/link";
-import Logo from "./ppd-logo";
-import PageFooter from "./page-footer";
-import Menu from "./menu";
-import Layout from "./layout";
-import Container from "./container";
+import Logo from "./PpdLogo";
+import PageFooter from "./PageFooter";
+import Menu from "./Menu";
+import Layout from "./Layout";
+import Container from "./Container";
 
 const HomeLayout = ({
   children,

@@ -1,4 +1,4 @@
-import HomeLayout from "#/components/home-layout";
+import HomeLayout from "#/components/HomeLayout";
 
 export default function ProjectsPage() {
   return (

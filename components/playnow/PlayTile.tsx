@@ -1,4 +1,4 @@
-import { useGame } from "#/lib/GameContext";
+import { useGame } from "#/lib/gameContext";
 import { Tile as TileType, TileValue as TileValueType } from "types/game";
 import BaseTile from "./BaseTile";
 

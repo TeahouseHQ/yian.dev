@@ -1,6 +1,6 @@
 import cn from "classnames";
 
-import Container from "./container";
+import Container from "./Container";
 
 interface Props {
   preview?: boolean;

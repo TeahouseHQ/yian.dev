@@ -1,4 +1,4 @@
-import { useGame } from "#/lib/GameContext";
+import { useGame } from "#/lib/gameContext";
 import { TileValue } from "types/game";
 
 import SummaryTile from "./SummaryTile";

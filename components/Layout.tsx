@@ -1,4 +1,4 @@
-import Alert from "./alert";
+import Alert from "./Alert";
 
 interface Props {
   preview?: boolean;

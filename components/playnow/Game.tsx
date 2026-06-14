@@ -1,5 +1,5 @@
 import Grid from "#/components/playnow/Grid";
-import { useGame } from "#/lib/GameContext";
+import { useGame } from "#/lib/gameContext";
 
 export default function Game() {
   const { isGameOver, isWinner, resetGame, score } = useGame();

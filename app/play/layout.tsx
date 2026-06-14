@@ -1,8 +1,8 @@
 import { Metadata } from "next/types";
 import React from "react";
 
-import Container from "../../components/container";
-import Logo from "../../components/ppd-logo";
+import Container from "../../components/Container";
+import Logo from "../../components/PpdLogo";
 import { Suffix } from "../../lib/constants";
 
 export const metadata: Metadata = {

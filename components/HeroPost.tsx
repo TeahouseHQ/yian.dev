@@ -2,9 +2,9 @@ import Link from "next/link";
 
 import type Author from "types/author";
 
-import Avatar from "./avatar";
-import CoverImage from "./cover-image";
-import DateFormatter from "./date-formatter";
+import Avatar from "./Avatar";
+import CoverImage from "./CoverImage";
+import DateFormatter from "./DateFormatter";
 
 interface Props {
   title: string;

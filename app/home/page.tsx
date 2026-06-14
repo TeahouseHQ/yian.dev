@@ -1,5 +1,5 @@
-import PostList from "#/components/post-list";
-import HomeLayout from "#/components/home-layout";
+import PostList from "#/components/PostList";
+import HomeLayout from "#/components/HomeLayout";
 import { getAllPosts } from "#/lib/api";
 
 export default async function HomePage() {

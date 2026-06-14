@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import DateFormatter from "./date-formatter";
+import DateFormatter from "./DateFormatter";
 
 interface Props {
   name: string;

@@ -3,7 +3,7 @@ import HomeLayout from "#/components/HomeLayout";
 import { getAllPosts } from "#/lib/api";
 
 export default async function HomePage() {
-  const posts = getAllPosts(["slug", "title", "date", "excerpt"]);
+  const posts = getAllPosts(["slug", "title", "date", "excerpt", "readingTime"]);
 
   return (
     <HomeLayout route="~">

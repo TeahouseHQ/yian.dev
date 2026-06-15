@@ -3,6 +3,7 @@ import Link from "next/link";
 import Post from "types/post";
 
 import DateFormatter from "./DateFormatter";
+import { formatReadingTime } from "#/lib/readingTime";
 
 interface Props {
   posts: Post[];
@@ -22,8 +23,14 @@ const PostList = ({ posts }: Props): JSX.Element => {
           <div className={`mb-4 text-foreground`}>
             {post.excerpt || "No excerpt available for this post."}
           </div>
-          <div className="mb-4 text-green">
+          <div className="mb-4 text-green flex items-center gap-2">
             <DateFormatter isoDateString={post.date} />
+            {post.readingTime ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{formatReadingTime(post.readingTime)}</span>
+              </>
+            ) : null}
           </div>
         </div>
       ))}

@@ -66,6 +66,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
             coverImage={post.coverImage}
             date={post.date}
             author={post.author}
+            readingTime={post.readingTime}
           />
           <PostBody content={post.content} />
         </article>
@@ -100,6 +101,7 @@ async function getPost(params): Promise<PostType> {
     "excerpt",
     "ogImage",
     "coverImage",
+    "readingTime",
   ]);
   const content = await markdownToHtml(post.content || "");
 

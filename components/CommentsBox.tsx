@@ -18,13 +18,13 @@ const CommentsBox = (props: Props): React.JSX.Element => {
     if (window.DISQUS) {
       window.DISQUS.reset({
         reload: true,
-        config: function () {
+        config: function (this: { page: { identifier: string; url: string } }) {
           this.page.identifier = pageId;
           this.page.url = pageUrl;
         },
       });
     } else {
-      window.disqus_config = function () {
+      window.disqus_config = function (this: { page: { identifier: string; url: string } }) {
         this.page.url = pageUrl;
         this.page.identifier = pageId;
       };

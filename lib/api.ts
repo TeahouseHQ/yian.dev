@@ -40,8 +40,9 @@ export function getPostBySlug(slug: string, fields: string[] = []): Items {
   items["isDraft"] = data["isDraft"] || false;
   items["commentsEnabled"] = data["commentsEnabled"] || false;
 
-  // Always derive reading time from the raw markdown so previews and
-  // post headers display the same value without callers needing to opt in.
+  // Derive reading time from the raw markdown so previews and post headers
+  // display the same value. Opt-in via the field list, matching the pattern
+  // used for other fields above.
   if (fields.includes("readingTime")) {
     items["readingTime"] = computeReadingTime(content) as unknown as string;
   }

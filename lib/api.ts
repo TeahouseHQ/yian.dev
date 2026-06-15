@@ -6,6 +6,7 @@ import matter from "gray-matter";
 import type Post from "types/post";
 
 import { IS_LOCAL_DEV } from "./constants";
+import { computeReadingTime } from "./readingTime";
 
 const postsDirectory = join(process.cwd(), "_posts");
 
@@ -38,6 +39,13 @@ export function getPostBySlug(slug: string, fields: string[] = []): Items {
 
   items["isDraft"] = data["isDraft"] || false;
   items["commentsEnabled"] = data["commentsEnabled"] || false;
+
+  // Derive reading time from the raw markdown so previews and post headers
+  // display the same value. Opt-in via the field list, matching the pattern
+  // used for other fields above.
+  if (fields.includes("readingTime")) {
+    items["readingTime"] = computeReadingTime(content) as unknown as string;
+  }
 
   return items;
 }

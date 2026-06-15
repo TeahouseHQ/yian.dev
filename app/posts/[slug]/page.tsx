@@ -90,7 +90,7 @@ export async function generateStaticParams(): Promise<Params[]> {
   }));
 }
 
-async function getPost(params): Promise<PostType> {
+async function getPost(params: Params): Promise<PostType> {
   const post = getPostBySlug(params.slug, [
     "id",
     "title",

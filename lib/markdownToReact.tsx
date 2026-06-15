@@ -46,14 +46,22 @@ const Pre = ({ children, ...rest }: PreProps): React.JSX.Element => {
   );
 };
 
+// react/jsx-runtime's types don't quite line up with rehype-react's expected
+// shape, so narrow the runtime once here rather than casting at each field.
+const jsxRuntime = prod as unknown as {
+  Fragment: typeof import("react").Fragment;
+  jsx: unknown;
+  jsxs: unknown;
+};
+
 const processor = unified()
   .use(remarkParse)
   .use(remarkRehype)
   .use(rehypeHighlight, { plainText: ["txt", "text"] })
   .use(rehypeReact, {
-    Fragment: (prod as unknown as { Fragment: typeof import("react").Fragment }).Fragment,
-    jsx: (prod as unknown as { jsx: unknown }).jsx,
-    jsxs: (prod as unknown as { jsxs: unknown }).jsxs,
+    Fragment: jsxRuntime.Fragment,
+    jsx: jsxRuntime.jsx,
+    jsxs: jsxRuntime.jsxs,
     components: {
       pre: Pre,
     },

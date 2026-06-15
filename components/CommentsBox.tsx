@@ -7,6 +7,10 @@ type Props = {
   enabled?: boolean;
 };
 
+// Disqus invokes its config callback with `this` bound to an object exposing
+// the `page` identifier/url it will use for the thread.
+type DisqusConfigThis = { page: { identifier: string; url: string } };
+
 const CommentsBox = (props: Props): React.JSX.Element => {
   const { pageUrl, pageId, enabled } = props;
 
@@ -18,13 +22,13 @@ const CommentsBox = (props: Props): React.JSX.Element => {
     if (window.DISQUS) {
       window.DISQUS.reset({
         reload: true,
-        config: function (this: { page: { identifier: string; url: string } }) {
+        config: function (this: DisqusConfigThis) {
           this.page.identifier = pageId;
           this.page.url = pageUrl;
         },
       });
     } else {
-      window.disqus_config = function (this: { page: { identifier: string; url: string } }) {
+      window.disqus_config = function (this: DisqusConfigThis) {
         this.page.url = pageUrl;
         this.page.identifier = pageId;
       };

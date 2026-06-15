@@ -1,5 +1,5 @@
 import { Metadata, ResolvingMetadata } from "next";
-import Script from "next/script";
+import type { ReactNode } from "react";
 
 import type PostType from "types/post";
 
@@ -12,7 +12,7 @@ import PostBody from "../../../components/PostBody";
 import PostHeader from "../../../components/PostHeader";
 import { getAllPosts, getPostBySlug } from "../../../lib/api";
 import { BaseUrl, Suffix } from "../../../lib/constants";
-import markdownToHtml from "../../../lib/markdownToHtml";
+import markdownToReact from "../../../lib/markdownToReact";
 
 export const dynamicParams = false;
 
@@ -55,6 +55,7 @@ export async function generateMetadata(
 export default async function Page(props: { params: Promise<Params> }): Promise<React.JSX.Element> {
   const params = await props.params;
   const post = await getPost(params);
+  const renderedContent: ReactNode = post.content as unknown as ReactNode;
 
   return (
     <Layout>
@@ -68,7 +69,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
             author={post.author}
             readingTime={post.readingTime}
           />
-          <PostBody content={post.content} />
+          <PostBody content={renderedContent} />
         </article>
         <CommentsBox
           pageUrl={`${BaseUrl}/posts/${post.slug}`}
@@ -76,7 +77,6 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
           enabled={post.commentsEnabled}
         />
         <PageFooter showMenu />
-        <Script src="/assets/js/copy.js" />
       </Container>
     </Layout>
   );
@@ -103,10 +103,10 @@ async function getPost(params): Promise<PostType> {
     "coverImage",
     "readingTime",
   ]);
-  const content = await markdownToHtml(post.content || "");
+  const content = await markdownToReact(post.content || "");
 
   return {
     ...post,
     content,
-  } as PostType;
+  } as unknown as PostType;
 }

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: `Playground${Suffix}`,
 };
 
-export default async function Index({ children }): Promise<JSX.Element> {
+export default async function Index({ children }): Promise<React.JSX.Element> {
   return (
     <Container>
       {children}

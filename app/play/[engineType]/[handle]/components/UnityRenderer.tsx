@@ -9,7 +9,7 @@ type PageProps = {
   handle: string;
 };
 
-export default function UnityRenderer({ handle }: PageProps): JSX.Element {
+export default function UnityRenderer({ handle }: PageProps): React.JSX.Element {
   useEffect(() => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 

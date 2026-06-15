@@ -10,7 +10,7 @@ const CardClassNames = {
   hide: "translate-x-full rotate-90 opacity-0",
 };
 
-export default function Index(): JSX.Element {
+export default function Index(): React.JSX.Element {
   return (
     <>
       <h1 className="text-center text-6xl m-4">Play</h1>

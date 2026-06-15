@@ -52,7 +52,7 @@ export async function generateMetadata(
   };
 }
 
-export default async function Page(props: { params: Promise<Params> }): Promise<JSX.Element> {
+export default async function Page(props: { params: Promise<Params> }): Promise<React.JSX.Element> {
   const params = await props.params;
   const post = await getPost(params);
 

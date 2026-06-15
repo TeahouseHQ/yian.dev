@@ -9,7 +9,7 @@ type PageProps = {
   handle: string;
 };
 
-export default function GodotRenderer({ handle }: PageProps): JSX.Element {
+export default function GodotRenderer({ handle }: PageProps): React.JSX.Element {
   const { metadata = {} } = getBundleMetadata(handle) || {};
 
   return (

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const Menu = (): JSX.Element => {
+const Menu = (): React.JSX.Element => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 flex justify-center gap-8 text-lg py-4 bg-background">
       <Link href="/home" className="hover:no-underline hover:text-aqua transition-colors">

@@ -1,4 +1,4 @@
-const SectionSeparator = (): JSX.Element => {
+const SectionSeparator = (): React.JSX.Element => {
   return <hr className="border-neutral-200 mt-28 mb-24" />;
 };
 

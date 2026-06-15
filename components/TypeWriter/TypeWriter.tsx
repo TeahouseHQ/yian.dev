@@ -23,7 +23,7 @@ const initializeTypewriterJs = (
   return typewriter;
 };
 
-const TypeWriter = ({ phrases }: { phrases: string[] }): JSX.Element => {
+const TypeWriter = ({ phrases }: { phrases: string[] }): React.JSX.Element => {
   const [isTypeProgressing, setIsTypeProgressing] = useState(false);
   const [sequence, setSequence] = useState<SequenceItem[]>([]);
   const targetSpan = useRef<HTMLElement>(null);

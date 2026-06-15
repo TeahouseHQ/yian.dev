@@ -7,7 +7,7 @@ type Props = {
   enabled?: boolean;
 };
 
-const CommentsBox = (props: Props): JSX.Element => {
+const CommentsBox = (props: Props): React.JSX.Element => {
   const { pageUrl, pageId, enabled } = props;
 
   useEffect(() => {

@@ -21,16 +21,16 @@ importers:
         version: 4.0.3
       next:
         specifier: ^15.5.18
-        version: 15.5.18(@playwright/test@1.58.2)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 15.5.18(@playwright/test@1.58.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-sitemap:
         specifier: ^4.2.3
-        version: 4.2.3(next@15.5.18(@playwright/test@1.58.2)(react-dom@18.2.0(react@18.2.0))(react@18.2.0))
+        version: 4.2.3(next@15.5.18(@playwright/test@1.58.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
       react:
-        specifier: ^18.2.0
-        version: 18.2.0
+        specifier: ^19.2.7
+        version: 19.2.7
       react-dom:
-        specifier: ^18.2.0
-        version: 18.2.0(react@18.2.0)
+        specifier: ^19.2.7
+        version: 19.2.7(react@19.2.7)
       rehype-format:
         specifier: ^5.0.0
         version: 5.0.0
@@ -57,11 +57,11 @@ importers:
         specifier: ^22
         version: 22.19.20
       "@types/react":
-        specifier: ^18.2.61
-        version: 18.3.28
+        specifier: ^19.2.17
+        version: 19.2.17
       "@types/react-dom":
-        specifier: ^18.2.19
-        version: 18.3.7(@types/react@18.3.28)
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.17)
       "@typescript-eslint/eslint-plugin":
         specifier: ^8.18.2
         version: 8.54.0(@typescript-eslint/parser@8.54.0(eslint@9.39.2(jiti@1.21.7))(typescript@5.1.6))(eslint@9.39.2(jiti@1.21.7))(typescript@5.1.6)
@@ -1103,24 +1103,18 @@ packages:
         integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==,
       }
 
-  "@types/prop-types@15.7.5":
+  "@types/react-dom@19.2.3":
     resolution:
       {
-        integrity: sha512-JCB8C6SnDoQf0cNycqd/35A7MjcnK+ZTqE7judS6o7utxUCg6imJg3QK2qzHKszlTjcj2cn+NwMB2i96ubpj7w==,
-      }
-
-  "@types/react-dom@18.3.7":
-    resolution:
-      {
-        integrity: sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==,
+        integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==,
       }
     peerDependencies:
-      "@types/react": ^18.0.0
+      "@types/react": ^19.2.0
 
-  "@types/react@18.3.28":
+  "@types/react@19.2.17":
     resolution:
       {
-        integrity: sha512-z9VXpC7MWrhfWipitjNdgCauoMLRdIILQsAEV+ZesIzBq/oUlxk0m3ApZuMFCXdnS4U7KrI+l3WRUEGQ8K1QKw==,
+        integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==,
       }
 
   "@types/unist@3.0.2":
@@ -3623,13 +3617,13 @@ packages:
         integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==,
       }
 
-  react-dom@18.2.0:
+  react-dom@19.2.7:
     resolution:
       {
-        integrity: sha512-6IMTriUmvsjHUjNtEDudZfuDQUoWXVxKHhlEGSk81n4YFS+r/Kl99wXiwlVXtPBtJenozv2P+hxDsw9eA7Xo6g==,
+        integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==,
       }
     peerDependencies:
-      react: ^18.2.0
+      react: ^19.2.7
 
   react-is@16.13.1:
     resolution:
@@ -3637,10 +3631,10 @@ packages:
         integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==,
       }
 
-  react@18.2.0:
+  react@19.2.7:
     resolution:
       {
-        integrity: sha512-/3IjMdb2L9QbBdWiW5e3P2/npwMBaU9mHCSCUzNln0ZCYbcfTsGbTJrU/kGemdH2IWmB2ioZ+zkxtmq6g09fGQ==,
+        integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==,
       }
     engines: { node: ">=0.10.0" }
 
@@ -3790,10 +3784,10 @@ packages:
       }
     engines: { node: ">=11.0.0" }
 
-  scheduler@0.23.0:
+  scheduler@0.27.0:
     resolution:
       {
-        integrity: sha512-CtuThmgHNg7zIZWAXi3AsyIzA3n4xx7aNyjwC2VJldO2LMVDhFK+63xGqq6CsJH4rTAt6/M+N4GhZiDYPx9eUw==,
+        integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==,
       }
 
   section-matter@1.0.0:
@@ -4907,15 +4901,12 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  "@types/prop-types@15.7.5": {}
-
-  "@types/react-dom@18.3.7(@types/react@18.3.28)":
+  "@types/react-dom@19.2.3(@types/react@19.2.17)":
     dependencies:
-      "@types/react": 18.3.28
+      "@types/react": 19.2.17
 
-  "@types/react@18.3.28":
+  "@types/react@19.2.17":
     dependencies:
-      "@types/prop-types": 15.7.5
       csstype: 3.2.3
 
   "@types/unist@3.0.2": {}
@@ -6501,23 +6492,23 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next-sitemap@4.2.3(next@15.5.18(@playwright/test@1.58.2)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)):
+  next-sitemap@4.2.3(next@15.5.18(@playwright/test@1.58.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)):
     dependencies:
       "@corex/deepmerge": 4.0.43
       "@next/env": 13.5.11
       fast-glob: 3.3.3
       minimist: 1.2.8
-      next: 15.5.18(@playwright/test@1.58.2)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+      next: 15.5.18(@playwright/test@1.58.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
 
-  next@15.5.18(@playwright/test@1.58.2)(react-dom@18.2.0(react@18.2.0))(react@18.2.0):
+  next@15.5.18(@playwright/test@1.58.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       "@next/env": 15.5.18
       "@swc/helpers": 0.5.15
       caniuse-lite: 1.0.30001793
       postcss: 8.4.31
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
-      styled-jsx: 5.1.6(react@18.2.0)
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      styled-jsx: 5.1.6(react@19.2.7)
     optionalDependencies:
       "@next/swc-darwin-arm64": 15.5.18
       "@next/swc-darwin-x64": 15.5.18
@@ -6708,17 +6699,14 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
-  react-dom@18.2.0(react@18.2.0):
+  react-dom@19.2.7(react@19.2.7):
     dependencies:
-      loose-envify: 1.4.0
-      react: 18.2.0
-      scheduler: 0.23.0
+      react: 19.2.7
+      scheduler: 0.27.0
 
   react-is@16.13.1: {}
 
-  react@18.2.0:
-    dependencies:
-      loose-envify: 1.4.0
+  react@19.2.7: {}
 
   read-cache@1.0.0:
     dependencies:
@@ -6864,9 +6852,7 @@ snapshots:
 
   sax@1.6.0: {}
 
-  scheduler@0.23.0:
-    dependencies:
-      loose-envify: 1.4.0
+  scheduler@0.27.0: {}
 
   section-matter@1.0.0:
     dependencies:
@@ -7046,10 +7032,10 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  styled-jsx@5.1.6(react@18.2.0):
+  styled-jsx@5.1.6(react@19.2.7):
     dependencies:
       client-only: 0.0.1
-      react: 18.2.0
+      react: 19.2.7
 
   sucrase@3.35.1:
     dependencies:

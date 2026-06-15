@@ -8,7 +8,7 @@ interface Props {
   date?: string;
 }
 
-const Avatar = ({ name, picture, date }: Props): JSX.Element => {
+const Avatar = ({ name, picture, date }: Props): React.JSX.Element => {
   return (
     <div className="flex items-center">
       <Image

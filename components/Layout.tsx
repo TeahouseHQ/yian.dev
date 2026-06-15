@@ -5,7 +5,7 @@ interface Props {
   children: React.ReactNode;
 }
 
-const Layout = ({ preview, children }: Props): JSX.Element => {
+const Layout = ({ preview, children }: Props): React.JSX.Element => {
   return (
     <div className="min-h-screen mx-8">
       <Alert preview={preview} />

@@ -11,7 +11,7 @@ const HomeLayout = ({
 }: {
   children: React.ReactNode;
   route: string;
-}): JSX.Element => {
+}): React.JSX.Element => {
   return (
     <Layout>
       <Container>

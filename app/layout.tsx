@@ -43,7 +43,7 @@ export const metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {
+export default function RootLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <html lang="en" className={sourceCodePro.className}>
       <head>

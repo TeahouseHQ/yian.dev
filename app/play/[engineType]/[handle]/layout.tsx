@@ -39,6 +39,6 @@ export async function generateMetadata(props: PageProps, _: ResolvingMetadata): 
   };
 }
 
-export default async function Index({ children }): Promise<JSX.Element> {
+export default async function Index({ children }): Promise<React.JSX.Element> {
   return <div className="flex justify-center min-h-screen">{children}</div>;
 }

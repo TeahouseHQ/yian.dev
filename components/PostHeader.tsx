@@ -13,7 +13,7 @@ interface Props {
   readingTime?: number;
 }
 
-const PostHeader = ({ title, coverImage, date, author, readingTime }: Props): JSX.Element => {
+const PostHeader = ({ title, coverImage, date, author, readingTime }: Props): React.JSX.Element => {
   return (
     <>
       <PostTitle>{title}</PostTitle>

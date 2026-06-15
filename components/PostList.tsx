@@ -9,7 +9,7 @@ interface Props {
   posts: Post[];
 }
 
-const PostList = ({ posts }: Props): JSX.Element => {
+const PostList = ({ posts }: Props): React.JSX.Element => {
   return (
     <div>
       {posts.map((post) => (

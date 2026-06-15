@@ -27,7 +27,7 @@ const PageFooter = ({
 }: {
   className?: string;
   showMenu?: boolean;
-}): JSX.Element => {
+}): React.JSX.Element => {
   return (
     <div className={`w-full md:max-w-4xl mx-auto mb-28 ${styles.footer} ${className}`}>
       <hr className="w-full border-t-2 border-foreground/20 my-16" />

@@ -15,7 +15,14 @@ interface Props {
   slug: string;
 }
 
-const PostPreview = ({ title, coverImage, date, excerpt, author, slug }: Props): JSX.Element => {
+const PostPreview = ({
+  title,
+  coverImage,
+  date,
+  excerpt,
+  author,
+  slug,
+}: Props): React.JSX.Element => {
   return (
     <div>
       <div className="mb-5">

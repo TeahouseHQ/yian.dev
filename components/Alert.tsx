@@ -6,7 +6,7 @@ interface Props {
   preview?: boolean;
 }
 
-const Alert = ({ preview }: Props): JSX.Element => {
+const Alert = ({ preview }: Props): React.JSX.Element => {
   return preview ? (
     <div
       className={cn("border-b", {

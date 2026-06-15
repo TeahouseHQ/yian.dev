@@ -4,7 +4,7 @@ interface Props {
   content: string;
 }
 
-const PostBody = ({ content }: Props): JSX.Element => {
+const PostBody = ({ content }: Props): React.JSX.Element => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className={markdownStyles.markdown} dangerouslySetInnerHTML={{ __html: content }} />

@@ -25,7 +25,7 @@ ARG AGENT_GID=1000
 RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d /home/agent -m -l agent node
 
 # Install pi coding agent
-RUN npm install -g @mariozechner/pi-coding-agent
+RUN npm install -g @earendil-works/pi-coding-agent
 
 # Run as root. Under ROOTLESS Docker (this machine), the container's root maps
 # to the host user that owns the bind-mounted worktree, so root is the ONLY

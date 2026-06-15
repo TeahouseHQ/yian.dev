@@ -76,7 +76,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           copyToWorktree: ["node_modules"],
           hooks: {
             sandbox: {
-              onSandboxReady: [{ command: "npm install && npm run build" }],
+              // pnpm with a frozen lockfile: this repo is pnpm-only (pnpm-lock.yaml,
+              // no package-lock.json), so `npm install` would generate a competing
+              // lockfile and resolve deps differently. --frozen-lockfile keeps sandbox
+              // installs reproducible and fast against the committed pnpm-lock.yaml.
+              onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
             },
           },
         });

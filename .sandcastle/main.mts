@@ -4,6 +4,14 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 const MAX_ITERATIONS = 10;
 const MAX_PARALLEL = 4;
 
+// Model used by every sandcastle.pi(...) agent call below (Planner, Implementer,
+// Reviewer, Merger). glm-5.1 is served via the host LiteLLM proxy whose endpoint
+// + auth are baked into .sandcastle/models.json (see #49 and
+// docs/adr/0002-host-access-via-tailscale-ip.md). No `thinking` option is passed
+// to sandcastle.pi(...) because LiteLLM's drop_params strips it for glm models —
+// reasoning happens at the model's default level regardless.
+const MODEL = "glm-5.1";
+
 // Sandbox factory — use this everywhere instead of calling docker() directly.
 //
 // This machine runs ROOTLESS Docker. Under rootless, the container's root maps
@@ -27,7 +35,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   const plan = await sandcastle.run({
     sandbox: dockerSandbox(),
     name: "Planner",
-    agent: sandcastle.pi("claude-opus-4-7"),
+    agent: sandcastle.pi(MODEL),
     promptFile: "./.sandcastle/plan-prompt.md",
   });
 
@@ -87,7 +95,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
         const result = await sandbox.run({
           name: "Implementer #" + issue.number,
-          agent: sandcastle.pi("claude-opus-4-7"),
+          agent: sandcastle.pi(MODEL),
           promptFile: "./.sandcastle/implement-prompt.md",
           promptArgs: {
             ISSUE_NUMBER: String(issue.number),
@@ -99,7 +107,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         if (result.commits.length > 0) {
           await sandbox.run({
             name: "Reviewer #" + issue.number,
-            agent: sandcastle.pi("claude-opus-4-7"),
+            agent: sandcastle.pi(MODEL),
             promptFile: "./.sandcastle/review-prompt.md",
             promptArgs: {
               ISSUE_NUMBER: String(issue.number),
@@ -151,7 +159,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     sandbox: dockerSandbox(),
     name: "Merger",
     maxIterations: 10,
-    agent: sandcastle.pi("claude-opus-4-7"),
+    agent: sandcastle.pi(MODEL),
     promptFile: "./.sandcastle/merge-prompt.md",
     promptArgs: {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),

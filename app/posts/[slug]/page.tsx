@@ -28,7 +28,7 @@ export async function generateMetadata(
   const { slug } = params;
 
   // fetch data
-  const post = getPostBySlug(slug, ["title", "excerpt", "ogImage"]);
+  const post = getPostBySlug(slug, ["title", "excerpt"]);
 
   return {
     title: post.title,
@@ -41,13 +41,16 @@ export async function generateMetadata(
       description: post.excerpt,
       url: `/posts/${slug}`,
       type: "article",
-      images: [post.ogImage],
+      // `images` is intentionally omitted. The sibling opengraph-image.tsx route
+      // generates a branded card per post; Next.js only honors that file-based
+      // image when config metadata does not define `images` itself.
     },
     twitter: {
       card: "summary_large_image",
       title: post.title,
       description: post.excerpt,
-      images: [post.ogImage],
+      // `images` omitted so twitter:image inherits from the openGraph image
+      // (the generated card) per Next's metadata inheritance rules.
     },
   };
 }

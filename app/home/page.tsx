@@ -1,13 +1,5 @@
-import PostList from "#/components/PostList";
-import HomeLayout from "#/components/HomeLayout";
-import { getAllPosts } from "#/lib/api";
+import HomePosts from "#/components/HomePosts";
 
-export default async function HomePage() {
-  const posts = getAllPosts(["slug", "title", "date", "excerpt", "readingTime"]);
-
-  return (
-    <HomeLayout route="~">
-      <PostList posts={posts} />
-    </HomeLayout>
-  );
+export default async function HomePage(): Promise<React.JSX.Element> {
+  return <HomePosts page={1} />;
 }

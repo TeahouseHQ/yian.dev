@@ -10,7 +10,15 @@ const MAX_PARALLEL = 4;
 // docs/adr/0002-host-access-via-tailscale-ip.md). No `thinking` option is passed
 // to sandcastle.pi(...) because LiteLLM's drop_params strips it for glm models —
 // reasoning happens at the model's default level regardless.
-const MODEL = "glm-5.1";
+//
+// IMPORTANT: use the "provider/id" slash form. sandcastle's pi() helper emits only
+// `--model <MODEL>` (no --provider). A bare model id is NOT resolved against
+// models.json — pi falls back to its built-in default provider ("opencode" in
+// this fork) and dies with "No API key found for opencode". The slash form makes
+// pi select the litellm provider explicitly. Verified inside the image:
+//   echo hi | pi -p --model glm-5.1          -> "No API key found for opencode"
+//   echo hi | pi -p --model litellm/glm-5.1  -> ok
+const MODEL = "litellm/glm-5.1";
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
 //

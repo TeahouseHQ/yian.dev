@@ -46,6 +46,14 @@ COPY .sandcastle/models.json /home/agent/.pi/agent/models.json
 # and drop the containerUid/containerGid options in main.mts.
 USER root
 
+# Point $HOME at /home/agent. The container runs as root (above), whose
+# default HOME is /root, but models.json (and pi's other state) live under
+# /home/agent/.pi/agent. Without this, pi resolves ~/.pi/agent to
+# /root/.pi/agent (missing), never loads the glm-5.1/litellm provider, and
+# falls back to its default provider -> "No API key found". The bind-mounted
+# worktree write path is unaffected: the process is still root.
+ENV HOME=/home/agent
+
 WORKDIR /home/agent
 
 # In worktree sandbox mode, Sandcastle bind-mounts the git worktree at /home/agent/workspace

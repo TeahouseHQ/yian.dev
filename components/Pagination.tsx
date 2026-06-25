@@ -40,30 +40,25 @@ const Pagination = ({ page, totalPages, basePath }: Props): React.JSX.Element | 
       </div>
 
       <ol className="flex items-center gap-1">
-        {pages.map((p) => {
-          if (p === page) {
-            return (
-              <li key={p}>
-                <span
-                  aria-current="page"
-                  className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded bg-foreground px-2 text-background"
-                >
-                  {p}
-                </span>
-              </li>
-            );
-          }
-          return (
-            <li key={p}>
+        {pages.map((p) => (
+          <li key={p}>
+            {p === page ? (
+              <span
+                aria-current="page"
+                className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded bg-foreground px-2 text-background"
+              >
+                {p}
+              </span>
+            ) : (
               <Link
                 href={pageHref(basePath, p)}
                 className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded px-2 hover:bg-foreground/10"
               >
                 {p}
               </Link>
-            </li>
-          );
-        })}
+            )}
+          </li>
+        ))}
       </ol>
 
       <div className="min-w-[6rem] text-right">

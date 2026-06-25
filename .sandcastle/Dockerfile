@@ -27,6 +27,16 @@ RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d 
 # Install pi coding agent
 RUN npm install -g @earendil-works/pi-coding-agent
 
+# Bake glm-5.1 LiteLLM provider config into the image (issue #49).
+# pi reads ~/.pi/agent/models.json at startup; containerUid: 0 means the
+# container runs as root, so /home/agent/.pi/agent is owned by root and no
+# chown is needed. The provider points at the host's Tailscale IP
+# (100.86.127.113:4000) — see docs/adr/0002-host-access-via-tailscale-ip.md
+# for why bridge -> Tailscale IP is the only working network path.
+# $LITELLM_API_KEY is resolved at request time from the container env.
+RUN mkdir -p /home/agent/.pi/agent
+COPY .sandcastle/models.json /home/agent/.pi/agent/models.json
+
 # Run as root. Under ROOTLESS Docker (this machine), the container's root maps
 # to the host user that owns the bind-mounted worktree, so root is the ONLY
 # user that can write commits into it. main.mts must pass matching

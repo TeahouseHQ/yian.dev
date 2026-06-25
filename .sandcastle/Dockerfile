@@ -34,7 +34,7 @@ RUN npm install -g @earendil-works/pi-coding-agent
 # (100.86.127.113:4000) — see docs/adr/0002-host-access-via-tailscale-ip.md
 # for why bridge -> Tailscale IP is the only working network path.
 # $LITELLM_API_KEY is resolved at request time from the container env.
-RUN mkdir -p /home/agent/.pi/agent
+# COPY auto-creates /home/agent/.pi/agent, so no preceding mkdir is needed.
 COPY .sandcastle/models.json /home/agent/.pi/agent/models.json
 
 # Run as root. Under ROOTLESS Docker (this machine), the container's root maps

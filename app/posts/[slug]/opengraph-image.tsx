@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import type Author from "types/author";
 
 import PostOgCard from "#/components/PostOgCard";
 import { getPostBySlug } from "#/lib/api";
@@ -26,7 +27,7 @@ export default async function OpengraphImage({
 }): Promise<ImageResponse> {
   const { slug } = await params;
   const post = getPostBySlug(slug, ["title", "date", "author"]);
-  const author = post.author as unknown as { name?: string } | undefined;
+  const author = post.author as unknown as Author | undefined;
 
   return new ImageResponse(
     <PostOgCard
@@ -35,6 +36,6 @@ export default async function OpengraphImage({
       authorName={author?.name}
       siteName={SiteTitle}
     />,
-    { ...size }
+    size
   );
 }

@@ -102,6 +102,15 @@
     page-break-inside: avoid;
   }
 
+  /* Resume collapsibles: always reveal bodies and drop the toggle when printing */
+  .collapsible-content {
+    display: block !important;
+  }
+
+  .collapsible-toggle {
+    display: none !important;
+  }
+
   /* Make links readable in print */
   a {
     color: black !important;

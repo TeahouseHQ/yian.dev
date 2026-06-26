@@ -11,10 +11,24 @@ export interface ResumeData {
     location: string;
   };
   summary: string;
-  skills: string[];
+  skills: SkillEntry[];
   experience: Experience[];
   education: Education[];
 }
+
+export interface Skill {
+  name: string;
+  /** Years of experience; drives tag visual weighting when present. */
+  years?: number;
+  /** Optional 1..5 proficiency; used as a weight fallback. */
+  proficiency?: number;
+}
+
+/**
+ * A skill entry may be a plain string (legacy data) or a structured object
+ * carrying weighting data. Components normalize via lib/resume.normalizeSkill.
+ */
+export type SkillEntry = string | Skill;
 
 export interface Experience {
   company: string;
@@ -29,4 +43,15 @@ export interface Education {
   degree: string;
   startDate: string;
   endDate: string;
+}
+
+/** A single milestone on the career timeline. */
+export interface TimelineEntry {
+  /** Start year, used to order the timeline. NaN if the date is unparseable. */
+  year: number;
+  label: string;
+  sublabel?: string;
+  type: "experience" | "education";
+  /** True when the experience has no end date (currently held). */
+  current?: boolean;
 }

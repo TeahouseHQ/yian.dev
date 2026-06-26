@@ -1,7 +1,10 @@
-export { ResumeLayout } from "./ResumeLayout";
-export { ResumeHeader } from "./ResumeHeader";
-export { ResumeSummary } from "./ResumeSummary";
-export { ResumeSkills } from "./ResumeSkills";
-export { ResumeExperience } from "./ResumeExperience";
+export { Collapsible } from "./Collapsible";
 export { ResumeEducation } from "./ResumeEducation";
+export { ResumeExperience } from "./ResumeExperience";
+export { ResumeHashScroll } from "./ResumeHashScroll";
+export { ResumeHeader } from "./ResumeHeader";
+export { ResumeLayout } from "./ResumeLayout";
+export { ResumeSkills } from "./ResumeSkills";
+export { ResumeSummary } from "./ResumeSummary";
+export { ResumeTimeline } from "./ResumeTimeline";
 export { ResumeDownload } from "./ResumeDownload";

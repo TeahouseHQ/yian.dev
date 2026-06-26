@@ -1,31 +1,13 @@
 import type { Education } from "types/resume";
+import { formatDate } from "#/lib/resume";
 
 interface Props {
   education: Education[];
 }
 
-function formatDate(dateStr: string): string {
-  const [year, month] = dateStr.split("-");
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-  return `${monthNames[parseInt(month) - 1]} ${year}`;
-}
-
 export function ResumeEducation({ education }: Props) {
   return (
-    <section className="mb-6">
+    <section id="education" className="mb-6 print:mb-3 scroll-mt-4">
       <h2 className="text-lg font-bold uppercase tracking-wide border-b border-black/30 mb-3 pb-1">
         Education
       </h2>

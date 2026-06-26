@@ -4,7 +4,7 @@ interface Props {
 
 export function ResumeSummary({ summary }: Props) {
   return (
-    <section className="mb-6 print:mb-3">
+    <section id="summary" className="mb-6 print:mb-3 scroll-mt-4">
       <p className="text-sm leading-snug">{summary}</p>
     </section>
   );

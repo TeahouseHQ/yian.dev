@@ -19,16 +19,27 @@ function gameWonConfetti() {
     origin: { y: 0.45 },
   };
 
-  window.confetti({
-    ...baseConfetti,
-    particleCount: 80,
-  });
-  setTimeout(() => {
-    window.confetti({
-      ...baseConfetti,
-      particleCount: 100,
+  // Dynamically import @tsparticles/confetti so the (heavy) particle engine
+  // is its own lazy chunk that only loads on the PlayNow page, and only
+  // after the player actually wins. It never touches first paint elsewhere.
+  void import("@tsparticles/confetti")
+    .then(({ confetti }) => {
+      confetti({
+        ...baseConfetti,
+        particleCount: 80,
+      });
+      setTimeout(() => {
+        confetti({
+          ...baseConfetti,
+          particleCount: 100,
+        });
+      }, 200);
+    })
+    // Confetti is purely cosmetic; a failed chunk load should not surface as
+    // an unhandled rejection.
+    .catch(() => {
+      /* no-op: confetti is non-critical */
     });
-  }, 200);
 }
 
 if (IS_LOCAL_DEV) {

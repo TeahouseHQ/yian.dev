@@ -86,8 +86,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
             </Script>
           </>
         )}
-        <Script src="https://kit.fontawesome.com/87445c11d6.js" />
-        <Script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js" />
       </head>
       <body>{children}</body>
     </html>

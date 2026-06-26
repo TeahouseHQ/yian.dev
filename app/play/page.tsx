@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 
@@ -36,7 +37,11 @@ export default function Index(): React.JSX.Element {
                 </div>
                 <div className="flex-grow-0 text-4xl">
                   <Link href={getGamePath(handle)} target="_blank">
-                    <i className="fas fa-play transition-colors hover:text-green-200 "></i>
+                    <Play
+                      size={36}
+                      className="transition-colors hover:text-green-200"
+                      aria-hidden="true"
+                    />
                   </Link>
                 </div>
               </div>

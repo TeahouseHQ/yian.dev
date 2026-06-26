@@ -1,3 +1,9 @@
+const withBundleAnalyzer = require("@next/bundle-analyzer")({
+  // Opt-in via `pnpm analyze` (ANALYZE=true); stays off for normal builds
+  // so it never blocks CI or adds the webpack-bundle-analyzer plugin.
+  enabled: process.env.ANALYZE === "true",
+});
+
 /**
  * @type {import('next').NextConfig}
  */
@@ -13,7 +19,8 @@ const COOP_COEP_HEADERS = [
   },
 ];
 
-module.exports = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   async headers() {
     return [
       {
@@ -27,3 +34,5 @@ module.exports = {
     ];
   },
 };
+
+module.exports = withBundleAnalyzer(nextConfig);

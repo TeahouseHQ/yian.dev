@@ -1,5 +1,6 @@
 "use client";
 
+import { Copy } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 interface Props {
@@ -39,7 +40,7 @@ const CopyButton = ({ text }: Props): React.JSX.Element => {
       className={copied ? "copied" : undefined}
       onClick={onClick}
     >
-      <i className="fa-regular fa-clone" aria-hidden="true" />
+      <Copy size={16} aria-hidden="true" />
       <span>Copied!</span>
     </button>
   );

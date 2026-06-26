@@ -30,15 +30,15 @@
       @apply opacity-0 transition-opacity duration-300 ease-in-out absolute right-0 text-green;
     }
 
-    > i {
+    > svg {
       @apply opacity-100 transition-opacity duration-300 ease-in-out;
     }
 
-    &:hover > i {
+    &:hover > svg {
       @apply text-gray-300;
     }
 
-    &:active > i {
+    &:active > svg {
       @apply text-gray-400;
     }
   }
@@ -48,7 +48,7 @@
   > span {
     @apply opacity-100;
   }
-  i {
+  svg {
     @apply opacity-0;
   }
 }

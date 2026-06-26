@@ -11,6 +11,8 @@ type PostType = {
   author: Author;
   excerpt: string;
   readingTime: number;
+  /** Free-form taxonomy tags authored in front matter (`tags: string[]`). */
+  tags?: string[];
   ogImage: {
     url: string;
   };

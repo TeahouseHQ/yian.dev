@@ -71,6 +71,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
             date={post.date}
             author={post.author}
             readingTime={post.readingTime}
+            tags={post.tags}
           />
           <PostBody content={renderedContent} />
         </article>
@@ -105,6 +106,7 @@ async function getPost(params: Params): Promise<PostType> {
     "ogImage",
     "coverImage",
     "readingTime",
+    "tags",
   ]);
   const content = await markdownToReact(post.content || "");
 

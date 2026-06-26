@@ -1,8 +1,3 @@
-.footer li:not(:last-child)::after {
-  content: "|";
-  @apply mx-4;
-}
-
 .cardOverlay {
   background-image: linear-gradient(transparent 25%, theme(colors.background) 90%);
 }

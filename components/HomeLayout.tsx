@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Logo from "./PpdLogo";
 import PageFooter from "./PageFooter";
-import Menu from "./Menu";
 import Layout from "./Layout";
 import Container from "./Container";
 
@@ -16,7 +15,7 @@ const HomeLayout = ({
     <Layout>
       <Container>
         <h1 className="sr-only">Yi-An Lai - Pedal Powered Dev</h1>
-        <div className="flex-col md:flex-row flex items-center md:justify-between md:h-screen">
+        <div className="flex-col md:flex-row flex items-center md:justify-between md:min-h-[calc(100vh-4rem)]">
           <div className="flex flex-col items-center xl:w-3/12 md:w-5/12 gap-2 pt-16 md:py-0">
             <Link href={"/play"}>
               <Logo />
@@ -43,9 +42,8 @@ const HomeLayout = ({
           <div className="flex flex-col items-center xl:w-9/12 md:w-7/12 p-4">
             <div className="max-w-4xl mx-auto">{children}</div>
           </div>
-          <PageFooter className="md:hidden" showMenu={false} />
+          <PageFooter className="md:hidden" />
         </div>
-        <Menu />
       </Container>
     </Layout>
   );

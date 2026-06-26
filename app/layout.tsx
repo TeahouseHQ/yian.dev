@@ -1,5 +1,6 @@
 import Script from "next/script";
 
+import NavBar from "#/components/NavBar";
 import { PersonJsonLd } from "#/components/JsonLd";
 import { SiteTitle, SiteDescription, IS_LOCAL_DEV, BaseUrl } from "../lib/constants";
 import { noto, sourceCodePro } from "./fonts";
@@ -89,7 +90,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
         <Script src="https://kit.fontawesome.com/87445c11d6.js" />
         <Script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js" />
       </head>
-      <body>{children}</body>
+      <body>
+        <NavBar />
+        {children}
+      </body>
     </html>
   );
 }

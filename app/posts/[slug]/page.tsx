@@ -76,7 +76,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
           pageId={post.id}
           enabled={post.commentsEnabled}
         />
-        <PageFooter showMenu />
+        <PageFooter />
       </Container>
     </Layout>
   );

@@ -2,14 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import type Post from "types/post";
 
-import {
-  filterByTag,
-  getUniqueTags,
-  normalizeTag,
-  TAG_BASE_PATH,
-  TAG_QUERY_KEY,
-  tagHref,
-} from "./tags";
+import { filterByTag, normalizeTag, TAG_BASE_PATH, TAG_QUERY_KEY, tagHref } from "./tags";
 
 /** Build a minimal post shape carrying only the tags used by these helpers. */
 function withTags(tags: string[]): Post {
@@ -24,28 +17,6 @@ describe("normalizeTag", () => {
 
   it("collapses an all-whitespace tag to an empty string", () => {
     expect(normalizeTag("   ")).toBe("");
-  });
-});
-
-describe("getUniqueTags", () => {
-  it("collects every tag across posts, sorted and de-duplicated", () => {
-    const tags = getUniqueTags([withTags(["tailwind", "meta"]), withTags(["meta", "nextjs"])]);
-    expect(tags).toEqual(["meta", "nextjs", "tailwind"]);
-  });
-
-  it("normalizes before de-duplicating so case variants collapse", () => {
-    const tags = getUniqueTags([withTags(["NextJS"]), withTags(["nextjs"]), withTags(["NEXTJS"])]);
-    expect(tags).toEqual(["nextjs"]);
-  });
-
-  it("ignores posts without a tags array", () => {
-    const tags = getUniqueTags([withTags(["unity"]), {} as unknown as Post]);
-    expect(tags).toEqual(["unity"]);
-  });
-
-  it("returns an empty list when no post has tags", () => {
-    expect(getUniqueTags([])).toEqual([]);
-    expect(getUniqueTags([{} as unknown as Post])).toEqual([]);
   });
 });
 

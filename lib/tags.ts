@@ -19,8 +19,6 @@ export const TAG_BASE_PATH = "/home";
 /** Query-string key used to filter the home listing by tag. */
 export const TAG_QUERY_KEY = "tag";
 
-type TaggedPost = Pick<Post, "tags">;
-
 /**
  * Normalize a tag for matching: trimmed + lowercased so "NextJS", " nextjs ",
  * and "nextjs" all resolve to the same filter. Display code uses the original
@@ -30,22 +28,6 @@ type TaggedPost = Pick<Post, "tags">;
  */
 export function normalizeTag(tag: string): string {
   return tag.trim().toLowerCase();
-}
-
-/**
- * Sorted, de-duplicated list of every tag across the given posts. Posts
- * without a `tags` array (or with an empty one) contribute nothing. Tags are
- * normalized before de-duping so case variants collapse to one entry.
- */
-export function getUniqueTags(posts: TaggedPost[]): string[] {
-  const seen = new Set<string>();
-  for (const post of posts) {
-    for (const tag of post.tags ?? []) {
-      const normalized = normalizeTag(tag);
-      if (normalized) seen.add(normalized);
-    }
-  }
-  return Array.from(seen).sort();
 }
 
 /**

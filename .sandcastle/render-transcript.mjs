@@ -123,7 +123,7 @@ export async function readManifest(path = manifestPath) {
  * @returns {string | null}
  */
 export function latestRunId(entries) {
-  /** @type {Map<string, number>} */
+  /** @type {string | null} */
   let bestId = null;
   let bestAt = -1;
   for (const e of entries) {

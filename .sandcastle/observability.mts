@@ -71,7 +71,7 @@ export function isVerbose(env: Env = process.env): boolean {
 export function formatStreamLine(
   label: string,
   event: AgentStreamEvent,
-  verbose: boolean,
+  verbose: boolean
 ): string | null {
   const prefix = `[${label}]`;
   switch (event.type) {
@@ -85,11 +85,7 @@ export function formatStreamLine(
 }
 
 /** Format a lifecycle marker line for the orchestrator's own transitions. */
-export function formatLifecycleLine(
-  label: string,
-  kind: LifecycleKind,
-  detail?: number,
-): string {
+export function formatLifecycleLine(label: string, kind: LifecycleKind, detail?: number): string {
   const prefix = `[${label}]`;
   switch (kind) {
     case "start":
@@ -142,7 +138,10 @@ export function lifecycle(label: string): LifecycleMarkers {
  */
 export function logPath(label: string, now: Date = new Date()): string {
   const slug =
-    label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "agent";
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "agent";
   const stamp = now.toISOString().replace(/[-:.TZ]/g, "");
   return join(process.cwd(), ".sandcastle", "logs", `${stamp}-${slug}.log`);
 }
@@ -276,9 +275,7 @@ interface ManifestEntryArgs {
  * Build a manifest entry for a successfully resolved agent run. Pure and
  * env-free so the field set + nulling rules are unit-testable in isolation.
  */
-export function buildManifestEntry(
-  args: ManifestEntryArgs & { result: RunLike },
-): ManifestEntry {
+export function buildManifestEntry(args: ManifestEntryArgs & { result: RunLike }): ManifestEntry {
   const session = lastSession(args.result);
   return {
     runId: args.runId,
@@ -303,7 +300,7 @@ export function buildManifestEntry(
  * parallelism). The error is stringified for the record.
  */
 export function buildFailedManifestEntry(
-  args: ManifestEntryArgs & { error: unknown },
+  args: ManifestEntryArgs & { error: unknown }
 ): ManifestEntry {
   return {
     runId: args.runId,
@@ -344,7 +341,7 @@ export function generateRunId(now: Date = new Date()): string {
  */
 export async function appendManifestLine(
   entry: ManifestEntry,
-  path: string = manifestPath,
+  path: string = manifestPath
 ): Promise<void> {
   try {
     await mkdir(dirname(path), { recursive: true });

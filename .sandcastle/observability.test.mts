@@ -21,7 +21,9 @@ import {
   type RunLike,
 } from "./observability.mts";
 
-const toolCall = (overrides: Partial<Extract<AgentStreamEvent, { type: "toolCall" }>> = {}): AgentStreamEvent => ({
+const toolCall = (
+  overrides: Partial<Extract<AgentStreamEvent, { type: "toolCall" }>> = {}
+): AgentStreamEvent => ({
   type: "toolCall",
   name: "Bash",
   formattedArgs: "pnpm test",
@@ -51,7 +53,7 @@ describe("formatStreamLine", () => {
 
   it("collapses multi-line toolCall args to the first line", () => {
     expect(
-      formatStreamLine("impl #44", toolCall({ formattedArgs: "pnpm test\n--silent" }), false),
+      formatStreamLine("impl #44", toolCall({ formattedArgs: "pnpm test\n--silent" }), false)
     ).toBe("[impl #44] ▶ Bash(pnpm test)");
   });
 
@@ -63,7 +65,7 @@ describe("formatStreamLine", () => {
   it("suppresses raw events unless verbose", () => {
     expect(formatStreamLine("planner", raw('{"type":"tool_use"}'), false)).toBeNull();
     expect(formatStreamLine("planner", raw('{"type":"tool_use"}'), true)).toBe(
-      '[planner] # {"type":"tool_use"}',
+      '[planner] # {"type":"tool_use"}'
     );
   });
 
@@ -345,12 +347,24 @@ describe("appendManifestLine", () => {
     dir = await mkdtemp(join(tmpdir(), "manifest-"));
     const path = join(dir, "nested", "manifest.jsonl");
     await appendManifestLine(
-      buildFailedManifestEntry({ runId: "r", phase: "rev", error: "x", startedAt: new Date(0), endedAt: new Date(0) }),
-      path,
+      buildFailedManifestEntry({
+        runId: "r",
+        phase: "rev",
+        error: "x",
+        startedAt: new Date(0),
+        endedAt: new Date(0),
+      }),
+      path
     );
     await appendManifestLine(
-      buildFailedManifestEntry({ runId: "r", phase: "impl", error: "y", startedAt: new Date(0), endedAt: new Date(0) }),
-      path,
+      buildFailedManifestEntry({
+        runId: "r",
+        phase: "impl",
+        error: "y",
+        startedAt: new Date(0),
+        endedAt: new Date(0),
+      }),
+      path
     );
     const contents = await readFile(path, "utf8");
     const lines = contents.trim().split("\n");
@@ -364,9 +378,15 @@ describe("appendManifestLine", () => {
     // An unwritable path (a file used as a directory) forces the mkdir to fail.
     await expect(
       appendManifestLine(
-        buildFailedManifestEntry({ runId: "r", phase: "rev", error: "x", startedAt: new Date(0), endedAt: new Date(0) }),
-        "/proc/1/manifest.jsonl",
-      ),
+        buildFailedManifestEntry({
+          runId: "r",
+          phase: "rev",
+          error: "x",
+          startedAt: new Date(0),
+          endedAt: new Date(0),
+        }),
+        "/proc/1/manifest.jsonl"
+      )
     ).resolves.toBeUndefined();
     expect(error).toHaveBeenCalled();
     error.mockRestore();

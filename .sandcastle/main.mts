@@ -70,7 +70,7 @@ async function recordedRun<R extends RunLike>(args: {
         result,
         startedAt,
         endedAt: new Date(),
-      }),
+      })
     );
     return result;
   } catch (error) {
@@ -83,7 +83,7 @@ async function recordedRun<R extends RunLike>(args: {
         error,
         startedAt,
         endedAt: new Date(),
-      }),
+      })
     );
     throw error;
   }

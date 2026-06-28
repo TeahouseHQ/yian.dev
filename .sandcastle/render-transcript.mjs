@@ -145,8 +145,7 @@ export function latestRunId(entries) {
  * @returns {object[]}
  */
 export function filterEntries(entries, filter) {
-  const run =
-    filter.run === "latest" ? latestRunId(entries) ?? "" : filter.run ?? "";
+  const run = filter.run === "latest" ? (latestRunId(entries) ?? "") : (filter.run ?? "");
   return entries.filter((e) => {
     if (filter.issue !== undefined && e.issue !== filter.issue) return false;
     if (filter.phase !== undefined && e.phase !== filter.phase) return false;
@@ -178,8 +177,7 @@ export function summarizeEntry(entry) {
   const n = entry.commits ?? 0;
   const commits = `${n} commit${n === 1 ? "" : "s"}`;
   const usage = summarizeUsage(entry.usage);
-  const status =
-    entry.status === "failed" ? `failed: ${entry.error ?? "(unknown)"}` : "ok";
+  const status = entry.status === "failed" ? `failed: ${entry.error ?? "(unknown)"}` : "ok";
   return `${entry.phase}  ${issue}  ${branch}  ${commits}  ${usage}  ${status}`;
 }
 
@@ -249,9 +247,7 @@ export function formatArguments(args) {
   if (!args || typeof args !== "object") return "";
   const entries = Object.entries(args);
   if (entries.length === 0) return "";
-  return entries
-    .map(([k, v]) => `${k}: ${renderValue(v)}`)
-    .join("\n");
+  return entries.map(([k, v]) => `${k}: ${renderValue(v)}`).join("\n");
 }
 
 /** @param {unknown} v */
@@ -299,9 +295,7 @@ export function renderTranscript(records) {
       const usage = formatTranscriptUsage(msg.usage);
       const model = msg.model ?? "?";
       const head =
-        usage !== ""
-          ? `── assistant (${model}) · ${usage} ──`
-          : `── assistant (${model}) ──`;
+        usage !== "" ? `── assistant (${model}) · ${usage} ──` : `── assistant (${model}) ──`;
       blocks.push(head);
       for (const block of msg.content ?? []) {
         const type = block?.type;
@@ -522,8 +516,7 @@ export async function main(argv = process.argv.slice(2)) {
 }
 
 // Run only when invoked directly, not when imported by the test.
-const invokedDirectly =
-  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+const invokedDirectly = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedDirectly) {
   main().then((code) => {
     if (code !== 0) process.exitCode = code;

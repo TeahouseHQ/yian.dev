@@ -46,7 +46,12 @@ const FIXTURE_JSONL = [
       role: "assistant",
       content: [
         { type: "thinking", thinking: "Let me read the issue.", thinkingSignature: "x" },
-        { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "gh issue view 54" } },
+        {
+          type: "toolCall",
+          id: "call_1",
+          name: "bash",
+          arguments: { command: "gh issue view 54" },
+        },
       ],
       model: "glm-5.1",
       usage: {
@@ -80,7 +85,12 @@ const FIXTURE_JSONL = [
     message: {
       role: "assistant",
       content: [
-        { type: "toolCall", id: "call_2", name: "edit", arguments: { path: "/x.ts", content: "y" } },
+        {
+          type: "toolCall",
+          id: "call_2",
+          name: "edit",
+          arguments: { path: "/x.ts", content: "y" },
+        },
       ],
       model: "glm-5.1",
       usage: { input: 120, output: 4, cacheRead: 80, cacheWrite: 0, totalTokens: 204 },
@@ -160,7 +170,12 @@ const entries = [
     sessionId: "s-old",
     sessionFile: "/repo/.sandcastle/sessions/--repo--",
     commits: 2,
-    usage: { inputTokens: 10, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+    usage: {
+      inputTokens: 10,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+    },
     startedAt: "2026-06-27T10:00:00.000Z",
     endedAt: "2026-06-27T10:05:00.000Z",
     status: "ok",
@@ -173,7 +188,12 @@ const entries = [
     sessionId: "s-plan",
     sessionFile: "/repo/.sandcastle/sessions/--repo--",
     commits: 0,
-    usage: { inputTokens: 5, outputTokens: 1, cacheReadInputTokens: 1, cacheCreationInputTokens: 0 },
+    usage: {
+      inputTokens: 5,
+      outputTokens: 1,
+      cacheReadInputTokens: 1,
+      cacheCreationInputTokens: 0,
+    },
     startedAt: "2026-06-28T12:00:00.000Z",
     endedAt: "2026-06-28T12:01:00.000Z",
     status: "ok",
@@ -186,7 +206,12 @@ const entries = [
     sessionId: "s-44",
     sessionFile: "/repo/.sandcastle/sessions/--repo--",
     commits: 3,
-    usage: { inputTokens: 50, outputTokens: 4, cacheReadInputTokens: 20, cacheCreationInputTokens: 2 },
+    usage: {
+      inputTokens: 50,
+      outputTokens: 4,
+      cacheReadInputTokens: 20,
+      cacheCreationInputTokens: 2,
+    },
     startedAt: "2026-06-28T12:02:00.000Z",
     endedAt: "2026-06-28T12:10:00.000Z",
     status: "ok",
@@ -327,7 +352,13 @@ describe("parseTranscript", () => {
 describe("formatTranscriptUsage", () => {
   it("formats the raw provider usage shape (input/output/cacheRead/cacheWrite/total)", () => {
     expect(
-      formatTranscriptUsage({ input: 100, output: 10, cacheRead: 50, cacheWrite: 5, totalTokens: 165 })
+      formatTranscriptUsage({
+        input: 100,
+        output: 10,
+        cacheRead: 50,
+        cacheWrite: 5,
+        totalTokens: 165,
+      })
     ).toBe("in=100  out=10  cacheRead=50  cacheWrite=5  total=165");
   });
 
@@ -342,7 +373,7 @@ describe("formatArguments", () => {
   });
 
   it("JSON-stringifies non-string values", () => {
-    expect(formatArguments({ n: 3, opts: { a: true } })).toBe("n: 3\nopts: {\"a\":true}");
+    expect(formatArguments({ n: 3, opts: { a: true } })).toBe('n: 3\nopts: {"a":true}');
   });
 
   it("returns empty string for no arguments", () => {

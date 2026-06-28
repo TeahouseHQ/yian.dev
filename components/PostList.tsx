@@ -3,6 +3,7 @@ import Link from "next/link";
 import Post from "types/post";
 
 import DateFormatter from "./DateFormatter";
+import PostTags from "./PostTags";
 import { formatReadingTime } from "#/lib/readingTime";
 
 interface Props {
@@ -32,6 +33,7 @@ const PostList = ({ posts }: Props): React.JSX.Element => {
               </>
             ) : null}
           </div>
+          <PostTags tags={post.tags} />
         </div>
       ))}
     </div>

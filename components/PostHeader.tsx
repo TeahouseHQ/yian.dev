@@ -2,6 +2,7 @@ import type Author from "types/author";
 
 import Avatar from "./Avatar";
 import CoverImage from "./CoverImage";
+import PostTags from "./PostTags";
 import PostTitle from "./PostTitle";
 import { formatReadingTime } from "#/lib/readingTime";
 
@@ -11,9 +12,17 @@ interface Props {
   date: string;
   author: Author;
   readingTime?: number;
+  tags?: string[];
 }
 
-const PostHeader = ({ title, coverImage, date, author, readingTime }: Props): React.JSX.Element => {
+const PostHeader = ({
+  title,
+  coverImage,
+  date,
+  author,
+  readingTime,
+  tags,
+}: Props): React.JSX.Element => {
   return (
     <>
       <PostTitle>{title}</PostTitle>
@@ -31,6 +40,9 @@ const PostHeader = ({ title, coverImage, date, author, readingTime }: Props): Re
             <div className="text-red mt-1">{formatReadingTime(readingTime)}</div>
           ) : null}
         </div>
+        {/* Tags render once here (visible on all viewports) rather than in each
+            avatar block, so desktop and mobile share one tags row. */}
+        <PostTags tags={tags} />
       </div>
     </>
   );

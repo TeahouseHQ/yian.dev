@@ -4,6 +4,8 @@ title: "Hello World"
 excerpt: "Hello, World. Welcome to Pedal Powered Dev, the new homepage/blog where I plan to write about my journey in game dev, cycling, and random things worth documenting in life."
 coverImage: "/assets/blog/hello-world/helloworld.jpg"
 date: "2024-02-19T01:28:48Z"
+tags:
+  - helloworld
 author:
   name: Yian
   picture: "/assets/blog/authors/yian-genmoji.png"

@@ -176,6 +176,11 @@ function firstLine(s: string): string {
 
 // ---- Manifest (issue #53) -------------------------------------------------
 
+/** Extract a human-readable message from an unknown throwable. */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Absolute path to the relocated sessions dir (gitignored). Passed as
  * `sessionStorage.hostSessionsDir` to every `pi()` call so captured session
@@ -312,7 +317,7 @@ export function buildFailedManifestEntry(
     startedAt: args.startedAt.toISOString(),
     endedAt: args.endedAt.toISOString(),
     status: "failed",
-    error: args.error instanceof Error ? args.error.message : String(args.error),
+    error: errorMessage(args.error),
   };
 }
 
@@ -345,8 +350,6 @@ export async function appendManifestLine(
     await mkdir(dirname(path), { recursive: true });
     await appendFile(path, JSON.stringify(entry) + "\n", "utf8");
   } catch (err) {
-    console.error(
-      `[manifest] failed to append to ${path}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    console.error(`[manifest] failed to append to ${path}: ${errorMessage(err)}`);
   }
 }

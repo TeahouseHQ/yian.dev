@@ -132,9 +132,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   }
 
   // Phase 2: Execute + Review — implement then review each branch, max 4 in parallel.
-  // The Implementer pushes its branch and opens a PR (Closes #N) when it has commits;
-  // the orchestrator's commits.length > 0 gate keeps a no-op Implementer from being
-  // reviewed or landed (no commits → no PR → nothing to merge).
+  // The Implementer pushes its branch and opens a DRAFT PR (Closes #N) when it has
+  // commits; the orchestrator's commits.length > 0 gate keeps a no-op Implementer from
+  // being reviewed or landed (no commits → no PR → nothing to merge). The Reviewer
+  // commits any fixes, posts a COMMENT review, flips the PR draft → ready, and adds the
+  // `reviewed` label — the gate the Merger checks before landing.
   let running = 0;
   const queue: (() => void)[] = [];
   const acquire = () =>
@@ -258,7 +260,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     continue;
   }
 
-  // Phase 3: Merge — one agent lands each branch's PR via test-then-merge (gh pr merge --merge)
+  // Phase 3: Merge — one agent lands each ELIGIBLE PR (ready + `reviewed` label) via
+  // test-then-merge (gh pr merge --merge); draft or un-reviewed PRs are left for a human.
   const mergeLC = lifecycle("merger");
   mergeLC.start();
   await recordedRun({

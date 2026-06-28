@@ -57,11 +57,12 @@ section entirely — do not push, and do not open a PR.
 If you made commits:
 
 1. Push the branch to origin: `git push -u origin {{BRANCH}}`
-2. Open a pull request targeting `main`. The body MUST contain `Closes #{{ISSUE_NUMBER}}`
-   so the issue auto-closes when the PR is merged:
+2. Open a **draft** pull request targeting `main`. The body MUST contain
+   `Closes #{{ISSUE_NUMBER}}` so the issue auto-closes when the PR is merged. Open it as
+   a draft — the Reviewer marks it ready once it has been reviewed:
 
    ```
-   gh pr create --base main --head {{BRANCH}} \
+   gh pr create --draft --base main --head {{BRANCH}} \
      --title "RALPH: #{{ISSUE_NUMBER}} {{ISSUE_TITLE}}" \
      --body "Closes #{{ISSUE_NUMBER}}"
    ```

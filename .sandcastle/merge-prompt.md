@@ -1,8 +1,7 @@
 # TASK
 
-Land the following pull requests using **test-then-merge**. Each branch below already
-has an open PR (opened by the Implementer) targeting `main` whose body contains
-`Closes #N`.
+Land the eligible pull requests using **test-then-merge**. Each branch below has an open
+PR (opened by the Implementer) targeting `main` whose body contains `Closes #N`.
 
 Branches (one PR each):
 
@@ -12,9 +11,23 @@ Issues:
 
 {{ISSUES}}
 
-# TEST-THEN-MERGE (per branch)
+# REVIEW GATE — only merge reviewed PRs
 
-For each branch above, in order:
+A PR is eligible to merge **only if it is ready (not a draft) AND carries the `reviewed`
+label**. The Reviewer marks a PR ready and adds `reviewed` once it has been reviewed.
+
+For each branch, check eligibility before doing anything else:
+
+```
+gh pr view <branch> --json isDraft,labels
+```
+
+Skip any PR that is still a draft or is missing the `reviewed` label — leave it open for
+a human and move on to the next branch. Do **not** merge it.
+
+# TEST-THEN-MERGE (per eligible branch)
+
+For each eligible branch above, in order:
 
 1. Merge the branch into your local checkout to validate it:
    `git merge <branch> --no-edit`
@@ -37,4 +50,5 @@ Each PR body contains `Closes #N`, so merging the PR auto-closes its issue \u201
 **not** need to close those issues manually. If merging an issue completes a parent
 issue (such as a PRD), close that parent.
 
-Once you've landed every PR you can, output <promise>COMPLETE</promise>.
+Once you've landed every eligible PR you can (skipping any draft or un-`reviewed` PR),
+output <promise>COMPLETE</promise>.

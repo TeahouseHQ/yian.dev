@@ -1,5 +1,6 @@
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { lifecycle, observe } from "./observability.mts";
 
 const MAX_ITERATIONS = 10;
 const MAX_PARALLEL = 3;
@@ -32,12 +33,16 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
   // Phase 1: Plan — orchestrator agent analyzes issues and picks parallelizable work
+  const planLC = lifecycle("planner");
+  planLC.start();
   const plan = await sandcastle.run({
     sandbox: dockerSandbox(),
     name: "Planner",
     agent: sandcastle.pi(MODELS.PLANNING),
     promptFile: "./.sandcastle/plan-prompt.md",
+    logging: observe("planner"),
   });
+  planLC.done();
 
   const planMatch = plan.stdout.match(/<plan>([\s\S]*?)<\/plan>/);
   if (!planMatch) {
@@ -78,6 +83,10 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     issues.map(async (issue) => {
       await acquire();
       try {
+        const implLabel = "impl #" + issue.number;
+        const implLC = lifecycle(implLabel);
+        implLC.start();
+
         await using sandbox = await sandcastle.createSandbox({
           sandbox: dockerSandbox(),
           branch: issue.branch,
@@ -92,6 +101,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             },
           },
         });
+        implLC.sandbox();
 
         const result = await sandbox.run({
           name: "Implementer #" + issue.number,
@@ -102,10 +112,16 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             ISSUE_TITLE: issue.title,
             BRANCH: issue.branch,
           },
+          logging: observe(implLabel),
         });
+        implLC.commits(result.commits.length);
+        implLC.done();
 
         if (result.commits.length > 0) {
-          await sandbox.run({
+          const revLabel = "rev #" + issue.number;
+          const revLC = lifecycle(revLabel);
+          revLC.start();
+          const review = await sandbox.run({
             name: "Reviewer #" + issue.number,
             agent: sandcastle.pi(MODELS.REVIEW),
             promptFile: "./.sandcastle/review-prompt.md",
@@ -114,7 +130,10 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
               ISSUE_TITLE: issue.title,
               BRANCH: issue.branch,
             },
+            logging: observe(revLabel),
           });
+          revLC.commits(review.commits.length);
+          revLC.done();
         }
 
         return result;
@@ -155,6 +174,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   }
 
   // Phase 3: Merge — one agent merges all branches together
+  const mergeLC = lifecycle("merger");
+  mergeLC.start();
   await sandcastle.run({
     sandbox: dockerSandbox(),
     name: "Merger",
@@ -165,7 +186,9 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
       ISSUES: completedIssues.map((i) => `- #${i.number}: ${i.title}`).join("\n"),
     },
+    logging: observe("merger"),
   });
+  mergeLC.done();
 
   console.log("\nBranches merged.");
 }

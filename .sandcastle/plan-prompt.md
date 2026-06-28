@@ -10,6 +10,8 @@ Here are the open issues in the repo:
 
 # TASK
 
+**Scope constraint (read first):** The `<issues-json>` block above is the _complete and only_ set of issues you may consider. It already filters to issues labeled `ready-for-agent`. Do **not** run any additional commands, query the issue tracker, fetch more issues, or otherwise expand this set. If the block is empty (or contains no eligible issues), that is a valid and expected state — output an empty plan as described below. Never substitute, infer, or invent issues that are not present in the block.
+
 Analyze the open issues and build a dependency graph. For each issue, determine whether it **blocks** or **is blocked by** any other open issue.
 
 An issue B is **blocked by** issue A if:
@@ -32,4 +34,7 @@ Output your plan as a JSON object wrapped in `<plan>` tags:
 {"issues": [{"number": 42, "title": "Fix auth bug", "branch": "sandcastle/issue-42"}]}
 </plan>
 
-Include only unblocked issues. If every issue is blocked, include the single highest-priority candidate (the one with the fewest or weakest dependencies).
+Include only unblocked issues that are present in the `<issues-json>` block.
+
+- If the block contains issues but every one of them is blocked, include the single highest-priority candidate (the one with the fewest or weakest dependencies).
+- If the block is empty or contains no eligible issues, output an empty list: `<plan>{"issues": []}</plan>`. Do not look for other work to fill the plan.

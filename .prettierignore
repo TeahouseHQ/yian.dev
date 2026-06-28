@@ -5,6 +5,7 @@ dist/
 
 # Dependencies
 node_modules/
+.pnpm-store/
 
 # Cache directories
 .mypy_cache/
@@ -16,3 +17,6 @@ postcss.config.js
 
 # Public assets
 public/assets/js/
+
+# worktrees
+.sandcastle/worktrees/

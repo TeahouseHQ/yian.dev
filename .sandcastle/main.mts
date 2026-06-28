@@ -2,23 +2,15 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
 const MAX_ITERATIONS = 10;
-const MAX_PARALLEL = 4;
+const MAX_PARALLEL = 3;
 
-// Model used by every sandcastle.pi(...) agent call below (Planner, Implementer,
-// Reviewer, Merger). glm-5.1 is served via the host LiteLLM proxy whose endpoint
-// + auth are baked into .sandcastle/models.json (see #49 and
-// docs/adr/0002-host-access-via-tailscale-ip.md). No `thinking` option is passed
-// to sandcastle.pi(...) because LiteLLM's drop_params strips it for glm models —
-// reasoning happens at the model's default level regardless.
-//
-// IMPORTANT: use the "provider/id" slash form. sandcastle's pi() helper emits only
-// `--model <MODEL>` (no --provider). A bare model id is NOT resolved against
-// models.json — pi falls back to its built-in default provider ("opencode" in
-// this fork) and dies with "No API key found for opencode". The slash form makes
-// pi select the litellm provider explicitly. Verified inside the image:
-//   echo hi | pi -p --model glm-5.1          -> "No API key found for opencode"
-//   echo hi | pi -p --model litellm/glm-5.1  -> ok
-const MODEL = "litellm/glm-5.1";
+const DEFAULT_MODEL = "litellm/glm-5.1";
+const MODELS = {
+  PLANNING: "claude-opus-4-8",
+  IMPLEMENTATION: "litellm/glm-5.1",
+  REVIEW: "claude-opus-4-8",
+  MERGE: "claude-opus-4-8",
+};
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
 //
@@ -43,7 +35,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   const plan = await sandcastle.run({
     sandbox: dockerSandbox(),
     name: "Planner",
-    agent: sandcastle.pi(MODEL),
+    agent: sandcastle.pi(MODELS.PLANNING),
     promptFile: "./.sandcastle/plan-prompt.md",
   });
 
@@ -103,7 +95,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
         const result = await sandbox.run({
           name: "Implementer #" + issue.number,
-          agent: sandcastle.pi(MODEL),
+          agent: sandcastle.pi(MODELS.IMPLEMENTATION),
           promptFile: "./.sandcastle/implement-prompt.md",
           promptArgs: {
             ISSUE_NUMBER: String(issue.number),
@@ -115,7 +107,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         if (result.commits.length > 0) {
           await sandbox.run({
             name: "Reviewer #" + issue.number,
-            agent: sandcastle.pi(MODEL),
+            agent: sandcastle.pi(MODELS.REVIEW),
             promptFile: "./.sandcastle/review-prompt.md",
             promptArgs: {
               ISSUE_NUMBER: String(issue.number),
@@ -167,7 +159,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     sandbox: dockerSandbox(),
     name: "Merger",
     maxIterations: 10,
-    agent: sandcastle.pi(MODEL),
+    agent: sandcastle.pi(MODELS.MERGE),
     promptFile: "./.sandcastle/merge-prompt.md",
     promptArgs: {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),

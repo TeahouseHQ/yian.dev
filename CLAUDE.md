@@ -2,18 +2,6 @@
 
 Personal portfolio/blog site for yian.dev, built with Next.js 15 (App Router), TypeScript, and Tailwind CSS 3. Features a blog with Markdown posts, embedded game demos (Unity/Godot), and interactive browser games.
 
-## Commands
-
-```bash
-pnpm dev          # Dev server on port 3030
-pnpm build        # Production build
-pnpm lint         # ESLint (next lint)
-pnpm typecheck    # TypeScript type checking (tsc)
-pnpm format       # Prettier formatting
-```
-
-Node version: 22.22.2 (see .nvmrc). Tests use [Vitest](https://vitest.dev/) (`pnpm test` / `pnpm test:watch`).
-
 ## Architecture
 
 ### Routing (App Router)
@@ -48,50 +36,6 @@ Node version: 22.22.2 (see .nvmrc). Tests use [Vitest](https://vitest.dev/) (`pn
 ### Styling
 
 Tailwind CSS and CSS modules used for markdown content styling (`markdown-styles.module.css`).
-
-### Game Architecture
-
-- **PlayNow game:** React Context API (`GameContext`) for state, seeded RNG (Mulberry32), dynamic import with SSR disabled
-- **Shogun game:** Abstract state machine pattern (`lib/shogun/util/stateMachine.ts`), unit-based turn system with attack queues
-- **Embedded games:** COOP/COEP headers configured in `next.config.js` for SharedArrayBuffer (required by Godot WASM)
-
-## Git Worktree (Parallel Development)
-
-This repo supports parallel agentic workflows via git worktrees. Each worktree can run its own dev server without port conflicts.
-
-**Prerequisites:** [direnv](https://direnv.net/) for automatic environment loading.
-
-### Quick Setup for New Worktree
-
-```bash
-# Create worktree
-git worktree add ../yian-dev-feature feature-branch
-cd ../yian-dev-feature
-
-# Set up environment (auto-derives unique port from path)
-cp .envrc.template .envrc
-direnv allow
-
-# Install deps (worktrees need their own node_modules)
-pnpm install
-
-# Run dev server (uses PORT from .envrc, shown on cd)
-pnpm dev
-```
-
-### How It Works
-
-- **direnv** auto-loads `.envrc` on `cd` — no manual sourcing
-- `PORT` env var controls dev server port (default: 3030)
-- Port derived from path hash (3030-3999) — unique per worktree
-- Each worktree needs its own `node_modules` (not shared)
-- `.envrc` is gitignored — per-worktree, copy from `.envrc.template`
-
-### Testing Isolation
-
-```bash
-./scripts/test-worktree-isolation.sh
-```
 
 ## Deployment
 

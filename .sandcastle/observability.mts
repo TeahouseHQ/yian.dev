@@ -26,9 +26,24 @@
  * Note: pi `thinking` blocks are not surfaced as a live event by sandcastle, so
  * reasoning never appears here — intentionally. Live = actions; Transcript =
  * full reasoning.
+ *
+ * This module also owns the **Manifest** (`.sandcastle/sessions/manifest.jsonl`):
+ * an append-only index — one line per resolved agent `run()` — that maps each
+ * human-meaningful Run/phase/issue to its captured session id/path, commits, and
+ * usage (see docs/adr/0001-relocate-and-source-transcripts-from-session-jsonl.md).
+ * Entries are appended at run resolution (never batched) so a crashed or
+ * Ctrl-C'd Run still leaves a complete record; a rejected `run()` still gets a
+ * best-effort `status: "failed"` entry with the error and timing, without
+ * guessing a transcript link.
  */
-import { join } from "node:path";
-import type { AgentStreamEvent, LoggingOption } from "@ai-hero/sandcastle";
+import { appendFile, mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import type {
+  AgentStreamEvent,
+  IterationResult,
+  IterationUsage,
+  LoggingOption,
+} from "@ai-hero/sandcastle";
 
 const TOOL_GLYPH = "▶";
 const TEXT_GLYPH = "»";
@@ -157,4 +172,181 @@ export function observe(label: string): LoggingOption {
 function firstLine(s: string): string {
   const nl = s.indexOf("\n");
   return (nl === -1 ? s : s.slice(0, nl)).trim();
+}
+
+// ---- Manifest (issue #53) -------------------------------------------------
+
+/**
+ * Absolute path to the relocated sessions dir (gitignored). Passed as
+ * `sessionStorage.hostSessionsDir` to every `pi()` call so captured session
+ * JSONL lands under `<sessionsDir>/--<encoded-cwd>--/` in the repo instead of
+ * mixing with the developer's other local pi sessions. The encoded-cwd subdir
+ * is load-bearing for pi resume and must not be flattened — see ADR 0001.
+ */
+export const sessionsDir = join(process.cwd(), ".sandcastle", "sessions");
+
+/** Absolute path to the append-only session manifest. */
+export const manifestPath = join(sessionsDir, "manifest.jsonl");
+
+/**
+ * Structural slice of a sandcastle run result, common to both top-level `run()`
+ * and sandbox `run()`, used to build manifest entries without coupling to either
+ * concrete type. Both `RunResult` and `SandboxRunResult` are assignable.
+ */
+export interface RunLike {
+  readonly iterations: ReadonlyArray<IterationResult>;
+  readonly commits: ReadonlyArray<{ sha: string }>;
+}
+
+/** Fields describing a captured session, extracted from the last iteration. */
+export interface SessionSlice {
+  readonly sessionId?: string;
+  readonly sessionFile?: string;
+  readonly usage?: IterationUsage;
+}
+
+/**
+ * Extract the session id / file / usage from the last iteration that captured
+ * one. The run's "session" is the final iteration's; earlier iterations are
+ * retries. Returns `{}` when no iteration captured a session (e.g. capture
+ * disabled) so callers can fall back to nulls uniformly.
+ *
+ * Pure and env-free so it is unit-testable in isolation.
+ */
+export function lastSession(result: RunLike): SessionSlice {
+  for (let i = result.iterations.length - 1; i >= 0; i--) {
+    const it = result.iterations[i];
+    if (it.sessionId || it.sessionFilePath) {
+      return { sessionId: it.sessionId, sessionFile: it.sessionFilePath, usage: it.usage };
+    }
+  }
+  return {};
+}
+
+/**
+ * One row in the append-only session manifest. Carries the full field set per
+ * issue #53: `{ runId, phase, issue, branch, sessionId, sessionFile, commits,
+ * usage, startedAt, endedAt, status }`, plus `error` on failed entries only.
+ */
+export interface ManifestEntry {
+  /** Generated once per outer orchestrator iteration; shared by all sessions in it. */
+  readonly runId: string;
+  /** Orchestrator phase that produced this session: planner | impl | rev | merger. */
+  readonly phase: string;
+  /** GitHub issue number the session worked on, or null for orchestrator-wide phases. */
+  readonly issue: number | null;
+  /** Branch the session worked on, or null for host phases with no single branch. */
+  readonly branch: string | null;
+  /** Captured pi/Claude session id (key to the transcript file), or null when unavailable. */
+  readonly sessionId: string | null;
+  /** Host path sandcastle reported for the session, or null. For pi this is the
+   *  session directory (sandcastle's `hostSessionFilePath` ignores the id); the
+   *  exact file is `<sessionFile>/*_<sessionId>.jsonl`, found via `sessionId`. */
+  readonly sessionFile: string | null;
+  /** Number of commits the agent produced. 0 for failed / commit-less runs. */
+  readonly commits: number;
+  /** Token usage from the session iteration, or null when the provider reports none. */
+  readonly usage: IterationUsage | null;
+  /** ISO timestamp when the agent run() started. */
+  readonly startedAt: string;
+  /** ISO timestamp when the agent run() resolved. */
+  readonly endedAt: string;
+  /** "ok" for a resolved run, "failed" for a rejected one. */
+  readonly status: "ok" | "failed";
+  /** Present only on failed entries: the error message. */
+  readonly error?: string;
+}
+
+/** Arguments shared by both manifest entry builders. */
+interface ManifestEntryArgs {
+  readonly runId: string;
+  readonly phase: string;
+  readonly issue?: number | null;
+  readonly branch?: string | null;
+  readonly startedAt: Date;
+  readonly endedAt: Date;
+}
+
+/**
+ * Build a manifest entry for a successfully resolved agent run. Pure and
+ * env-free so the field set + nulling rules are unit-testable in isolation.
+ */
+export function buildManifestEntry(
+  args: ManifestEntryArgs & { result: RunLike },
+): ManifestEntry {
+  const session = lastSession(args.result);
+  return {
+    runId: args.runId,
+    phase: args.phase,
+    issue: args.issue ?? null,
+    branch: args.branch ?? null,
+    sessionId: session.sessionId ?? null,
+    sessionFile: session.sessionFile ?? null,
+    commits: args.result.commits.length,
+    usage: session.usage ?? null,
+    startedAt: args.startedAt.toISOString(),
+    endedAt: args.endedAt.toISOString(),
+    status: "ok",
+  };
+}
+
+/**
+ * Build a best-effort manifest entry for a rejected agent run. The generic
+ * `run()` failure carries no `RunResult`, so `sessionId` / `sessionFile` /
+ * `commits` / `usage` are deliberately left null/0 — no transcript link is
+ * guessed (sessionId is unavailable, and mtime-matching is unreliable under
+ * parallelism). The error is stringified for the record.
+ */
+export function buildFailedManifestEntry(
+  args: ManifestEntryArgs & { error: unknown },
+): ManifestEntry {
+  return {
+    runId: args.runId,
+    phase: args.phase,
+    issue: args.issue ?? null,
+    branch: args.branch ?? null,
+    sessionId: null,
+    sessionFile: null,
+    commits: 0,
+    usage: null,
+    startedAt: args.startedAt.toISOString(),
+    endedAt: args.endedAt.toISOString(),
+    status: "failed",
+    error: args.error instanceof Error ? args.error.message : String(args.error),
+  };
+}
+
+/**
+ * Generate a fresh `runId` for one outer orchestrator iteration (shared by every
+ * session in that iteration). Millisecond-stamped from the injected `now`, so
+ * distinct iterations — always separated by at least one full agent Run — never
+ * collide, while remaining deterministic and unit-testable.
+ */
+export function generateRunId(now: Date = new Date()): string {
+  const stamp = now.toISOString().replace(/[-:.TZ]/g, "");
+  return `run-${stamp}`;
+}
+
+/**
+ * Append one manifest entry as a single JSON line to `manifest.jsonl`. Creates
+ * the file (and its parent dir) on first write. Called once per session at run
+ * resolution — never batched — so a mid-Run crash still leaves a complete record.
+ *
+ * Best-effort: never throws. Observability must not break the run, so a write
+ * failure (e.g. read-only mount) is logged to stderr and swallowed. Node is
+ * single-threaded and each line is a single sub-PIPE_BUF `appendFile` with
+ * `O_APPEND`, so concurrent appends from parallel impl/rev runs do not interleave.
+ */
+export async function appendManifestLine(
+  entry: ManifestEntry,
+  path: string = manifestPath,
+): Promise<void> {
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    await appendFile(path, JSON.stringify(entry) + "\n", "utf8");
+  } catch (err) {
+    console.error(
+      `[manifest] failed to append to ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }

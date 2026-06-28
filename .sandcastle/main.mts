@@ -1,6 +1,15 @@
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
-import { lifecycle, observe } from "./observability.mts";
+import {
+  appendManifestLine,
+  buildFailedManifestEntry,
+  buildManifestEntry,
+  generateRunId,
+  lifecycle,
+  observe,
+  sessionsDir,
+  type RunLike,
+} from "./observability.mts";
 
 const MAX_ITERATIONS = 10;
 const MAX_PARALLEL = 3;
@@ -29,18 +38,77 @@ const MODELS = {
 // `USER ${AGENT_UID}:${AGENT_GID}` in the Dockerfile instead.
 const dockerSandbox = () => docker({ containerUid: 0, containerGid: 0 });
 
+// `sessionStorage.hostSessionsDir` MUST be passed to every pi() call or
+// capture/resume desync (ADR 0001). One shared absolute path relocates all
+// captured session JSONL into the repo under .sandcastle/sessions/. The same
+// runId is generated once per outer iteration and shared by every session in it.
+const piSessions = { sessionStorage: { hostSessionsDir: sessionsDir } };
+
+/**
+ * Run an agent and append one Manifest line the moment it resolves — success or
+ * failure. A rejected run() still records a best-effort `status: "failed"`
+ * entry (error + timing, no transcript-link guessing) before re-throwing, so a
+ * mid-Run crash leaves a complete record. The manifest append itself never
+ * throws (see appendManifestLine).
+ */
+async function recordedRun<R extends RunLike>(args: {
+  runId: string;
+  phase: string;
+  issue?: number | null;
+  branch?: string | null;
+  run: () => Promise<R>;
+}): Promise<R> {
+  const startedAt = new Date();
+  try {
+    const result = await args.run();
+    await appendManifestLine(
+      buildManifestEntry({
+        runId: args.runId,
+        phase: args.phase,
+        issue: args.issue,
+        branch: args.branch,
+        result,
+        startedAt,
+        endedAt: new Date(),
+      }),
+    );
+    return result;
+  } catch (error) {
+    await appendManifestLine(
+      buildFailedManifestEntry({
+        runId: args.runId,
+        phase: args.phase,
+        issue: args.issue,
+        branch: args.branch,
+        error,
+        startedAt,
+        endedAt: new Date(),
+      }),
+    );
+    throw error;
+  }
+}
+
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+
+  // One runId per outer iteration, shared by every Session (planner/impl/rev/merger) in it.
+  const runId = generateRunId();
 
   // Phase 1: Plan — orchestrator agent analyzes issues and picks parallelizable work
   const planLC = lifecycle("planner");
   planLC.start();
-  const plan = await sandcastle.run({
-    sandbox: dockerSandbox(),
-    name: "Planner",
-    agent: sandcastle.pi(MODELS.PLANNING),
-    promptFile: "./.sandcastle/plan-prompt.md",
-    logging: observe("planner"),
+  const plan = await recordedRun({
+    runId,
+    phase: "planner",
+    run: () =>
+      sandcastle.run({
+        sandbox: dockerSandbox(),
+        name: "Planner",
+        agent: sandcastle.pi(MODELS.PLANNING, piSessions),
+        promptFile: "./.sandcastle/plan-prompt.md",
+        logging: observe("planner"),
+      }),
   });
   planLC.done();
 
@@ -103,16 +171,23 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         });
         implLC.sandbox();
 
-        const result = await sandbox.run({
-          name: "Implementer #" + issue.number,
-          agent: sandcastle.pi(MODELS.IMPLEMENTATION),
-          promptFile: "./.sandcastle/implement-prompt.md",
-          promptArgs: {
-            ISSUE_NUMBER: String(issue.number),
-            ISSUE_TITLE: issue.title,
-            BRANCH: issue.branch,
-          },
-          logging: observe(implLabel),
+        const result = await recordedRun({
+          runId,
+          phase: "impl",
+          issue: issue.number,
+          branch: issue.branch,
+          run: () =>
+            sandbox.run({
+              name: "Implementer #" + issue.number,
+              agent: sandcastle.pi(MODELS.IMPLEMENTATION, piSessions),
+              promptFile: "./.sandcastle/implement-prompt.md",
+              promptArgs: {
+                ISSUE_NUMBER: String(issue.number),
+                ISSUE_TITLE: issue.title,
+                BRANCH: issue.branch,
+              },
+              logging: observe(implLabel),
+            }),
         });
         implLC.commits(result.commits.length);
         implLC.done();
@@ -121,16 +196,23 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           const revLabel = "rev #" + issue.number;
           const revLC = lifecycle(revLabel);
           revLC.start();
-          const review = await sandbox.run({
-            name: "Reviewer #" + issue.number,
-            agent: sandcastle.pi(MODELS.REVIEW),
-            promptFile: "./.sandcastle/review-prompt.md",
-            promptArgs: {
-              ISSUE_NUMBER: String(issue.number),
-              ISSUE_TITLE: issue.title,
-              BRANCH: issue.branch,
-            },
-            logging: observe(revLabel),
+          const review = await recordedRun({
+            runId,
+            phase: "rev",
+            issue: issue.number,
+            branch: issue.branch,
+            run: () =>
+              sandbox.run({
+                name: "Reviewer #" + issue.number,
+                agent: sandcastle.pi(MODELS.REVIEW, piSessions),
+                promptFile: "./.sandcastle/review-prompt.md",
+                promptArgs: {
+                  ISSUE_NUMBER: String(issue.number),
+                  ISSUE_TITLE: issue.title,
+                  BRANCH: issue.branch,
+                },
+                logging: observe(revLabel),
+              }),
           });
           revLC.commits(review.commits.length);
           revLC.done();
@@ -176,17 +258,22 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // Phase 3: Merge — one agent merges all branches together
   const mergeLC = lifecycle("merger");
   mergeLC.start();
-  await sandcastle.run({
-    sandbox: dockerSandbox(),
-    name: "Merger",
-    maxIterations: 10,
-    agent: sandcastle.pi(MODELS.MERGE),
-    promptFile: "./.sandcastle/merge-prompt.md",
-    promptArgs: {
-      BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
-      ISSUES: completedIssues.map((i) => `- #${i.number}: ${i.title}`).join("\n"),
-    },
-    logging: observe("merger"),
+  await recordedRun({
+    runId,
+    phase: "merger",
+    run: () =>
+      sandcastle.run({
+        sandbox: dockerSandbox(),
+        name: "Merger",
+        maxIterations: 10,
+        agent: sandcastle.pi(MODELS.MERGE, piSessions),
+        promptFile: "./.sandcastle/merge-prompt.md",
+        promptArgs: {
+          BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
+          ISSUES: completedIssues.map((i) => `- #${i.number}: ${i.title}`).join("\n"),
+        },
+        logging: observe("merger"),
+      }),
   });
   mergeLC.done();
 

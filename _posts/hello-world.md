@@ -5,9 +5,7 @@ excerpt: "Hello, World. Welcome to Pedal Powered Dev, the new homepage/blog wher
 coverImage: "/assets/blog/hello-world/helloworld.jpg"
 date: "2024-02-19T01:28:48Z"
 tags:
-  - meta
-  - nextjs
-  - tailwind
+  - helloworld
 author:
   name: Yian
   picture: "/assets/blog/authors/yian-genmoji.png"

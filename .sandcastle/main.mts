@@ -131,7 +131,10 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     console.log(`  #${issue.number}: ${issue.title} → ${issue.branch}`);
   }
 
-  // Phase 2: Execute + Review — implement then review each branch, max 4 in parallel
+  // Phase 2: Execute + Review — implement then review each branch, max 4 in parallel.
+  // The Implementer pushes its branch and opens a PR (Closes #N) when it has commits;
+  // the orchestrator's commits.length > 0 gate keeps a no-op Implementer from being
+  // reviewed or landed (no commits → no PR → nothing to merge).
   let running = 0;
   const queue: (() => void)[] = [];
   const acquire = () =>
@@ -245,17 +248,17 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   const completedBranches = completedIssues.map((i) => i.branch);
 
-  console.log(`\nExecution complete. ${completedBranches.length} branch(es) with commits:`);
+  console.log(`\nExecution complete. ${completedBranches.length} branch(es) with commits/PRs:`);
   for (const branch of completedBranches) {
     console.log(`  ${branch}`);
   }
 
   if (completedBranches.length === 0) {
-    console.log("No commits produced. Nothing to merge.");
+    console.log("No commits produced. No PRs to merge.");
     continue;
   }
 
-  // Phase 3: Merge — one agent merges all branches together
+  // Phase 3: Merge — one agent lands each branch's PR via test-then-merge (gh pr merge --merge)
   const mergeLC = lifecycle("merger");
   mergeLC.start();
   await recordedRun({

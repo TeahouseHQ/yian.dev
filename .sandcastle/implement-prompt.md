@@ -6,7 +6,7 @@ Pull in the issue using `gh issue view`, with comments. If it has a parent PRD, 
 
 Only work on the issue specified.
 
-Work on branch {{BRANCH}}. Make commits, run tests, and close the issue when done.
+Work on branch {{BRANCH}}. Make commits, run tests, and open a pull request when done.
 
 # CONTEXT
 
@@ -49,11 +49,31 @@ Make a git commit. The commit message must:
 
 Keep it concise.
 
+# PUSH AND OPEN A PULL REQUEST
+
+Do this **only if you actually made commits**. If you made zero commits, skip this
+section entirely — do not push, and do not open a PR.
+
+If you made commits:
+
+1. Push the branch to origin: `git push -u origin {{BRANCH}}`
+2. Open a pull request targeting `main`. The body MUST contain `Closes #{{ISSUE_NUMBER}}`
+   so the issue auto-closes when the PR is merged:
+
+   ```
+   gh pr create --base main --head {{BRANCH}} \
+     --title "RALPH: #{{ISSUE_NUMBER}} {{ISSUE_TITLE}}" \
+     --body "Closes #{{ISSUE_NUMBER}}"
+   ```
+
+3. If a PR for this branch already exists, just push your new commits to it — do not
+   open a duplicate.
+
 # THE ISSUE
 
 If the task is not complete, leave a comment on the GitHub issue with what was done.
 
-Do not close the issue - this will be done later.
+Do not close the issue manually — merging the PR (`Closes #{{ISSUE_NUMBER}}`) closes it.
 
 Once complete, output <promise>COMPLETE</promise>.
 

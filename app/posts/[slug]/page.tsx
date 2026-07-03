@@ -10,6 +10,7 @@ import Layout from "../../../components/Layout";
 import PageFooter from "../../../components/PageFooter";
 import PostBody from "../../../components/PostBody";
 import PostHeader from "../../../components/PostHeader";
+import ThemeToggle from "../../../components/ThemeToggle";
 import { getAllPosts, getPostBySlug } from "../../../lib/api";
 import { BaseUrl, Suffix } from "../../../lib/constants";
 import markdownToReact from "../../../lib/markdownToReact";
@@ -62,6 +63,8 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
 
   return (
     <Layout>
+      {/* Reader light/dark toggle — post pages only (ADR-0005, issue #59). */}
+      <ThemeToggle />
       <BlogPostJsonLd title={post.title} date={post.date} slug={post.slug} excerpt={post.excerpt} />
       <Container>
         <article className="mb-24 pt-16">

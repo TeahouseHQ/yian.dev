@@ -1,6 +1,6 @@
 # yian.dev
 
-A personal portfolio/blog site. This glossary currently covers the **Sandcastle observability** subsystem — the AFK agentic workflow (`.sandcastle/`) and how its work is made visible and auditable.
+A personal portfolio/blog site. This glossary covers the **Sandcastle observability** subsystem — the AFK agentic workflow (`.sandcastle/`) and how its work is made visible and auditable — and **Blog reader theming**, the light/dark switching on post pages.
 
 ## Language
 
@@ -36,3 +36,21 @@ _Avoid_: index, log.
 **Pull request (PR)**:
 The per-issue review surface on GitHub that makes the Implementer→Reviewer interaction visible and auditable. One PR per issue branch; opened as a draft by the Implementer and reviewed in place by the Reviewer, who marks it ready when it passes. A first-class part of the audit surface alongside the Transcript and Manifest.
 _Avoid_: MR, change request.
+
+### Blog reader theming
+
+**Blog reader**:
+A single blog-post page at `/posts/[slug]` — the whole page frame (nav, post header, article body, comments, footer), not just the article markdown. The only surface that can be light; every other page (`/home`, `/playnow`, …) is permanently dark.
+_Avoid_: post viewer, article view.
+
+**Reader theme**:
+The active colour scheme of a Blog reader: `dark` (the site-wide default) or `light`. Applied by toggling a `theme-light` class on `<html>`; the absence of the class means dark.
+_Avoid_: mode, colour mode, skin.
+
+**Theme preference**:
+The reader's persisted, global choice of Reader theme, stored in `localStorage` under a single key. Applies to all Blog readers and survives reloads and future visits. Dark by default (a first-time visitor's OS `prefers-color-scheme` is ignored). Does not affect any non-post page.
+_Avoid_: setting, mode preference.
+
+**Theme toggle**:
+The fixed top-corner sun/moon `<button>` rendered only on Blog readers. Flips the Theme preference and re-applies the Reader theme live. On mount it applies the preference; on unmount it reverts to dark, keeping non-post pages dark during client-side navigation.
+_Avoid_: switcher, dark mode button.

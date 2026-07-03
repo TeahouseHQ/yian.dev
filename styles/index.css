@@ -25,6 +25,33 @@
   --color-purple: 178 148 187; /* #b294bb */
 }
 
+/*
+ * Blog reader light theme (ADR-0005, issue #59). Activated by toggling the
+ * `theme-light` class on <html> from the ThemeToggle client component on post
+ * pages. Defined AFTER :root so its equal specificity (class == :root pseudo)
+ * wins by source order, overriding every semantic colour at once.
+ *
+ * Code blocks are intentionally NOT re-themed: highlight.js pins its own dark
+ * atom-one-dark colours via the CDN stylesheet, so they stay dark here too.
+ * The accent colours below only touch UI surfaces (links, headings, tags),
+ * tuned for contrast on a light background. Dark remains the default — this
+ * block is inert until the class is present.
+ */
+.theme-light {
+  --color-background: 250 250 250; /* #fafafa */
+  --color-foreground: 55 59 65; /* #373b41 */
+  --color-selection: 129 162 190; /* #81a2be — light text reads on it */
+  --color-line: 224 226 228; /* #e0e2e4 */
+  --color-comment: 124 126 128; /* #7c7e80 */
+  --color-red: 193 75 75; /* #c14b4b */
+  --color-orange: 192 99 51; /* #c06333 */
+  --color-yellow: 168 124 0; /* #a87c00 */
+  --color-green: 104 130 47; /* #68822f */
+  --color-aqua: 58 140 132; /* #3a8c84 */
+  --color-blue: 64 96 140; /* #40608c */
+  --color-purple: 138 99 158; /* #8a639e */
+}
+
 @layer base {
   body {
     @apply bg-background text-foreground relative;

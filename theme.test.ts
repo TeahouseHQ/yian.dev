@@ -54,12 +54,16 @@ function hexToChannels(hex: string): string {
   return `${r} ${g} ${b}`;
 }
 
-/** Parse the first `:root { ... }` block of a CSS file into name -> raw value. */
-function parseRootDeclarations(css: string): Record<string, string> {
-  const match = css.match(/:root\s*{([^}]*)}/);
+/**
+ * Parse the first `<selector> { ... }` block of a CSS file into name -> raw
+ * value. Strip block comments so a trailing hex annotation can't glue two
+ * declarations together when splitting on `;`. Used for both `:root` (the
+ * dark default) and `.theme-light` (the light overrides).
+ */
+function parseBlockDeclarations(css: string, selector: string): Record<string, string> {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = css.match(new RegExp(escaped + "\\s*{([^}]*)}"));
   if (!match) return {};
-  // Strip block comments so a trailing `/* #hex */` can't glue two
-  // declarations together when splitting on `;`.
   const body = match[1].replace(/\/\*[\s\S]*?\*\//g, "");
   const decls: Record<string, string> = {};
   for (const line of body.split(";")) {
@@ -76,17 +80,14 @@ describe("#58 semantic colours are indirected through CSS variables", () => {
   const semanticColours = Object.keys(ORIGINAL_HEX);
 
   describe("tailwind.config.js", () => {
-    it.each(semanticColours)(
-      "%s resolves from a CSS custom property",
-      (name) => {
-        const value = tailwindConfig.theme.colors[name];
-        expect(typeof value).toBe("string");
-        // Must reference the `--color-<name>` custom property...
-        expect(value).toContain(`var(--color-${name})`);
-        // ...and keep the alpha placeholder so opacity modifiers keep working.
-        expect(value).toContain("<alpha-value>");
-      },
-    );
+    it.each(semanticColours)("%s resolves from a CSS custom property", (name) => {
+      const value = tailwindConfig.theme.colors[name];
+      expect(typeof value).toBe("string");
+      // Must reference the `--color-<name>` custom property...
+      expect(value).toContain(`var(--color-${name})`);
+      // ...and keep the alpha placeholder so opacity modifiers keep working.
+      expect(value).toContain("<alpha-value>");
+    });
 
     it("leaves the non-semantic palette untouched", () => {
       // transparent / currentColor are bare keywords; black/white/gray stay
@@ -100,16 +101,34 @@ describe("#58 semantic colours are indirected through CSS variables", () => {
   });
 
   describe("styles/index.css :root", () => {
-    const root = parseRootDeclarations(indexCss);
+    const root = parseBlockDeclarations(indexCss, ":root");
 
-    it.each(semanticColours)(
-      "defines --color-%s matching the original dark hex",
-      (name) => {
-        const variable = `--color-${name}`;
-        expect(root[variable], `expected ${variable} in :root`).toBeDefined();
-        // Channels must equal the original hex's RGB (visual parity).
-        expect(root[variable]).toBe(hexToChannels(ORIGINAL_HEX[name]));
-      },
-    );
+    it.each(semanticColours)("defines --color-%s matching the original dark hex", (name) => {
+      const variable = `--color-${name}`;
+      expect(root[variable], `expected ${variable} in :root`).toBeDefined();
+      // Channels must equal the original hex's RGB (visual parity).
+      expect(root[variable]).toBe(hexToChannels(ORIGINAL_HEX[name]));
+    });
   });
+});
+
+describe("#59 light theme overrides the CSS variables under .theme-light", () => {
+  const semanticColours = Object.keys(ORIGINAL_HEX);
+  const root = parseBlockDeclarations(indexCss, ":root");
+  const light = parseBlockDeclarations(indexCss, ".theme-light");
+
+  it("defines a .theme-light block", () => {
+    expect(Object.keys(light).length).toBeGreaterThan(0);
+  });
+
+  it.each(semanticColours)(
+    "overrides --color-%s under .theme-light with a value that differs from the dark default",
+    (name) => {
+      const variable = `--color-${name}`;
+      expect(light[variable], `expected ${variable} in .theme-light`).toBeDefined();
+      // The override must actually change the value, otherwise the light
+      // theme would be visually identical to dark for this colour.
+      expect(light[variable], `${variable} must differ from :root`).not.toBe(root[variable]);
+    }
+  );
 });

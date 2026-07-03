@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Semantic theme colours, declared as RGB channel triplets so the
+ * `rgb(var(--color-*) / <alpha-value>)` wrappers in tailwind.config.js keep
+ * working for both plain and opacity-modified utilities. These are the dark
+ * "Tomorrow" palette values the site already used; a light theme (ADR-0005)
+ * will override this same block. Channels are the exact RGB of the previous
+ * hexes, so rendering is unchanged.
+ */
+:root {
+  --color-background: 29 31 33; /* #1d1f21 */
+  --color-foreground: 197 200 198; /* #c5c8c6 */
+  --color-selection: 240 198 116; /* #f0c674 */
+  --color-line: 40 42 46; /* #282a2e */
+  --color-comment: 150 152 150; /* #969896 */
+  --color-red: 204 102 102; /* #cc6666 */
+  --color-orange: 222 147 95; /* #de935f */
+  --color-yellow: 240 198 116; /* #f0c674 */
+  --color-green: 181 189 104; /* #b5bd68 */
+  --color-aqua: 138 190 183; /* #8abeb7 */
+  --color-blue: 129 162 190; /* #81a2be */
+  --color-purple: 178 148 187; /* #b294bb */
+}
+
 @layer base {
   body {
     @apply bg-background text-foreground relative;

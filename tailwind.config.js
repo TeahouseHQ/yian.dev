@@ -10,18 +10,27 @@ module.exports = {
       black: colors.black,
       white: colors.white,
       gray: colors.gray,
-      foreground: "#c5c8c6",
-      background: "#1d1f21",
-      selection: "#f0c674",
-      line: "#282a2e",
-      comment: "#969896",
-      red: "#cc6666",
-      orange: "#de935f",
-      yellow: "#f0c674",
-      green: "#b5bd68",
-      aqua: "#8abeb7",
-      blue: "#81a2be",
-      purple: "#b294bb",
+      // Semantic colours resolve from CSS custom properties declared in
+      // `styles/index.css` `:root`, so the palette can be swapped at runtime
+      // (groundwork for the blog reader light theme, ADR-0005). Each value is
+      // the variable's RGB channels wrapped in `rgb(... / <alpha-value>)`:
+      // the `<alpha-value>` placeholder is what lets Tailwind still emit the
+      // opacity-modified utilities the site relies on (e.g. `bg-foreground/10`,
+      // `text-foreground/30`, `border-foreground/30`). A bare `var(--x)` here
+      // would silently drop those classes. The channel triplets equal the
+      // previous dark hexes, so rendering is unchanged.
+      foreground: "rgb(var(--color-foreground) / <alpha-value>)",
+      background: "rgb(var(--color-background) / <alpha-value>)",
+      selection: "rgb(var(--color-selection) / <alpha-value>)",
+      line: "rgb(var(--color-line) / <alpha-value>)",
+      comment: "rgb(var(--color-comment) / <alpha-value>)",
+      red: "rgb(var(--color-red) / <alpha-value>)",
+      orange: "rgb(var(--color-orange) / <alpha-value>)",
+      yellow: "rgb(var(--color-yellow) / <alpha-value>)",
+      green: "rgb(var(--color-green) / <alpha-value>)",
+      aqua: "rgb(var(--color-aqua) / <alpha-value>)",
+      blue: "rgb(var(--color-blue) / <alpha-value>)",
+      purple: "rgb(var(--color-purple) / <alpha-value>)",
     },
     extend: {
       letterSpacing: {

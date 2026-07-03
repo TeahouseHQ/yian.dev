@@ -26,8 +26,28 @@ _Avoid_: clean, gc.
 A single pi agent invocation, identified by a session id, whose Transcript is captured as one JSONL file. One per agent run (Planner, Implementer, Reviewer, Merger).
 
 **Run**:
-One outer iteration of the orchestrator loop (Plan → parallel Implement/Review → Merge), identified by a `runId`. All Sessions produced in that iteration share the `runId`. Distinct from sandcastle's `run()` API call, which is one agent invocation.
-_Avoid_: iteration (when referring to the identified unit).
+One issue's **full lifecycle** through the pool — its Implementer, Reviewer, and Merger Sessions — identified by a `runId` derived deterministically from the issue number (mirrors the `sandcastle/issue-N` branch). Auditing everything that happened to an issue is a single `runId` lookup. The Planner is cross-issue and does **not** belong to any issue's Run; its Sessions are recorded per-invocation with no issue binding. Distinct from sandcastle's `run()` API call, which is one agent invocation. Supersedes the old "one outer loop iteration" meaning (ADR-0006).
+_Avoid_: iteration, cycle (a Poll tick is not a Run).
+
+**Pool**:
+The single shared concurrency limiter (size 10) across **all** Implementer, Reviewer, and Merger Sessions. One slot = one agent run **including** its whole sandbox lifecycle (create → install → build → run → dispose). The Planner runs in its own dedicated singleton slot and is **not** counted against the Pool. Introduced by the persistent shared-pool orchestrator (ADR-0006), replacing the old per-Run `MAX_PARALLEL` that bounded only Implement+Review.
+_Avoid_: queue, thread pool.
+
+**Dispatch bucket**:
+One of the three sources of pooled work the orchestrator drains each Poll tick, in priority order **merge → review → implement**: **ready-for-merge** (PR is ready/non-draft + `reviewed` label), **ready-for-review** (open **draft** `sandcastle/issue-N` PR without `reviewed`), and **ready-for-agent** (issue labeled `ready-for-agent` with no open PR). An item carrying `ready-for-human`, or already in the In-flight set, is excluded from every bucket. Only the ready-for-agent bucket is fed through the Planner; the two PR buckets are dispatched by pure orchestrator code.
+_Avoid_: queue, backlog, stage.
+
+**In-flight set**:
+The orchestrator's **in-memory** record of which issues/PRs currently have a Session running, keyed by issue/PR number. It is what stops a repeatedly-polling loop from dispatching a second agent for the same item; entries are removed the moment their Session resolves. Not durable — lost on process restart, which yields at-least-once (never at-most-once) dispatch (ADR-0006).
+_Avoid_: lock, lease.
+
+**Poll tick**:
+One iteration of the persistent orchestrator loop: every ~60s, if the Pool has a free slot, query the Dispatch buckets and fill free slots by priority. When the Pool is full the `gh` query is skipped entirely; when all buckets are empty the tick is the idle sleep. A freed slot idles at most one tick (~60s) before being refilled. A Poll tick is **not** a Run and has no `runId`.
+_Avoid_: iteration, run, cycle.
+
+**`ready-for-human`**:
+The universal terminal label — on an issue or a PR — meaning "out of all Dispatch buckets; a human owns it." Every give-up / failure path lands here: a no-op Implementer (strips `ready-for-agent`, adds `ready-for-human`), a Reviewer that can't pass a change (leaves it draft, adds `ready-for-human`), and a Merger whose test-then-merge fails or conflicts (removes `reviewed`, reverts the PR to draft, adds `ready-for-human`). This is what keeps the persistent loop from re-dispatching un-actionable work forever.
+_Avoid_: blocked, stuck, wontfix (a distinct triage label).
 
 **Manifest**:
 The append-only index of Sessions (`.sandcastle/sessions/manifest.jsonl`), one line per Session, carrying the human-meaningful metadata the raw Transcript filename lacks (run, phase, issue, branch, status, commits, usage). The lookup table that makes Transcripts findable and a Run auditable.

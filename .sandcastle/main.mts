@@ -1,5 +1,19 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import {
+  createInflight,
+  createPool,
+  filterReadyForAgent,
+  handleImplementerOutcome,
+  pickImplementers,
+  POLL_INTERVAL_MS,
+  POOL_SIZE,
+  shouldQueryBuckets,
+  shouldRunPlanner,
+  type ReadyForAgentIssue,
+} from "./dispatch.mts";
 import {
   appendManifestLine,
   buildFailedManifestEntry,
@@ -11,10 +25,8 @@ import {
   type RunLike,
 } from "./observability.mts";
 
-const MAX_ITERATIONS = 10;
-const MAX_PARALLEL = 3;
+const execFileAsync = promisify(execFile);
 
-const DEFAULT_MODEL = "litellm/glm-5.1";
 const MODELS = {
   PLANNING: "claude-opus-4-8",
   IMPLEMENTATION: "litellm/glm-5.1",
@@ -90,14 +102,190 @@ async function recordedRun<R extends RunLike>(args: {
   }
 }
 
-for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-  console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+/** Run one `gh` command on the host and return its stdout (rejects on non-zero). */
+async function gh(args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("gh", args, { maxBuffer: 10 * 1024 * 1024 });
+  return stdout;
+}
 
-  // The Planner is cross-issue, so its Session gets a per-invocation runId with no
-  // issue binding — distinct from each issue's run-issue-<n> Run (CONTEXT.md: Run).
+/**
+ * Run a `gh` command, returning `fallback` (and a stderr line) on failure. Used
+ * for the per-tick bucket queries so one bad query never kills the loop — the
+ * next tick re-queries.
+ */
+async function ghOr(fallback: string, args: string[]): Promise<string> {
+  try {
+    return await gh(args);
+  } catch (err) {
+    console.error(`  ⚠ gh ${args.join(" ")} failed: ${errorMessage(err)}`);
+    return fallback;
+  }
+}
+
+function errorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.split("\n")[0];
+}
+
+/**
+ * The ready-for-agent Dispatch bucket: open issues labeled `ready-for-agent`,
+ * with their labels so `filterReadyForAgent` can exclude any that ALSO carry
+ * `ready-for-human`. (In-flight and open-PR exclusions are applied with that
+ * function — they need state the issue list does not carry.)
+ */
+async function queryReadyForAgent(): Promise<ReadyForAgentIssue[]> {
+  const out = await ghOr("[]", [
+    "issue",
+    "list",
+    "--state",
+    "open",
+    "--label",
+    "ready-for-agent",
+    "--limit",
+    "200",
+    "--json",
+    "number,title,labels",
+  ]);
+  const rows = JSON.parse(out || "[]") as {
+    number: number;
+    title: string;
+    labels: { name: string }[];
+  }[];
+  return rows.map((r) => ({
+    number: r.number,
+    title: r.title,
+    labels: r.labels.map((l) => l.name),
+  }));
+}
+
+/**
+ * Issue numbers that already have an open `sandcastle/issue-N` PR — the
+ * ready-for-agent bucket excludes these (an Implementer already opened a draft).
+ * The branch name is the deterministic link back to the issue number.
+ */
+async function queryOpenPrIssues(): Promise<Set<number>> {
+  const out = await ghOr("[]", [
+    "pr",
+    "list",
+    "--state",
+    "open",
+    "--json",
+    "number,headRefName",
+    "--limit",
+    "200",
+  ]);
+  const rows = JSON.parse(out || "[]") as { number: number; headRefName: string }[];
+  const open = new Set<number>();
+  for (const r of rows) {
+    const m = r.headRefName.match(/^sandcastle\/issue-(\d+)$/);
+    if (m) open.add(Number(m[1]));
+  }
+  return open;
+}
+
+/** The escalation `gh` runner handed to `handleImplementerOutcome`. */
+const escalateGh = { run: async (args: string[]) => void (await gh(args)) };
+
+// ── The persistent shared-pool orchestrator (ADR-0006) ──────────────────────
+//
+// One shared concurrency Pool of POOL_SIZE (only Implementers consume it in this
+// slice; review/merge join it in the follow-up), one In-flight set keyed by
+// issue number, and a Poll tick that never self-exits. Each tick: if the Pool is
+// full, skip the gh query entirely; otherwise query the ready-for-agent bucket,
+// run the Planner in its own (Pool-exempt) slot only when there is actionable
+// work AND a free slot, and dispatch up to `free` Implementers (each opening a
+// draft PR). A no-op Implementer is escalated to ready-for-human so it is not
+// re-dispatched. This slice leaves draft PRs un-reviewed/un-merged on purpose —
+// the review+merge slice wires those buckets next.
+const pool = createPool(POOL_SIZE);
+const inflight = createInflight();
+
+/**
+ * Dispatch one Implementer for an issue into the shared Pool. Occupies a slot
+ * (acquire), marks the issue in-flight, opens a fresh sandbox, runs the
+ * Implementer, then on a clean zero-commit run escalates to `ready-for-human`.
+ * Whatever happens, the finally disposes the sandbox, removes the issue from
+ * the In-flight set, and frees the Pool slot — in that order (await-using
+ * disposal runs before the finally), so the slot covers the full lifecycle.
+ *
+ * A CRASHED Implementer is NOT escalated (only a clean no-op is): a crash may be
+ * transient, so the issue stays `ready-for-agent` for a re-dispatch — the
+ * accepted at-least-once behaviour (ADR-0006).
+ */
+async function dispatchImplementer(issue: {
+  number: number;
+  title: string;
+  branch: string;
+}): Promise<void> {
+  await pool.acquire();
+  const issueRunId = generateRunId(issue.number);
+  const implLabel = "impl #" + issue.number;
+  const implLC = lifecycle(implLabel);
+  implLC.start();
+  try {
+    await using sandbox = await sandcastle.createSandbox({
+      sandbox: dockerSandbox(),
+      branch: issue.branch,
+      copyToWorktree: ["node_modules"],
+      hooks: {
+        sandbox: {
+          // pnpm with a frozen lockfile: this repo is pnpm-only (pnpm-lock.yaml,
+          // no package-lock.json), so `npm install` would generate a competing
+          // lockfile and resolve deps differently. --frozen-lockfile keeps sandbox
+          // installs reproducible and fast against the committed pnpm-lock.yaml.
+          onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
+        },
+      },
+    });
+    implLC.sandbox();
+
+    const result = await recordedRun({
+      runId: issueRunId,
+      phase: "impl",
+      issue: issue.number,
+      branch: issue.branch,
+      run: () =>
+        sandbox.run({
+          name: "Implementer #" + issue.number,
+          agent: sandcastle.pi(MODELS.IMPLEMENTATION, piSessions),
+          promptFile: "./.sandcastle/implement-prompt.md",
+          promptArgs: {
+            ISSUE_NUMBER: String(issue.number),
+            ISSUE_TITLE: issue.title,
+            BRANCH: issue.branch,
+          },
+          logging: observe(implLabel),
+        }),
+    });
+    implLC.commits(result.commits.length);
+
+    // No-op terminal handling (ADR-0006): zero commits → no draft PR → strip
+    // ready-for-agent, add ready-for-human, comment, so it is not re-dispatched.
+    const escalated = await handleImplementerOutcome(
+      issue.number,
+      result.commits.length,
+      escalateGh
+    );
+    if (escalated) {
+      console.log(`  ⚠ #${issue.number} produced no commits — escalated to ready-for-human.`);
+    }
+  } catch (err) {
+    console.error(`  ✗ #${issue.number} (${issue.branch}) failed: ${errorMessage(err)}`);
+  } finally {
+    implLC.done();
+    inflight.delete(issue.number);
+    pool.release();
+  }
+}
+
+/**
+ * Run the cross-issue Planner in its own dedicated slot (NOT counted against the
+ * Pool) and return its emitted, unblocked issues. The Planner re-queries gh
+ * itself (see plan-prompt.md); the orchestrator only invokes it when there is
+ * actionable work to analyze. Returns `[]` if the Planner produced no plan.
+ */
+async function runPlanner(): Promise<{ number: number; title: string; branch: string }[]> {
   const plannerRunId = generateRunId();
-
-  // Phase 1: Plan — orchestrator agent analyzes issues and picks parallelizable work
   const planLC = lifecycle("planner");
   planLC.start();
   const plan = await recordedRun({
@@ -116,197 +304,58 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   const planMatch = plan.stdout.match(/<plan>([\s\S]*?)<\/plan>/);
   if (!planMatch) {
-    throw new Error("Orchestrator did not produce a <plan> tag.\n\n" + plan.stdout);
+    console.error("Planner did not produce a <plan> tag.");
+    return [];
   }
-
   const { issues } = JSON.parse(planMatch[1]) as {
     issues: { number: number; title: string; branch: string }[];
   };
-
-  if (issues.length === 0) {
-    console.log("No issues to work on. Exiting.");
-    break;
-  }
-
-  console.log(`Planning complete. ${issues.length} issue(s) to work in parallel:`);
-  for (const issue of issues) {
-    console.log(`  #${issue.number}: ${issue.title} → ${issue.branch}`);
-  }
-
-  // Phase 2: Execute + Review — implement then review each branch, max 4 in parallel.
-  // The Implementer pushes its branch and opens a DRAFT PR (Closes #N) when it has
-  // commits; the orchestrator's commits.length > 0 gate keeps a no-op Implementer from
-  // being reviewed or landed (no commits → no PR → nothing to merge). The Reviewer
-  // commits any fixes, posts a COMMENT review, flips the PR draft → ready, and adds the
-  // `reviewed` label — the gate the Merger checks before landing.
-  let running = 0;
-  const queue: (() => void)[] = [];
-  const acquire = () =>
-    running < MAX_PARALLEL
-      ? (running++, Promise.resolve())
-      : new Promise<void>((resolve) => queue.push(resolve));
-  const release = () => {
-    running--;
-    const next = queue.shift();
-    if (next) {
-      running++;
-      next();
-    }
-  };
-
-  const settled = await Promise.allSettled(
-    issues.map(async (issue) => {
-      await acquire();
-      try {
-        // One issue-derived runId shared by this issue's Implementer, Reviewer, and
-        // Merger Sessions (mirrors the sandcastle/issue-N branch); stable across
-        // the issue's whole lifecycle (CONTEXT.md: Run).
-        const issueRunId = generateRunId(issue.number);
-        const implLabel = "impl #" + issue.number;
-        const implLC = lifecycle(implLabel);
-        implLC.start();
-
-        await using sandbox = await sandcastle.createSandbox({
-          sandbox: dockerSandbox(),
-          branch: issue.branch,
-          copyToWorktree: ["node_modules"],
-          hooks: {
-            sandbox: {
-              // pnpm with a frozen lockfile: this repo is pnpm-only (pnpm-lock.yaml,
-              // no package-lock.json), so `npm install` would generate a competing
-              // lockfile and resolve deps differently. --frozen-lockfile keeps sandbox
-              // installs reproducible and fast against the committed pnpm-lock.yaml.
-              onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
-            },
-          },
-        });
-        implLC.sandbox();
-
-        const result = await recordedRun({
-          runId: issueRunId,
-          phase: "impl",
-          issue: issue.number,
-          branch: issue.branch,
-          run: () =>
-            sandbox.run({
-              name: "Implementer #" + issue.number,
-              agent: sandcastle.pi(MODELS.IMPLEMENTATION, piSessions),
-              promptFile: "./.sandcastle/implement-prompt.md",
-              promptArgs: {
-                ISSUE_NUMBER: String(issue.number),
-                ISSUE_TITLE: issue.title,
-                BRANCH: issue.branch,
-              },
-              logging: observe(implLabel),
-            }),
-        });
-        implLC.commits(result.commits.length);
-        implLC.done();
-
-        if (result.commits.length > 0) {
-          const revLabel = "rev #" + issue.number;
-          const revLC = lifecycle(revLabel);
-          revLC.start();
-          const review = await recordedRun({
-            runId: issueRunId,
-            phase: "rev",
-            issue: issue.number,
-            branch: issue.branch,
-            run: () =>
-              sandbox.run({
-                name: "Reviewer #" + issue.number,
-                agent: sandcastle.pi(MODELS.REVIEW, piSessions),
-                promptFile: "./.sandcastle/review-prompt.md",
-                promptArgs: {
-                  ISSUE_NUMBER: String(issue.number),
-                  ISSUE_TITLE: issue.title,
-                  BRANCH: issue.branch,
-                },
-                logging: observe(revLabel),
-              }),
-          });
-          revLC.commits(review.commits.length);
-          revLC.done();
-        }
-
-        return result;
-      } finally {
-        release();
-      }
-    })
-  );
-
-  for (const [i, outcome] of settled.entries()) {
-    if (outcome.status === "rejected") {
-      console.error(`  ✗ #${issues[i].number} (${issues[i].branch}) failed: ${outcome.reason}`);
-    }
-  }
-
-  const completedIssues = settled
-    .map((outcome, i) => ({ outcome, issue: issues[i] }))
-    .filter(
-      (
-        entry
-      ): entry is {
-        outcome: PromiseFulfilledResult<Awaited<ReturnType<typeof sandcastle.run>>>;
-        issue: (typeof issues)[number];
-      } => entry.outcome.status === "fulfilled" && entry.outcome.value.commits.length > 0
-    )
-    .map((entry) => entry.issue);
-
-  const completedBranches = completedIssues.map((i) => i.branch);
-
-  console.log(`\nExecution complete. ${completedBranches.length} branch(es) with commits/PRs:`);
-  for (const branch of completedBranches) {
-    console.log(`  ${branch}`);
-  }
-
-  if (completedBranches.length === 0) {
-    console.log("No commits produced. No PRs to merge.");
-    continue;
-  }
-
-  // Phase 3: Merge — one Merger Session per eligible PR. Each issue's Merger shares
-  // that issue's runId with its Implementer/Reviewer (one Run spans one issue's full
-  // lifecycle), and runs test-then-merge in its own fresh sandbox. Per-PR merges also
-  // isolate a single failing merge from the others (ADR-0006 direction). The prompt's
-  // per-branch REVIEW GATE still skips any draft or un-`reviewed` PR for a human.
-  const mergeSettled = await Promise.allSettled(
-    completedIssues.map(async (issue) => {
-      const mergeLC = lifecycle("merger #" + issue.number);
-      mergeLC.start();
-      await recordedRun({
-        runId: generateRunId(issue.number),
-        phase: "merger",
-        issue: issue.number,
-        branch: issue.branch,
-        run: () =>
-          sandcastle.run({
-            sandbox: dockerSandbox(),
-            name: "Merger #" + issue.number,
-            maxIterations: 10,
-            agent: sandcastle.pi(MODELS.MERGE, piSessions),
-            promptFile: "./.sandcastle/merge-prompt.md",
-            promptArgs: {
-              BRANCHES: `- ${issue.branch}`,
-              ISSUES: `- #${issue.number}: ${issue.title}`,
-            },
-            logging: observe("merger #" + issue.number),
-          }),
-      });
-      mergeLC.done();
-    })
-  );
-  let merged = 0;
-  for (const [i, outcome] of mergeSettled.entries()) {
-    if (outcome.status === "rejected") {
-      console.error(`  ✗ merger #${completedIssues[i].number} failed: ${outcome.reason}`);
-    } else {
-      merged++;
-    }
-  }
-
-  console.log(`\n${merged} of ${completedIssues.length} PR(s) merged.`);
+  return issues;
 }
 
-console.log("\nAll done.");
+for (;;) {
+  const free = pool.free();
+  console.log(`\n=== Poll tick — ${free}/${POOL_SIZE} Pool slots free, ${inflight.size()} in-flight ===\n`);
+
+  if (!shouldQueryBuckets(free)) {
+    console.log("Pool full — skipping gh query this tick.");
+  } else {
+    const [readyForAgent, openPrIssues] = await Promise.all([
+      queryReadyForAgent(),
+      queryOpenPrIssues(),
+    ]);
+    const actionable = filterReadyForAgent(readyForAgent, inflight, openPrIssues);
+
+    console.log(
+      `ready-for-agent bucket: ${readyForAgent.length} labeled, ${actionable.length} actionable ` +
+        `(${readyForAgent.length - actionable.length} excluded by open-PR / ready-for-human / in-flight).`
+    );
+
+    if (shouldRunPlanner(actionable, free)) {
+      try {
+        const emitted = await runPlanner();
+        console.log(`Planner emitted ${emitted.length} unblocked issue(s).`);
+
+        // The Planner re-queries gh, so it can emit an issue that just got a PR
+        // this tick — drop those before dispatching. (In-flight dedupe + the
+        // free-slot cap happen in pickImplementers.)
+        const dispatchable = emitted.filter((i) => !openPrIssues.has(i.number));
+        const toDispatch = pickImplementers(dispatchable, free, inflight);
+
+        for (const issue of toDispatch) {
+          inflight.add(issue.number);
+          console.log(`  → dispatching Implementer for #${issue.number}: ${issue.title} → ${issue.branch}`);
+          // Fire-and-forget: the Session runs across ticks and removes itself
+          // from the In-flight set + frees its Pool slot on resolution.
+          void dispatchImplementer(issue);
+        }
+      } catch (err) {
+        console.error(`Planner failed: ${errorMessage(err)}`);
+      }
+    } else {
+      console.log("Nothing actionable or no free slot — skipping Planner this tick.");
+    }
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+}

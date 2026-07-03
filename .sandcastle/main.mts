@@ -6,12 +6,17 @@ import {
   createInflight,
   createPool,
   filterReadyForAgent,
+  filterReadyForMerge,
+  filterReadyForReview,
   handleImplementerOutcome,
+  issueFromBranch,
   pickImplementers,
+  pickPrs,
   POLL_INTERVAL_MS,
   POOL_SIZE,
   shouldQueryBuckets,
   shouldRunPlanner,
+  type BucketPr,
   type ReadyForAgentIssue,
 } from "./dispatch.mts";
 import {
@@ -159,28 +164,45 @@ async function queryReadyForAgent(): Promise<ReadyForAgentIssue[]> {
 }
 
 /**
- * Issue numbers that already have an open `sandcastle/issue-N` PR — the
- * ready-for-agent bucket excludes these (an Implementer already opened a draft).
- * The branch name is the deterministic link back to the issue number.
+ * All open `sandcastle/issue-N` PRs with their draft state and labels — the
+ * raw input for both the `ready-for-merge` and `ready-for-review` Dispatch
+ * buckets (split by `filterReadyForMerge` / `filterReadyForReview`), AND the
+ * source of the open-PR issue set that excludes `ready-for-agent` issues from
+ * the implement bucket. One `gh pr list` query feeds all three concerns. Only
+ * `sandcastle/issue-N` branches are kept; the branch is parsed back to the
+ * issue number so a Reviewer/Merger shares the issue-derived `runId` and
+ * In-flight key with the issue's Implementer (one issue ↔ one PR).
  */
-async function queryOpenPrIssues(): Promise<Set<number>> {
+async function queryReviewMergePrs(): Promise<BucketPr[]> {
   const out = await ghOr("[]", [
     "pr",
     "list",
     "--state",
     "open",
     "--json",
-    "number,headRefName",
+    "number,headRefName,isDraft,labels",
     "--limit",
     "200",
   ]);
-  const rows = JSON.parse(out || "[]") as { number: number; headRefName: string }[];
-  const open = new Set<number>();
+  const rows = JSON.parse(out || "[]") as {
+    number: number;
+    headRefName: string;
+    isDraft: boolean;
+    labels: { name: string }[];
+  }[];
+  const prs: BucketPr[] = [];
   for (const r of rows) {
-    const m = r.headRefName.match(/^sandcastle\/issue-(\d+)$/);
-    if (m) open.add(Number(m[1]));
+    const issue = issueFromBranch(r.headRefName);
+    if (issue === null) continue; // not one of our sandcastle PRs
+    prs.push({
+      prNumber: r.number,
+      issue,
+      branch: r.headRefName,
+      isDraft: r.isDraft,
+      labels: r.labels.map((l) => l.name),
+    });
   }
-  return open;
+  return prs;
 }
 
 /** The escalation `gh` runner handed to `handleImplementerOutcome`. */
@@ -188,15 +210,17 @@ const escalateGh = { run: async (args: string[]) => void (await gh(args)) };
 
 // ── The persistent shared-pool orchestrator (ADR-0006) ──────────────────────
 //
-// One shared concurrency Pool of POOL_SIZE (only Implementers consume it in this
-// slice; review/merge join it in the follow-up), one In-flight set keyed by
-// issue number, and a Poll tick that never self-exits. Each tick: if the Pool is
-// full, skip the gh query entirely; otherwise query the ready-for-agent bucket,
-// run the Planner in its own (Pool-exempt) slot only when there is actionable
-// work AND a free slot, and dispatch up to `free` Implementers (each opening a
-// draft PR). A no-op Implementer is escalated to ready-for-human so it is not
-// re-dispatched. This slice leaves draft PRs un-reviewed/un-merged on purpose —
-// the review+merge slice wires those buckets next.
+// One shared concurrency Pool of POOL_SIZE consumed by all three roles
+// (Implementer, Reviewer, Merger), one In-flight set keyed by issue number, and
+// a Poll tick that never self-exits. Each tick: if the Pool is full, skip the
+// gh query entirely; otherwise query all three Dispatch buckets and fill `free`
+// slots in strict priority **merge → review → implement** (started work lands
+// before new work starts, which prevents PR starvation). The Planner runs in its
+// own (Pool-exempt) slot only when actionable `ready-for-agent` issues exist AND
+// a slot remains free after merge+review draining. Reviewers/Mergers each build
+// their own fresh sandbox (impl and review are decoupled across ticks) and run
+// the issue-derived `runId`. A no-op Implementer is escalated to ready-for-human
+// so it is not re-dispatched; Reviewer/Merger give-up paths live in the prompts (#65).
 const pool = createPool(POOL_SIZE);
 const inflight = createInflight();
 
@@ -279,6 +303,127 @@ async function dispatchImplementer(issue: {
 }
 
 /**
+ * Dispatch one Reviewer for a draft PR into the shared Pool. Occupies a slot
+ * (acquire), marks the issue in-flight, opens a **fresh sandbox from the PR
+ * branch** (impl and review are decoupled across ticks per ADR-0006, so the
+ * Reviewer cannot reuse the Implementer's live sandbox), re-runs install+build,
+ * and runs review-prompt.md. The Reviewer commits fixes itself (Model A) and,
+ * when the change passes, opens the REVIEW GATE (adds `reviewed`, flips the PR
+ * draft → ready) so the Merger can land it; its give-up path escalates to
+ * `ready-for-human` inside the prompt (#65). Whatever happens, the finally
+ * disposes the sandbox, removes the issue from the In-flight set, and frees the
+ * Pool slot. The runId is issue-derived, shared with the issue's impl/merger.
+ */
+async function dispatchReviewer(pr: {
+  prNumber: number;
+  issue: number;
+  branch: string;
+}): Promise<void> {
+  await pool.acquire();
+  const issueRunId = generateRunId(pr.issue);
+  const label = "rev #" + pr.issue;
+  const lc = lifecycle(label);
+  lc.start();
+  try {
+    await using sandbox = await sandcastle.createSandbox({
+      sandbox: dockerSandbox(),
+      branch: pr.branch,
+      copyToWorktree: ["node_modules"],
+      hooks: {
+        sandbox: {
+          onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
+        },
+      },
+    });
+    lc.sandbox();
+
+    await recordedRun({
+      runId: issueRunId,
+      phase: "rev",
+      issue: pr.issue,
+      branch: pr.branch,
+      run: () =>
+        sandbox.run({
+          name: "Reviewer #" + pr.issue,
+          agent: sandcastle.pi(MODELS.REVIEW, piSessions),
+          promptFile: "./.sandcastle/review-prompt.md",
+          // The prompt re-fetches the full issue via `gh issue view`, so the
+          // title is just a header; it is not in the PR-bucket query, so a
+          // derived placeholder avoids an extra gh call per Reviewer.
+          promptArgs: {
+            ISSUE_NUMBER: String(pr.issue),
+            ISSUE_TITLE: "Issue #" + pr.issue,
+            BRANCH: pr.branch,
+          },
+          logging: observe(label),
+        }),
+    });
+  } catch (err) {
+    console.error(`  ✗ rev #${pr.issue} (${pr.branch}) failed: ${errorMessage(err)}`);
+  } finally {
+    lc.done();
+    inflight.delete(pr.issue);
+    pool.release();
+  }
+}
+
+/**
+ * Dispatch one Merger for a ready + `reviewed` PR into the shared Pool
+ * (ADR-0006: Per-PR Mergers, not a batch Merger). Occupies a slot (acquire),
+ * marks the issue in-flight, and runs merge-prompt.md in a **fresh sandbox**
+ * (top-level `sandcastle.run`, which manages its own worktree on main with
+ * merge-to-head) that re-runs install+build. The Merger does test-then-merge
+ * (`git merge <branch>` → `pnpm typecheck && pnpm test` → `gh pr merge --merge`);
+ * its give-up path reverts the PR to draft + `ready-for-human` inside the prompt
+ * (#65). Whatever happens, the finally removes the issue from the In-flight set
+ * and frees the Pool slot. The runId is issue-derived, shared with impl/rev.
+ */
+async function dispatchMerger(pr: {
+  prNumber: number;
+  issue: number;
+  branch: string;
+}): Promise<void> {
+  await pool.acquire();
+  const issueRunId = generateRunId(pr.issue);
+  const label = "merger #" + pr.issue;
+  const lc = lifecycle(label);
+  lc.start();
+  try {
+    await recordedRun({
+      runId: issueRunId,
+      phase: "merger",
+      issue: pr.issue,
+      branch: pr.branch,
+      run: () =>
+        sandcastle.run({
+          sandbox: dockerSandbox(),
+          copyToWorktree: ["node_modules"],
+          hooks: {
+            sandbox: {
+              onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
+            },
+          },
+          name: "Merger #" + pr.issue,
+          maxIterations: 10,
+          agent: sandcastle.pi(MODELS.MERGE, piSessions),
+          promptFile: "./.sandcastle/merge-prompt.md",
+          promptArgs: {
+            BRANCHES: `- ${pr.branch}`,
+            ISSUES: `- #${pr.issue}: Issue #${pr.issue}`,
+          },
+          logging: observe(label),
+        }),
+    });
+  } catch (err) {
+    console.error(`  ✗ merger #${pr.issue} (${pr.branch}) failed: ${errorMessage(err)}`);
+  } finally {
+    lc.done();
+    inflight.delete(pr.issue);
+    pool.release();
+  }
+}
+
+/**
  * Run the cross-issue Planner in its own dedicated slot (NOT counted against the
  * Pool) and return its emitted, unblocked issues. The Planner re-queries gh
  * itself (see plan-prompt.md); the orchestrator only invokes it when there is
@@ -320,40 +465,79 @@ for (;;) {
   if (!shouldQueryBuckets(free)) {
     console.log("Pool full — skipping gh query this tick.");
   } else {
-    const [readyForAgent, openPrIssues] = await Promise.all([
+    // One ready-for-agent issue query + one PR query feeds all three buckets:
+    // the PR list is split into ready-for-merge / ready-for-review, and its
+    // issue set excludes ready-for-agent issues that already have an open PR.
+    const [readyForAgent, prs] = await Promise.all([
       queryReadyForAgent(),
-      queryOpenPrIssues(),
+      queryReviewMergePrs(),
     ]);
+    const openPrIssues = new Set(prs.map((p) => p.issue));
+    const readyForMerge = filterReadyForMerge(prs, inflight);
+    const readyForReview = filterReadyForReview(prs, inflight);
     const actionable = filterReadyForAgent(readyForAgent, inflight, openPrIssues);
 
     console.log(
-      `ready-for-agent bucket: ${readyForAgent.length} labeled, ${actionable.length} actionable ` +
-        `(${readyForAgent.length - actionable.length} excluded by open-PR / ready-for-human / in-flight).`
+      `buckets: ready-for-merge ${readyForMerge.length}, ready-for-review ${readyForReview.length}, ` +
+        `ready-for-agent ${readyForAgent.length} (${actionable.length} actionable).`
     );
 
-    if (shouldRunPlanner(actionable, free)) {
+    // Priority drain (ADR-0006): fill `free` slots merge → review → implement,
+    // so started work lands before new work starts (prevents PR starvation).
+    // `remaining` counts slots still free after each bucket drains its share.
+    let remaining = free;
+
+    // 1) ready-for-merge — ready + reviewed PRs → one Merger per PR.
+    const mergers = pickPrs(readyForMerge, remaining, inflight);
+    for (const pr of mergers) {
+      inflight.add(pr.issue);
+      console.log(
+        `  → dispatching Merger for PR #${pr.prNumber} (issue #${pr.issue}) → ${pr.branch}`
+      );
+      void dispatchMerger(pr); // fire-and-forget; resolves across ticks.
+    }
+    remaining -= mergers.length;
+
+    // 2) ready-for-review — draft sandcastle/issue-N PRs without reviewed.
+    const reviewers = pickPrs(readyForReview, remaining, inflight);
+    for (const pr of reviewers) {
+      inflight.add(pr.issue);
+      console.log(
+        `  → dispatching Reviewer for PR #${pr.prNumber} (issue #${pr.issue}) → ${pr.branch}`
+      );
+      void dispatchReviewer(pr);
+    }
+    remaining -= reviewers.length;
+
+    // 3) ready-for-agent — the Planner runs in its own Pool-exempt slot ONLY
+    // when actionable issues exist AND a slot remains after merge+review
+    // draining (don't spend Opus on a plan we can't dispatch). It re-plans
+    // every eligible tick (no caching); pickImplementers caps at `remaining`.
+    if (shouldRunPlanner(actionable, remaining)) {
       try {
         const emitted = await runPlanner();
         console.log(`Planner emitted ${emitted.length} unblocked issue(s).`);
 
         // The Planner re-queries gh, so it can emit an issue that just got a PR
         // this tick — drop those before dispatching. (In-flight dedupe + the
-        // free-slot cap happen in pickImplementers.)
+        // remaining-slot cap happen in pickImplementers.)
         const dispatchable = emitted.filter((i) => !openPrIssues.has(i.number));
-        const toDispatch = pickImplementers(dispatchable, free, inflight);
+        const toDispatch = pickImplementers(dispatchable, remaining, inflight);
 
         for (const issue of toDispatch) {
           inflight.add(issue.number);
-          console.log(`  → dispatching Implementer for #${issue.number}: ${issue.title} → ${issue.branch}`);
-          // Fire-and-forget: the Session runs across ticks and removes itself
-          // from the In-flight set + frees its Pool slot on resolution.
+          console.log(
+            `  → dispatching Implementer for #${issue.number}: ${issue.title} → ${issue.branch}`
+          );
           void dispatchImplementer(issue);
         }
       } catch (err) {
         console.error(`Planner failed: ${errorMessage(err)}`);
       }
     } else {
-      console.log("Nothing actionable or no free slot — skipping Planner this tick.");
+      console.log(
+        "No actionable ready-for-agent issues, or no free slot after merge+review draining — skipping Planner this tick."
+      );
     }
   }
 

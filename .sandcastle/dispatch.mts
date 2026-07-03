@@ -99,6 +99,17 @@ export interface ReadyForAgentIssue {
 }
 
 /**
+ * Parse the issue number out of a deterministic `sandcastle/issue-N` branch
+ * name, or return `null` when the branch is not one of ours. The branch is the
+ * link back from a PR to its issue — used to key the In-flight set, derive the
+ * issue `runId`, and populate prompt args for Reviewer/Merger dispatch.
+ */
+export function issueFromBranch(branch: string): number | null {
+  const m = branch.match(/^sandcastle\/issue-(\d+)$/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
  * Filter the `ready-for-agent` **Dispatch bucket** (CONTEXT.md). An issue is
  * dropped if it carries `ready-for-human` (the universal terminal label — out of
  * all buckets), already has an open `sandcastle/issue-N` PR (nothing to
@@ -132,8 +143,10 @@ export function shouldQueryBuckets(free: number): boolean {
  * dedicated singleton slot (NOT counted against the Pool) and only when (a)
  * there are `ready-for-agent` issues to analyze and (b) at least one free Pool
  * slot remains — otherwise running Opus to produce a plan we can't dispatch is
- * pure token waste. In this implement-only slice there is no merge/review
- * draining ahead of it, so the gate is just "actionable issues exist AND free".
+ * pure token waste. The caller passes the free count **remaining after the
+ * merge+review buckets have drained their slots** (priority drain: merge →
+ * review → implement), so the Planner never runs when started work already
+ * filled every free slot.
  */
 export function shouldRunPlanner(
   actionable: ReadonlyArray<{ number: number }>,
@@ -158,6 +171,89 @@ export function pickImplementers<T extends { number: number }>(
   for (const item of emitted) {
     if (picked.length >= free) break;
     if (!inflight.has(item.number)) picked.push(item);
+  }
+  return picked;
+}
+
+/**
+ * A PR as the `ready-for-merge` / `ready-for-review` **Dispatch buckets** see it
+ * (CONTEXT.md). Only `sandcastle/issue-N` PRs reach this type — the orchestrator
+ * parses the branch back to its issue (`issueFromBranch`) so a Reviewer/Merger
+ * can share the issue-derived `runId` and the In-flight set key with the issue's
+ * Implementer. One issue ↔ one PR (deterministic branch), so the In-flight key
+ * is the issue number across all three roles.
+ */
+export interface BucketPr {
+  /** The PR's own GitHub number. */
+  readonly prNumber: number;
+  /** The issue number parsed from the `sandcastle/issue-N` branch. */
+  readonly issue: number;
+  /** The PR's head branch name (`sandcastle/issue-N`). */
+  readonly branch: string;
+  /** Whether the PR is still a draft (true) or ready for review (false). */
+  readonly isDraft: boolean;
+  /** Current labels on the PR (so `reviewed` / `ready-for-human` are visible). */
+  readonly labels: ReadonlyArray<string>;
+}
+
+/**
+ * Filter the `ready-for-merge` **Dispatch bucket** (CONTEXT.md; ADR-0006). A PR
+ * is eligible when it is **ready (non-draft) AND carries `reviewed`**, and is
+ * dropped if it carries `ready-for-human` (the universal terminal label — out of
+ * all buckets) or its issue is already in the In-flight set (a Merger is
+ * running). What remains is the list a Merger may be dispatched for this tick.
+ */
+export function filterReadyForMerge(
+  prs: ReadonlyArray<BucketPr>,
+  inflight: Inflight
+): BucketPr[] {
+  return prs.filter(
+    (p) =>
+      !p.isDraft &&
+      p.labels.includes("reviewed") &&
+      !p.labels.includes("ready-for-human") &&
+      !inflight.has(p.issue)
+  );
+}
+
+/**
+ * Filter the `ready-for-review` **Dispatch bucket** (CONTEXT.md; ADR-0006). A PR
+ * is eligible when it is an open **draft** (not yet ready) **without `reviewed`**
+ * (not yet reviewed), and is dropped if it carries `ready-for-human` or its
+ * issue is already in the In-flight set (a Reviewer is running). What remains is
+ * the list a Reviewer may be dispatched for this tick.
+ */
+export function filterReadyForReview(
+  prs: ReadonlyArray<BucketPr>,
+  inflight: Inflight
+): BucketPr[] {
+  return prs.filter(
+    (p) =>
+      p.isDraft &&
+      !p.labels.includes("reviewed") &&
+      !p.labels.includes("ready-for-human") &&
+      !inflight.has(p.issue)
+  );
+}
+
+/**
+ * Pick which PRs to dispatch this tick for a single bucket, given the number of
+ * free Pool slots and the In-flight set. Returns at most `free` PRs (the Pool
+ * caps concurrency), skipping any whose issue is already in-flight — the filter
+ * already excluded tick-start in-flight items, but within one tick the priority
+ * drain adds an issue to the set as it dispatches merge, and a PR can never be
+ * in two buckets at once (draft vs non-draft), so this re-check is pure
+ * defense-in-depth (mirroring `pickImplementers`). List order is preserved.
+ */
+export function pickPrs<T extends BucketPr>(
+  prs: ReadonlyArray<T>,
+  free: number,
+  inflight: Inflight
+): T[] {
+  const picked: T[] = [];
+  for (const pr of prs) {
+    if (picked.length >= free) break;
+    if (!inflight.has(pr.issue)) picked.push(pr);
   }
   return picked;
 }
@@ -192,9 +288,10 @@ export const NOOP_IMPLEMENTER_COMMENT =
  * (so the issue is never momentarily label-less / lost from every bucket), then
  * comment. Returns `true` when it escalated.
  *
- * A commit-producing run returns `false` and does nothing — in this implement
- * slice nothing reviews/merges automatically (the follow-up slice adds that),
- * so the draft PR simply waits.
+ * A commit-producing run returns `false` and does nothing here: the draft PR it
+ * opened simply waits in the `ready-for-review` bucket, where a later Poll tick
+ * dispatches a Reviewer (#67). No orchestrator-side escalation is needed for a
+ * successful Implementer.
  *
  * A *crashed* Implementer is NOT escalated here (only a clean zero-commit run
  * is): a crash may be transient (sandbox/install failure) and the issue stays

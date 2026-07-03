@@ -1,6 +1,7 @@
 import Script from "next/script";
 
 import { PersonJsonLd } from "#/components/JsonLd";
+import { themeInitScript } from "#/lib/theme";
 import { SiteTitle, SiteDescription, IS_LOCAL_DEV, BaseUrl } from "../lib/constants";
 import { noto, sourceCodePro } from "./fonts";
 
@@ -47,6 +48,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html lang="en" className={sourceCodePro.className}>
       <head>
+        {/*
+         * FOUC blocker for the Blog reader light theme (issue #60). Runs
+         * synchronously before first paint: on a /posts/ page it reads the
+         * stored reader preference and adds `theme-light` to <html> so a
+         * returning light-mode reader never sees a dark flash. Non-post pages
+         * bail out and stay dark. Placed first in <head> so it executes before
+         * the body can paint.
+         */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript() }} />
         <PersonJsonLd />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=202403" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=202403" />

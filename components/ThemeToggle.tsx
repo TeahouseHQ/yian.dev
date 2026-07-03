@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 
 import {
   LIGHT_THEME_CLASS,
@@ -54,9 +54,9 @@ function MoonIcon(): React.JSX.Element {
   );
 }
 
-const META: Record<ReaderTheme, { icon: () => ReactNode; label: string }> = {
-  dark: { icon: () => <SunIcon />, label: "Switch to light theme" },
-  light: { icon: () => <MoonIcon />, label: "Switch to dark theme" },
+const META: Record<ReaderTheme, { Icon: ComponentType; label: string }> = {
+  dark: { Icon: SunIcon, label: "Switch to light theme" },
+  light: { Icon: MoonIcon, label: "Switch to dark theme" },
 };
 
 /**
@@ -65,7 +65,7 @@ const META: Record<ReaderTheme, { icon: () => ReactNode; label: string }> = {
  * wrapper below owns the preference + side effects.
  */
 export function ThemeToggleButton({ theme, onToggle }: ButtonProps): React.JSX.Element {
-  const { icon: Icon, label } = META[theme];
+  const { Icon, label } = META[theme];
   return (
     <button
       type="button"

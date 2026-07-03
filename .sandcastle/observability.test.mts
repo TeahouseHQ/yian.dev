@@ -193,13 +193,44 @@ const okResult = (overrides: Partial<RunLike> = {}): RunLike => ({
 });
 
 describe("generateRunId", () => {
-  it("produces a run- prefixed millisecond stamp from the injected time", () => {
-    expect(generateRunId(new Date("2026-06-28T12:00:00.123Z"))).toBe("run-20260628120000123");
+  it("derives a deterministic run-issue-<n> id from an issue number", () => {
+    expect(generateRunId(42)).toBe("run-issue-42");
+    expect(generateRunId(1)).toBe("run-issue-1");
   });
 
-  it("is unique across distinct millisecond stamps", () => {
-    const a = generateRunId(new Date("2026-06-28T12:00:00.000Z"));
-    const b = generateRunId(new Date("2026-06-28T12:00:00.001Z"));
+  it("is stable for the same issue number regardless of when it is called", () => {
+    // A Run spans an issue's whole lifecycle (impl → review → merge), so the id
+    // must not depend on the moment each Session is recorded.
+    expect(generateRunId(7, new Date("2026-06-28T12:00:00.000Z"))).toBe(
+      generateRunId(7, new Date("2030-01-01T00:00:00.000Z"))
+    );
+    expect(generateRunId(7, new Date("2026-06-28T12:00:00.000Z"))).toBe("run-issue-7");
+  });
+
+  it("yields distinct ids for distinct issue numbers", () => {
+    expect(generateRunId(1)).not.toBe(generateRunId(2));
+    expect(generateRunId(1)).toBe("run-issue-1");
+    expect(generateRunId(2)).toBe("run-issue-2");
+  });
+
+  it("ignores `now` entirely when an issue number is given", () => {
+    // The deterministic path must not bleed the timestamp in even if a Date is passed.
+    expect(generateRunId(99, new Date("2026-06-28T12:00:00.123Z"))).toBe("run-issue-99");
+  });
+
+  it("falls back to a per-invocation millisecond stamp when no issue is given", () => {
+    // Explicit undefined — the cross-issue Planner Session's id (no issue to bind to).
+    expect(generateRunId(undefined, new Date("2026-06-28T12:00:00.123Z"))).toBe(
+      "run-20260628120000123"
+    );
+    // No-arg form also stamps and never looks like an issue id.
+    expect(generateRunId().startsWith("run-")).toBe(true);
+    expect(generateRunId()).not.toMatch(/^run-issue-/);
+  });
+
+  it("produces unique per-invocation ids across distinct millisecond stamps", () => {
+    const a = generateRunId(undefined, new Date("2026-06-28T12:00:00.000Z"));
+    const b = generateRunId(undefined, new Date("2026-06-28T12:00:00.001Z"));
     expect(a).not.toBe(b);
   });
 });

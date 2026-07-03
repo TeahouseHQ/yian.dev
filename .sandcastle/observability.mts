@@ -233,7 +233,8 @@ export function lastSession(result: RunLike): SessionSlice {
  * usage, startedAt, endedAt, status }`, plus `error` on failed entries only.
  */
 export interface ManifestEntry {
-  /** Generated once per outer orchestrator iteration; shared by all sessions in it. */
+  /** Groups the Sessions of one issue's lifecycle (impl/rev/merger) as a deterministic
+   *  run-issue-<n>, or a per-invocation stamp for the cross-issue Planner (CONTEXT.md: Run). */
   readonly runId: string;
   /** Orchestrator phase that produced this session: planner | impl | rev | merger. */
   readonly phase: string;
@@ -319,12 +320,19 @@ export function buildFailedManifestEntry(
 }
 
 /**
- * Generate a fresh `runId` for one outer orchestrator iteration (shared by every
- * session in that iteration). Millisecond-stamped from the injected `now`, so
- * distinct iterations — always separated by at least one full agent Run — never
- * collide, while remaining deterministic and unit-testable.
+ * Generate a `runId`. When `issueNumber` is given, returns a deterministic
+ * `run-issue-<n>` id that is stable for that issue's whole lifecycle — its
+ * Implementer, Reviewer, and Merger Sessions all share it (mirrors the
+ * `sandcastle/issue-N` branch), so auditing everything that happened to an issue
+ * is a single lookup. When omitted, returns a unique per-invocation
+ * millisecond-stamped id — the cross-issue **Planner** Session's id, which has no
+ * issue to bind to (CONTEXT.md: Run). `now` is injectable for deterministic
+ * tests of the per-invocation path and is ignored on the deterministic path.
  */
-export function generateRunId(now: Date = new Date()): string {
+export function generateRunId(issueNumber?: number, now: Date = new Date()): string {
+  if (issueNumber !== undefined) {
+    return `run-issue-${issueNumber}`;
+  }
   const stamp = now.toISOString().replace(/[-:.TZ]/g, "");
   return `run-${stamp}`;
 }

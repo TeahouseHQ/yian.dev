@@ -40,8 +40,9 @@ const dockerSandbox = () => docker({ containerUid: 0, containerGid: 0 });
 
 // `sessionStorage.hostSessionsDir` MUST be passed to every pi() call or
 // capture/resume desync (ADR 0001). One shared absolute path relocates all
-// captured session JSONL into the repo under .sandcastle/sessions/. The same
-// runId is generated once per outer iteration and shared by every session in it.
+// captured session JSONL into the repo under .sandcastle/sessions/. Each Session
+// is tagged with its own runId: the Planner's is per-invocation, while an issue's
+// Implementer/Reviewer/Merger share an issue-derived run-issue-<n> (CONTEXT.md: Run).
 const piSessions = { sessionStorage: { hostSessionsDir: sessionsDir } };
 
 /**
@@ -92,14 +93,15 @@ async function recordedRun<R extends RunLike>(args: {
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
-  // One runId per outer iteration, shared by every Session (planner/impl/rev/merger) in it.
-  const runId = generateRunId();
+  // The Planner is cross-issue, so its Session gets a per-invocation runId with no
+  // issue binding — distinct from each issue's run-issue-<n> Run (CONTEXT.md: Run).
+  const plannerRunId = generateRunId();
 
   // Phase 1: Plan — orchestrator agent analyzes issues and picks parallelizable work
   const planLC = lifecycle("planner");
   planLC.start();
   const plan = await recordedRun({
-    runId,
+    runId: plannerRunId,
     phase: "planner",
     run: () =>
       sandcastle.run({
@@ -156,6 +158,10 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     issues.map(async (issue) => {
       await acquire();
       try {
+        // One issue-derived runId shared by this issue's Implementer, Reviewer, and
+        // Merger Sessions (mirrors the sandcastle/issue-N branch); stable across
+        // the issue's whole lifecycle (CONTEXT.md: Run).
+        const issueRunId = generateRunId(issue.number);
         const implLabel = "impl #" + issue.number;
         const implLC = lifecycle(implLabel);
         implLC.start();
@@ -177,7 +183,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         implLC.sandbox();
 
         const result = await recordedRun({
-          runId,
+          runId: issueRunId,
           phase: "impl",
           issue: issue.number,
           branch: issue.branch,
@@ -202,7 +208,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           const revLC = lifecycle(revLabel);
           revLC.start();
           const review = await recordedRun({
-            runId,
+            runId: issueRunId,
             phase: "rev",
             issue: issue.number,
             branch: issue.branch,
@@ -260,30 +266,47 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     continue;
   }
 
-  // Phase 3: Merge — one agent lands each ELIGIBLE PR (ready + `reviewed` label) via
-  // test-then-merge (gh pr merge --merge); draft or un-reviewed PRs are left for a human.
-  const mergeLC = lifecycle("merger");
-  mergeLC.start();
-  await recordedRun({
-    runId,
-    phase: "merger",
-    run: () =>
-      sandcastle.run({
-        sandbox: dockerSandbox(),
-        name: "Merger",
-        maxIterations: 10,
-        agent: sandcastle.pi(MODELS.MERGE, piSessions),
-        promptFile: "./.sandcastle/merge-prompt.md",
-        promptArgs: {
-          BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
-          ISSUES: completedIssues.map((i) => `- #${i.number}: ${i.title}`).join("\n"),
-        },
-        logging: observe("merger"),
-      }),
-  });
-  mergeLC.done();
+  // Phase 3: Merge — one Merger Session per eligible PR. Each issue's Merger shares
+  // that issue's runId with its Implementer/Reviewer (one Run spans one issue's full
+  // lifecycle), and runs test-then-merge in its own fresh sandbox. Per-PR merges also
+  // isolate a single failing merge from the others (ADR-0006 direction). The prompt's
+  // per-branch REVIEW GATE still skips any draft or un-`reviewed` PR for a human.
+  const mergeSettled = await Promise.allSettled(
+    completedIssues.map(async (issue) => {
+      const mergeLC = lifecycle("merger #" + issue.number);
+      mergeLC.start();
+      await recordedRun({
+        runId: generateRunId(issue.number),
+        phase: "merger",
+        issue: issue.number,
+        branch: issue.branch,
+        run: () =>
+          sandcastle.run({
+            sandbox: dockerSandbox(),
+            name: "Merger #" + issue.number,
+            maxIterations: 10,
+            agent: sandcastle.pi(MODELS.MERGE, piSessions),
+            promptFile: "./.sandcastle/merge-prompt.md",
+            promptArgs: {
+              BRANCHES: `- ${issue.branch}`,
+              ISSUES: `- #${issue.number}: ${issue.title}`,
+            },
+            logging: observe("merger #" + issue.number),
+          }),
+      });
+      mergeLC.done();
+    })
+  );
+  let merged = 0;
+  for (const [i, outcome] of mergeSettled.entries()) {
+    if (outcome.status === "rejected") {
+      console.error(`  ✗ merger #${completedIssues[i].number} failed: ${outcome.reason}`);
+    } else {
+      merged++;
+    }
+  }
 
-  console.log("\nBranches merged.");
+  console.log(`\n${merged} of ${completedIssues.length} PR(s) merged.`);
 }
 
 console.log("\nAll done.");

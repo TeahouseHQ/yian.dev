@@ -10,11 +10,17 @@
  * process** (never in-process — a crash in the loop must not take the Cockpit
  * down, ADR-0008). Enter **Start**s `tsx main.mts` with
  * `SANDCASTLE_EVENT_FORMAT=ndjson`; the child's stdout is the structured
- * **Live feed** (NDJSON, from #78), parsed line-by-line and rendered as a
- * scrolling **event log**. Enter again **Stop**s it (SIGTERM); Start after a
- * stop/crash restarts. The child's stderr (the per-agent sub-feed + any crash
- * trace) is surfaced dimmed in the same log. A child crash/exit is reported in
- * the UI (status line + a coloured log line) without unmounting the Cockpit.
+ * **Live feed** (NDJSON, from #78), parsed line-by-line and rendered as the full
+ * orchestrator monitor (issue #81): a status/Start-Stop header, a **pool gauge**
+ * (`N / POOL_SIZE` busy), an **in-flight list** of currently-running issues +
+ * phases, and a scrolling **event log**. The gauge and in-flight list derive
+ * purely from the event stream via `reduceLiveEvent` — a `dispatch` adds an
+ * entry, a `session-resolved` removes it — never from the Manifest (which only
+ * gains a row *after* a Session resolves, ADR-0008). Enter again **Stop**s it
+ * (SIGTERM); Start after a stop/crash restarts (resetting the monitor). The
+ * child's stderr (the per-agent sub-feed + any crash trace) is surfaced dimmed
+ * in the same log. A child crash/exit is reported in the UI (status line + a
+ * coloured log line) without unmounting the Cockpit.
  *
  * **Sessions** and **Maintenance** are placeholder tabs in this slice (their
  * standalone commands, `sandcastle:browse` / `sandcastle:prune`, still work).
@@ -41,9 +47,14 @@ import {
   appendLogLine,
   COCKPIT_TABS,
   cycleTab,
+  EMPTY_LIVE_VIEW,
   formatEventLog,
+  formatInFlight,
+  formatPoolGauge,
+  reduceLiveEvent,
   spawnOrchestrator,
   type CockpitTab,
+  type LiveView,
   type Supervisor,
 } from "./cockpit-core.mjs";
 import type { OrchestratorEvent } from "./events.mjs";
@@ -150,15 +161,41 @@ function statusColor(status: ChildStatus): string {
   }
 }
 
-/** The Live tab: status/Start-Stop header + the scrolling event log. */
+/** The in-flight panel: the pool gauge (busy/total slots) over the list of
+ *  currently-running Sessions, all folded from the event stream into `view`. */
+function InFlightPanel({ view }: { view: LiveView }): React.ReactElement {
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="gray">
+      <Box flexDirection="row">
+        <Text bold>Pool </Text>
+        <Text color="green">{formatPoolGauge(view)}</Text>
+      </Box>
+      {view.inflight.length === 0 ? (
+        <Text dimColor>no Sessions in flight</Text>
+      ) : (
+        view.inflight.map((entry) => (
+          <Text key={entry.issue} wrap="truncate-end">
+            · {formatInFlight(entry)}
+          </Text>
+        ))
+      )}
+    </Box>
+  );
+}
+
+/** The Live tab: status/Start-Stop header + pool gauge & in-flight list + the
+ *  scrolling event log. The gauge/list derive purely from the event stream via
+ *  `view` (never the Manifest — ADR-0008); the log is the same bounded ring. */
 function LiveTab({
   status,
   statusMessage,
+  view,
   log,
   height,
 }: {
   status: ChildStatus;
   statusMessage: string;
+  view: LiveView;
   log: LogEntry[];
   /** Max event-log rows to render (terminal-bounded; the log tail-follows). */
   height: number;
@@ -174,6 +211,9 @@ function LiveTab({
         </Text>
         <Text dimColor> — {statusMessage}</Text>
         <Text dimColor> · Enter to {action}</Text>
+      </Box>
+      <Box marginTop={1}>
+        <InFlightPanel view={view} />
       </Box>
       <Box
         flexDirection="column"
@@ -221,6 +261,9 @@ function Cockpit(): React.ReactElement {
   const [status, setStatus] = useState<ChildStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("not started");
   const [log, setLog] = useState<LogEntry[]>([]);
+  // The derived Live monitor state (pool gauge + in-flight list), folded from
+  // the event stream by the pure `reduceLiveEvent` — never the Manifest.
+  const [view, setView] = useState<LiveView>(EMPTY_LIVE_VIEW);
 
   // The live supervisor (null when no child is running). A ref, not state, so
   // the async stdout/exit handlers always see the current child without stale
@@ -236,9 +279,13 @@ function Cockpit(): React.ReactElement {
     if (supervisorRef.current) return;
     setStatus("running");
     setStatusMessage("running");
+    setView(EMPTY_LIVE_VIEW); // fresh monitor for this run (in-flight is non-durable)
     pushLog({ text: "▶ started orchestrator (tsx main.mts)", color: "cyan" });
     supervisorRef.current = spawnOrchestrator(ORCHESTRATOR_SPAWN, {
-      onEvent: (ev) => pushLog(eventEntry(ev)),
+      onEvent: (ev) => {
+        setView((v) => reduceLiveEvent(v, ev));
+        pushLog(eventEntry(ev));
+      },
       onStdoutRaw: (line) => pushLog({ text: line, dim: true }),
       onStderr: (line) => pushLog({ text: line, dim: true }),
       onExit: (exitStatus, message) => {
@@ -311,7 +358,13 @@ function Cockpit(): React.ReactElement {
       <TabBar tab={tab} />
       <Box flexDirection="column" flexGrow={1} marginTop={1}>
         {tab === "live" ? (
-          <LiveTab status={status} statusMessage={statusMessage} log={log} height={logHeight} />
+          <LiveTab
+            status={status}
+            statusMessage={statusMessage}
+            view={view}
+            log={log}
+            height={logHeight}
+          />
         ) : tab === "sessions" ? (
           <PlaceholderTab title="Sessions" hint="Standalone: `pnpm sandcastle:browse`" />
         ) : (

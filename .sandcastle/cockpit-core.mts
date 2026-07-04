@@ -307,6 +307,94 @@ export function spawnOrchestrator(config: SpawnConfig, handlers: OrchestratorHan
   };
 }
 
+/** One currently-running Session in the Live tab's in-flight list: an issue and
+ *  the **phase** (role) whose Session is running for it. Derived purely from the
+ *  structured event stream — an entry is added on `dispatch` and removed on
+ *  `session-resolved` (never from the Manifest, which only gains a row *after* a
+ *  Session resolves, ADR-0008). */
+export interface InFlightEntry {
+  readonly issue: number;
+  readonly role: "implementer" | "reviewer" | "merger";
+  /** The PR under review/merge; null for an Implementer (no PR yet). */
+  readonly pr: number | null;
+  /** The issue title (Implementer dispatch only; null for Reviewer/Merger). */
+  readonly title: string | null;
+}
+
+/** The Live tab's derived monitor state: the in-flight list plus the Pool size.
+ *  Everything the pool gauge and in-flight list render folds out of the event
+ *  stream into this — see {@link reduceLiveEvent}. */
+export interface LiveView {
+  /** Currently-running Sessions, one per issue, in dispatch order. */
+  readonly inflight: readonly InFlightEntry[];
+  /** Pool capacity (`POOL_SIZE`), learned from the first `tick`; null until then. */
+  readonly poolSize: number | null;
+}
+
+/** The zero state a fresh (or freshly restarted) Live monitor folds from. */
+export const EMPTY_LIVE_VIEW: LiveView = { inflight: [], poolSize: null };
+
+/**
+ * Fold one orchestrator event into the Live monitor view — the pure reducer
+ * behind the pool gauge and in-flight list (issue #81; ADR-0008). Only three
+ * event types move the view:
+ *
+ * - `dispatch` **adds** an in-flight entry, keyed by issue number so an issue
+ *   moving implement→review→merge replaces its phase in place (mirrors the
+ *   orchestrator's issue/PR-keyed In-flight set, CONTEXT.md) rather than stacking
+ *   duplicates.
+ * - `session-resolved` **removes** the entry for that issue.
+ * - `tick` captures `poolSize` for the gauge's denominator.
+ *
+ * Every other event leaves the view untouched (returned unchanged, same
+ * reference). Pure (view in, new view out; never mutates `view`) so the whole
+ * event→gauge/list derivation is unit-testable without the Ink layer.
+ */
+export function reduceLiveEvent(view: LiveView, event: OrchestratorEvent): LiveView {
+  switch (event.type) {
+    case "dispatch": {
+      const rest = view.inflight.filter((e) => e.issue !== event.issue);
+      const entry: InFlightEntry = {
+        issue: event.issue,
+        role: event.role,
+        pr: event.pr,
+        title: event.title,
+      };
+      return { ...view, inflight: [...rest, entry] };
+    }
+    case "session-resolved":
+      return { ...view, inflight: view.inflight.filter((e) => e.issue !== event.issue) };
+    case "tick":
+      return { ...view, poolSize: event.poolSize };
+    default:
+      return view;
+  }
+}
+
+/**
+ * The pool gauge label: how many Pool slots are busy vs total, `N / POOL_SIZE`.
+ * Busy is the derived in-flight count (kept in lock-step with the list), and the
+ * total is the Pool size learned from `tick` — rendered `?` until the first tick
+ * reports it. Pure so the exact string is unit-testable.
+ */
+export function formatPoolGauge(view: LiveView): string {
+  const total = view.poolSize === null ? "?" : String(view.poolSize);
+  return `${view.inflight.length} / ${total} busy`;
+}
+
+/**
+ * Render one in-flight entry as a compact `phase · what` line for the in-flight
+ * list: an Implementer shows its issue + title (`impl #12 · Add the widget`), a
+ * Reviewer/Merger shows the PR it is acting on (`rev PR #90 (#44)`). Pure so the
+ * exact strings are unit-testable.
+ */
+export function formatInFlight(entry: InFlightEntry): string {
+  if (entry.role === "implementer") {
+    return `impl #${entry.issue}${entry.title ? ` · ${entry.title}` : ""}`;
+  }
+  return `${roleAbbr(entry.role)} PR #${entry.pr} (#${entry.issue})`;
+}
+
 /** The compact role tag used in log lines: `impl` / `rev` / `merger`. Mirrors
  *  the labels the orchestrator's `lifecycle`/prose output already uses. */
 function roleAbbr(role: "implementer" | "reviewer" | "merger"): string {

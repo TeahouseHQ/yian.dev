@@ -6,8 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_WINDOW_DAYS,
   NO_WINDOW,
+  detailFields,
   filterEntries,
+  flattenTree,
   formatArguments,
+  formatDuration,
+  formatTimestamp,
   formatTranscriptUsage,
   groupRuns,
   isListMode,
@@ -19,6 +23,8 @@ import {
   renderTranscript,
   resolveCutoff,
   resolveTranscriptFile,
+  runIssue,
+  runSummaryFields,
   summarizeEntry,
   summarizeUsage,
   withinWindow,
@@ -616,5 +622,179 @@ describe("latestRunId (shares entryTime with groupRuns)", () => {
     expect(latestRunId(es)).toBe("run-b");
     // and matches groupRuns' first element
     expect(groupRuns(es)[0].runId).toBe("run-b");
+  });
+});
+
+// ---- detail + tree helpers (session browser, issue #73) ------------------
+
+describe("formatDuration", () => {
+  it("formats a sub-minute duration as Ns", () => {
+    expect(formatDuration("2026-06-28T12:11:30.000Z", "2026-06-28T12:11:00.000Z")).toBe("30s");
+  });
+
+  it("formats a sub-hour duration as Nm Ns", () => {
+    expect(formatDuration("2026-06-28T12:10:00.000Z", "2026-06-28T12:02:00.000Z")).toBe("8m 0s");
+  });
+
+  it("formats an hour+ duration as Nh Nm", () => {
+    expect(formatDuration("2026-06-28T13:04:00.000Z", "2026-06-28T12:02:00.000Z")).toBe("1h 2m");
+  });
+
+  it("returns 0s for equal timestamps", () => {
+    expect(formatDuration("2026-06-28T12:02:00.000Z", "2026-06-28T12:02:00.000Z")).toBe("0s");
+  });
+
+  it("returns (unknown) for unparseable or inverted timestamps", () => {
+    expect(formatDuration(null, "2026-06-28T12:02:00.000Z")).toBe("(unknown)");
+    // ended before started → invalid
+    expect(formatDuration("2026-06-28T12:02:00.000Z", "2026-06-28T12:10:00.000Z")).toBe(
+      "(unknown)"
+    );
+    expect(formatDuration(undefined, undefined)).toBe("(unknown)");
+  });
+});
+
+describe("formatTimestamp", () => {
+  it("formats an ISO timestamp in UTC deterministically", () => {
+    expect(formatTimestamp("2026-06-28T12:10:00.000Z")).toBe("2026-06-28 12:10:00 UTC");
+  });
+
+  it("returns (unknown) for an unparseable timestamp", () => {
+    expect(formatTimestamp("not-a-date")).toBe("(unknown)");
+    expect(formatTimestamp(null)).toBe("(unknown)");
+  });
+});
+
+describe("runIssue", () => {
+  it("returns the first non-null issue among a run's entries", () => {
+    const runs = groupRuns(entries);
+    const r = runs.find((x) => x.runId === "run-new");
+    // run-new mixes a planner(null) entry with impl(44) entries → 44
+    expect(runIssue(r)).toBe(44);
+  });
+
+  it("returns null when every entry is issue-less (a planner run)", () => {
+    const planner = { entries: [{ issue: null }, { issue: null }] };
+    expect(runIssue(planner)).toBeNull();
+  });
+});
+
+describe("detailFields", () => {
+  it("renders the full ordered field set for an ok session, including duration", () => {
+    const fields = detailFields(entries[2]); // impl #44, 3 commits, ok
+    expect(fields.map((f) => f.label)).toEqual([
+      "Phase",
+      "Issue",
+      "Branch",
+      "Started",
+      "Ended",
+      "Duration",
+      "Commits",
+      "Tokens",
+      "Status",
+    ]);
+    const map = Object.fromEntries(fields.map((f) => [f.label, f.value]));
+    expect(map.Phase).toBe("impl");
+    expect(map.Issue).toBe("#44");
+    expect(map.Branch).toBe("sandcastle/issue-44");
+    expect(map.Started).toBe("2026-06-28 12:02:00 UTC");
+    expect(map.Ended).toBe("2026-06-28 12:10:00 UTC");
+    expect(map.Duration).toBe("8m 0s");
+    expect(map.Commits).toBe("3 commits");
+    expect(map.Tokens).toBe("in=50  out=4  cacheRead=20  cacheWrite=2");
+    expect(map.Status).toBe("ok");
+  });
+
+  it("flags a failed session's Status with the error and pluralizes 0 commits", () => {
+    const map = Object.fromEntries(detailFields(entries[3]).map((f) => [f.label, f.value]));
+    expect(map.Status).toBe("failed: boom");
+    expect(map.Commits).toBe("0 commits");
+    expect(map.Duration).toBe("30s");
+  });
+
+  it("labels a planner (issue-less) session and a null branch", () => {
+    const map = Object.fromEntries(detailFields(entries[1]).map((f) => [f.label, f.value]));
+    expect(map.Issue).toBe("(planner)");
+    expect(map.Branch).toBe("(none)");
+  });
+});
+
+describe("runSummaryFields", () => {
+  it("summarizes a run's aggregate metadata", () => {
+    const r = groupRuns(entries).find((x) => x.runId === "run-new");
+    const map = Object.fromEntries(runSummaryFields(r).map((f) => [f.label, f.value]));
+    expect(map.Run).toBe("run-new");
+    expect(map.Issue).toBe("#44");
+    expect(map.Sessions).toBe("3 sessions");
+    expect(map["Total commits"]).toBe("3 commits"); // planner 0 + impl 3 + failed 0
+    expect(map.Phases).toBe("planner, impl");
+  });
+
+  it("labels a planner run and formats its newest ended timestamp", () => {
+    const planner = {
+      runId: "run-plan",
+      endedAt: Date.parse("2026-06-28T12:01:00.000Z"),
+      entries: [{ runId: "run-plan", phase: "planner", issue: null, commits: 0 }],
+    };
+    const map = Object.fromEntries(runSummaryFields(planner).map((f) => [f.label, f.value]));
+    expect(map.Issue).toBe("(planner)");
+    expect(map["Newest ended"]).toBe("2026-06-28 12:01:00 UTC");
+    expect(map.Phases).toBe("planner");
+  });
+
+  it("reports (unknown) when the run recorded no parseable endedAt", () => {
+    const r = { runId: "run-x", endedAt: -1, entries: [{ phase: "impl", commits: 1 }] };
+    const map = Object.fromEntries(runSummaryFields(r).map((f) => [f.label, f.value]));
+    expect(map["Newest ended"]).toBe("(unknown)");
+  });
+});
+
+describe("flattenTree", () => {
+  const runs = [
+    {
+      runId: "run-a",
+      endedAt: 2,
+      entries: [
+        { runId: "run-a", phase: "impl", issue: 1 },
+        { runId: "run-a", phase: "rev", issue: 1 },
+      ],
+    },
+    {
+      runId: "run-b",
+      endedAt: 1,
+      entries: [{ runId: "run-b", phase: "impl", issue: 2 }],
+    },
+  ];
+
+  it("emits a run row then its session rows when expanded", () => {
+    const rows = flattenTree(runs, new Set());
+    expect(rows.map((r) => [r.kind, r.runId])).toEqual([
+      ["run", "run-a"],
+      ["session", "run-a"],
+      ["session", "run-a"],
+      ["run", "run-b"],
+      ["session", "run-b"],
+    ]);
+    expect(rows[0].depth).toBe(0);
+    expect(rows[1].depth).toBe(1);
+    expect(rows[1].entry.phase).toBe("impl");
+  });
+
+  it("hides a collapsed run's sessions", () => {
+    const rows = flattenTree(runs, new Set(["run-a"]));
+    expect(rows.map((r) => [r.kind, r.runId])).toEqual([
+      ["run", "run-a"],
+      ["run", "run-b"],
+      ["session", "run-b"],
+    ]);
+  });
+
+  it("returns only run rows when every run is collapsed", () => {
+    const rows = flattenTree(runs, new Set(["run-a", "run-b"]));
+    expect(rows.map((r) => r.kind)).toEqual(["run", "run"]);
+  });
+
+  it("returns [] for an empty run list", () => {
+    expect(flattenTree([], new Set())).toEqual([]);
   });
 });

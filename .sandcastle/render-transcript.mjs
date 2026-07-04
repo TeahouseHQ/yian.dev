@@ -502,6 +502,60 @@ export function flattenTree(runs, collapsed) {
 }
 
 // ---------------------------------------------------------------------------
+// Transcript pager scroll (session browser, issue #74)
+// ---------------------------------------------------------------------------
+//
+// The final session-browser slice: `Enter` on a Session opens its rendered
+// Transcript in a full-screen pager (the rendered text comes from the reused
+// `resolveTranscriptFile` → `parseTranscript` → `renderTranscript` pipeline —
+// never reimplemented). Scrolling (j/k line, PgUp/PgDn page, g/G top/bottom) is
+// pure clamp math over the rendered lines; it lives here alongside the rest of
+// the query core and is unit-tested, exactly the ADR-0007 split.
+
+/** @typedef {"up" | "down" | "pageUp" | "pageDown" | "home" | "end"} PagerAction */
+
+/**
+ * Compute the next top-line offset for the transcript pager given a scroll
+ * action. Pure + injectable so the scroll/clamp rules are unit-tested in
+ * isolation — the off-by-one cases (page math, a transcript shorter than the
+ * viewport, a stale offset from a longer transcript) are exactly what a
+ * hand-rolled pager gets wrong.
+ *
+ * `height` is the number of visible rows; the max scroll is
+ * `max(0, lineCount - height)`, so a transcript shorter than the viewport pins
+ * to offset 0 (no scrolling past the end). `height` is floored at 1 so a
+ * degenerate terminal can't blow up the page math. An unknown action returns
+ * the current offset, re-clamped (so reopening a shorter transcript never
+ * leaves the viewport past the end).
+ * @param {number} offset current top line
+ * @param {number} lineCount total lines in the rendered transcript
+ * @param {number} height visible rows in the pager viewport
+ * @param {PagerAction | string} action
+ * @returns {number}
+ */
+export function pagerOffset(offset, lineCount, height, action) {
+  const h = Math.max(1, height);
+  const maxOffset = Math.max(0, lineCount - h);
+  const clamp = (n) => Math.max(0, Math.min(maxOffset, n));
+  switch (action) {
+    case "home":
+      return 0;
+    case "end":
+      return maxOffset;
+    case "up":
+      return clamp(offset - 1);
+    case "down":
+      return clamp(offset + 1);
+    case "pageUp":
+      return clamp(offset - h);
+    case "pageDown":
+      return clamp(offset + h);
+    default:
+      return clamp(offset);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Transcript parsing + rendering
 // ---------------------------------------------------------------------------
 

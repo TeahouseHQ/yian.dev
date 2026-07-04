@@ -24,7 +24,6 @@ import { Box, render, Text, useApp, useInput, useStdin } from "ink";
 
 import {
   DEFAULT_WINDOW_DAYS,
-  NO_WINDOW,
   groupRuns,
   manifestPath,
   parseWindowArgs,
@@ -83,6 +82,14 @@ function Browser({
   windowLabel: string;
   message?: string;
 }): React.ReactElement {
+  let body: React.ReactNode;
+  if (message != null) {
+    body = <Text color="yellow">{message}</Text>;
+  } else if (runs.length === 0) {
+    body = <Text color="yellow">No runs in this window.</Text>;
+  } else {
+    body = runs.map((run) => <RunBlock key={run.runId} run={run} />);
+  }
   return (
     <Box flexDirection="column">
       <Text bold color="cyan">
@@ -90,13 +97,7 @@ function Browser({
       </Text>
       <Text dimColor>Press q (or Ctrl-C) to quit.</Text>
       <Box flexDirection="column" marginTop={1}>
-        {message != null ? (
-          <Text color="yellow">{message}</Text>
-        ) : runs.length === 0 ? (
-          <Text color="yellow">No runs in this window.</Text>
-        ) : (
-          runs.map((run) => <RunBlock key={run.runId} run={run} />)
-        )}
+        {body}
       </Box>
       <QuitOnQ />
     </Box>

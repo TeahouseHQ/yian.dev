@@ -63,6 +63,20 @@ export function isVerbose(env: Env = process.env): boolean {
 }
 
 /**
+ * Which stream the per-agent Live-feed prose (lifecycle markers + observe
+ * stream lines) writes to. In structured-event mode
+ * (`SANDCASTLE_EVENT_FORMAT=ndjson`) the orchestrator's typed event stream owns
+ * stdout as one JSON object per line (see `events.mts`; ADR-0008), so this lossy
+ * per-agent prose yields stdout and moves to stderr — still glanceable to a
+ * developer watching the child process, but never corrupting the NDJSON the
+ * Cockpit parses. In prose mode (default) it stays on stdout, unchanged. Pure
+ * + env-injected so the routing is unit-testable in isolation.
+ */
+export function liveProseStream(env: Env = process.env): "stdout" | "stderr" {
+  return env.SANDCASTLE_EVENT_FORMAT === "ndjson" ? "stderr" : "stdout";
+}
+
+/**
  * Format one agent stream event as a single prefixed stdout line, or `null`
  * when the event is suppressed by the current verbosity.
  *
@@ -115,11 +129,18 @@ export interface LifecycleMarkers {
 
 /**
  * Bound prefixed lifecycle markers for `label`. Each call prints one
- * `formatLifecycleLine` to stdout.
+ * `formatLifecycleLine` — to stdout in prose mode, or to stderr in structured-
+ * event mode (so it never corrupts the NDJSON the Cockpit parses on stdout).
  */
 export function lifecycle(label: string): LifecycleMarkers {
-  const emit = (kind: LifecycleKind, detail?: number) =>
-    console.log(formatLifecycleLine(label, kind, detail));
+  const useStderr = liveProseStream() === "stderr";
+  const emit = (kind: LifecycleKind, detail?: number) => {
+    const line = formatLifecycleLine(label, kind, detail);
+    // Looked up at call time (not captured) so test spies on console.log/error
+    // intercept the write.
+    if (useStderr) console.error(line);
+    else console.log(line);
+  };
   return {
     start: () => emit("start"),
     done: () => emit("done"),
@@ -148,21 +169,27 @@ export function logPath(label: string, now: Date = new Date()): string {
 
 /**
  * Build a file-mode `logging` config whose `onAgentStreamEvent` prints prefixed
- * `toolCall` lines (plus `text`/`raw` when verbose) to the orchestrator's
- * stdout. Wire into every `pi()` agent `run()` via the `logging` option.
+ * `toolCall` lines (plus `text`/`raw` when verbose) — to stdout in prose mode,
+ * or to stderr in structured-event mode so it never corrupts the NDJSON the
+ * Cockpit parses on stdout. Wire into every `pi()` agent `run()` via the
+ * `logging` option.
  *
  * Verbosity is read once at construction time and threaded into both the
  * handler's suppression and sandcastle's own `logging.verbose`.
  */
 export function observe(label: string): LoggingOption {
   const verbose = isVerbose();
+  const useStderr = liveProseStream() === "stderr";
   return {
     type: "file",
     path: logPath(label),
     verbose,
     onAgentStreamEvent: (event: AgentStreamEvent) => {
       const line = formatStreamLine(label, event, verbose);
-      if (line !== null) console.log(line);
+      if (line === null) return;
+      // Looked up at call time (not captured) so test spies intercept the write.
+      if (useStderr) console.error(line);
+      else console.log(line);
     },
   };
 }

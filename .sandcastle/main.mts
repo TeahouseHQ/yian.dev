@@ -29,6 +29,7 @@ import {
   sessionsDir,
   type RunLike,
 } from "./observability.mts";
+import { createEvents } from "./events.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -122,7 +123,7 @@ async function ghOr(fallback: string, args: string[]): Promise<string> {
   try {
     return await gh(args);
   } catch (err) {
-    console.error(`  ⚠ gh ${args.join(" ")} failed: ${errorMessage(err)}`);
+    events.ghError(args, errorMessage(err));
     return fallback;
   }
 }
@@ -208,6 +209,13 @@ async function queryReviewMergePrs(): Promise<BucketPr[]> {
 /** The escalation `gh` runner handed to `handleImplementerOutcome`. */
 const escalateGh = { run: async (args: string[]) => void (await gh(args)) };
 
+/** The typed orchestrator event stream (ADR-0008): every progress moment
+ *  flows through this one emitter as a discriminated union, with a prose
+ *  renderer (default, headless output unchanged) and an NDJSON renderer
+ *  (`SANDCASTLE_EVENT_FORMAT=ndjson`, for the supervising Cockpit). Replaces
+ *  the ad-hoc `console.log`s that used to be scattered through this file. */
+const events = createEvents();
+
 // ── The persistent shared-pool orchestrator (ADR-0006) ──────────────────────
 //
 // One shared concurrency Pool of POOL_SIZE consumed by all three roles
@@ -282,6 +290,13 @@ async function dispatchImplementer(issue: {
         }),
     });
     implLC.commits(result.commits.length);
+    events.sessionResolved({
+      role: "implementer",
+      issue: issue.number,
+      branch: issue.branch,
+      status: "ok",
+      commits: result.commits.length,
+    });
 
     // No-op terminal handling (ADR-0006): zero commits → no draft PR → strip
     // ready-for-agent, add ready-for-human, comment, so it is not re-dispatched.
@@ -291,10 +306,17 @@ async function dispatchImplementer(issue: {
       escalateGh
     );
     if (escalated) {
-      console.log(`  ⚠ #${issue.number} produced no commits — escalated to ready-for-human.`);
+      events.noopEscalated(issue.number);
     }
   } catch (err) {
-    console.error(`  ✗ #${issue.number} (${issue.branch}) failed: ${errorMessage(err)}`);
+    events.sessionResolved({
+      role: "implementer",
+      issue: issue.number,
+      branch: issue.branch,
+      status: "failed",
+      commits: 0,
+      error: errorMessage(err),
+    });
   } finally {
     implLC.done();
     inflight.delete(issue.number);
@@ -337,7 +359,7 @@ async function dispatchReviewer(pr: {
     });
     lc.sandbox();
 
-    await recordedRun({
+    const result = await recordedRun({
       runId: issueRunId,
       phase: "rev",
       issue: pr.issue,
@@ -358,8 +380,22 @@ async function dispatchReviewer(pr: {
           logging: observe(label),
         }),
     });
+    events.sessionResolved({
+      role: "reviewer",
+      issue: pr.issue,
+      branch: pr.branch,
+      status: "ok",
+      commits: result.commits.length,
+    });
   } catch (err) {
-    console.error(`  ✗ rev #${pr.issue} (${pr.branch}) failed: ${errorMessage(err)}`);
+    events.sessionResolved({
+      role: "reviewer",
+      issue: pr.issue,
+      branch: pr.branch,
+      status: "failed",
+      commits: 0,
+      error: errorMessage(err),
+    });
   } finally {
     lc.done();
     inflight.delete(pr.issue);
@@ -391,7 +427,7 @@ async function dispatchMerger(pr: {
   const lc = lifecycle(label);
   lc.start();
   try {
-    await recordedRun({
+    const result = await recordedRun({
       runId: issueRunId,
       phase: "merger",
       issue: pr.issue,
@@ -432,8 +468,22 @@ async function dispatchMerger(pr: {
           logging: observe(label),
         }),
     });
+    events.sessionResolved({
+      role: "merger",
+      issue: pr.issue,
+      branch: pr.branch,
+      status: "ok",
+      commits: result.commits.length,
+    });
   } catch (err) {
-    console.error(`  ✗ merger #${pr.issue} (${pr.branch}) failed: ${errorMessage(err)}`);
+    events.sessionResolved({
+      role: "merger",
+      issue: pr.issue,
+      branch: pr.branch,
+      status: "failed",
+      commits: 0,
+      error: errorMessage(err),
+    });
   } finally {
     lc.done();
     inflight.delete(pr.issue);
@@ -467,7 +517,7 @@ async function runPlanner(): Promise<{ number: number; title: string; branch: st
 
   const planMatch = plan.stdout.match(/<plan>([\s\S]*?)<\/plan>/);
   if (!planMatch) {
-    console.error("Planner did not produce a <plan> tag.");
+    events.plannerNoPlan();
     return [];
   }
   const { issues } = JSON.parse(planMatch[1]) as {
@@ -478,12 +528,10 @@ async function runPlanner(): Promise<{ number: number; title: string; branch: st
 
 for (;;) {
   const free = pool.free();
-  console.log(
-    `\n=== Poll tick — ${free}/${POOL_SIZE} Pool slots free, ${inflight.size()} in-flight ===\n`
-  );
+  events.tick(free, POOL_SIZE, inflight.size());
 
   if (!shouldQueryBuckets(free)) {
-    console.log("Pool full — skipping gh query this tick.");
+    events.poolFull();
   } else {
     // One ready-for-agent issue query + one PR query feeds all three buckets:
     // the PR list is split into ready-for-merge / ready-for-review, and its
@@ -494,9 +542,11 @@ for (;;) {
     const readyForReview = filterReadyForReview(prs, inflight);
     const actionable = filterReadyForAgent(readyForAgent, inflight, openPrIssues);
 
-    console.log(
-      `buckets: ready-for-merge ${readyForMerge.length}, ready-for-review ${readyForReview.length}, ` +
-        `ready-for-agent ${readyForAgent.length} (${actionable.length} actionable).`
+    events.buckets(
+      readyForMerge.length,
+      readyForReview.length,
+      readyForAgent.length,
+      actionable.length
     );
 
     // Priority drain (ADR-0006): fill `free` slots merge → review → implement,
@@ -508,9 +558,7 @@ for (;;) {
     const mergers = pickPrs(readyForMerge, remaining, inflight);
     for (const pr of mergers) {
       inflight.add(pr.issue);
-      console.log(
-        `  → dispatching Merger for PR #${pr.prNumber} (issue #${pr.issue}) → ${pr.branch}`
-      );
+      events.dispatchMerger(pr.prNumber, pr.issue, pr.branch);
       void dispatchMerger(pr); // fire-and-forget; resolves across ticks.
     }
     remaining -= mergers.length;
@@ -519,9 +567,7 @@ for (;;) {
     const reviewers = pickPrs(readyForReview, remaining, inflight);
     for (const pr of reviewers) {
       inflight.add(pr.issue);
-      console.log(
-        `  → dispatching Reviewer for PR #${pr.prNumber} (issue #${pr.issue}) → ${pr.branch}`
-      );
+      events.dispatchReviewer(pr.prNumber, pr.issue, pr.branch);
       void dispatchReviewer(pr);
     }
     remaining -= reviewers.length;
@@ -533,7 +579,7 @@ for (;;) {
     if (shouldRunPlanner(actionable, remaining)) {
       try {
         const emitted = await runPlanner();
-        console.log(`Planner emitted ${emitted.length} unblocked issue(s).`);
+        events.plannerEmitted(emitted.length);
 
         // The Planner re-queries gh, so it can emit an issue that just got a PR
         // this tick — drop those before dispatching. (In-flight dedupe + the
@@ -543,18 +589,14 @@ for (;;) {
 
         for (const issue of toDispatch) {
           inflight.add(issue.number);
-          console.log(
-            `  → dispatching Implementer for #${issue.number}: ${issue.title} → ${issue.branch}`
-          );
+          events.dispatchImplementer(issue.number, issue.title, issue.branch);
           void dispatchImplementer(issue);
         }
       } catch (err) {
-        console.error(`Planner failed: ${errorMessage(err)}`);
+        events.plannerFailed(errorMessage(err));
       }
     } else {
-      console.log(
-        "No actionable ready-for-agent issues, or no free slot after merge+review draining — skipping Planner this tick."
-      );
+      events.plannerSkipped();
     }
   }
 

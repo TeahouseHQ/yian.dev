@@ -4,18 +4,24 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_WINDOW_DAYS,
+  NO_WINDOW,
   filterEntries,
   formatArguments,
   formatTranscriptUsage,
+  groupRuns,
   isListMode,
   latestRunId,
   parseArgs,
   parseTranscript,
+  parseWindowArgs,
   renderRunSummary,
   renderTranscript,
+  resolveCutoff,
   resolveTranscriptFile,
   summarizeEntry,
   summarizeUsage,
+  withinWindow,
 } from "./render-transcript.mjs";
 
 // A minimal but representative captured pi session JSONL: a user prompt, an
@@ -470,5 +476,145 @@ describe("resolveTranscriptFile", () => {
       dir
     );
     expect(got).toBeNull();
+  });
+});
+
+// ---- windowing + run grouping (session browser, issue #72) ---------------
+
+describe("parseWindowArgs", () => {
+  it("returns {} when neither flag is present (unknown flags ignored)", () => {
+    expect(parseWindowArgs([])).toEqual({});
+    expect(parseWindowArgs(["--foo", "bar"])).toEqual({});
+  });
+
+  it("parses --days as an integer in both space and equals forms", () => {
+    expect(parseWindowArgs(["--days", "7"])).toEqual({ days: 7 });
+    expect(parseWindowArgs(["--days=7"])).toEqual({ days: 7 });
+  });
+
+  it("parses --since as a string", () => {
+    expect(parseWindowArgs(["--since", "2026-07-01"])).toEqual({ since: "2026-07-01" });
+    expect(parseWindowArgs(["--since=2026-07-01T00:00:00Z"])).toEqual({
+      since: "2026-07-01T00:00:00Z",
+    });
+  });
+
+  it("lets --days and --since coexist (since wins at resolve time)", () => {
+    expect(parseWindowArgs(["--days", "3", "--since", "2026-07-01"])).toEqual({
+      days: 3,
+      since: "2026-07-01",
+    });
+  });
+
+  it("rejects a non-integer --days", () => {
+    expect(() => parseWindowArgs(["--days", "abc"])).toThrow(/days/i);
+  });
+
+  it("throws when a value is missing", () => {
+    expect(() => parseWindowArgs(["--days"])).toThrow(/requires a value/);
+    expect(() => parseWindowArgs(["--since"])).toThrow(/requires a value/);
+  });
+});
+
+describe("resolveCutoff", () => {
+  const now = new Date("2026-07-04T00:00:00.000Z");
+
+  it("pins DEFAULT_WINDOW_DAYS to 3", () => {
+    expect(DEFAULT_WINDOW_DAYS).toBe(3);
+  });
+
+  it("defaults to the last 3 days", () => {
+    // 2026-07-04 minus 3 days = 2026-07-01T00:00:00Z
+    expect(resolveCutoff({}, now)).toBe(Date.parse("2026-07-01T00:00:00.000Z"));
+    expect(resolveCutoff(undefined, now)).toBe(Date.parse("2026-07-01T00:00:00.000Z"));
+  });
+
+  it("honors --days N when provided", () => {
+    expect(resolveCutoff({ days: 1 }, now)).toBe(Date.parse("2026-07-03T00:00:00.000Z"));
+    expect(resolveCutoff({ days: 7 }, now)).toBe(Date.parse("2026-06-27T00:00:00.000Z"));
+  });
+
+  it("disables windowing for --days 0 or negative (NO_WINDOW)", () => {
+    expect(resolveCutoff({ days: 0 }, now)).toBe(NO_WINDOW);
+    expect(resolveCutoff({ days: -1 }, now)).toBe(NO_WINDOW);
+    expect(NO_WINDOW).toBe(-Infinity);
+  });
+
+  it("--since overrides --days and the default", () => {
+    expect(resolveCutoff({ days: 3, since: "2026-07-02" }, now)).toBe(
+      Date.parse("2026-07-02T00:00:00.000Z")
+    );
+  });
+
+  it("a non-parseable --since falls back to days/default (no throw)", () => {
+    expect(resolveCutoff({ since: "not-a-date" }, now)).toBe(
+      Date.parse("2026-07-01T00:00:00.000Z")
+    );
+  });
+});
+
+describe("withinWindow", () => {
+  const es = [
+    { runId: "a", endedAt: "2026-07-03T10:00:00.000Z" },
+    { runId: "b", endedAt: "2026-06-20T10:00:00.000Z" }, // before cutoff
+    { runId: "c", startedAt: "2026-07-02T10:00:00.000Z" }, // no endedAt → startedAt
+    { runId: "d" }, // no parseable time
+  ];
+
+  it("keeps entries at/after the cutoff (endedAt, with startedAt fallback)", () => {
+    const cutoff = Date.parse("2026-07-01T00:00:00.000Z");
+    expect(withinWindow(es, cutoff).map((e) => e.runId)).toEqual(["a", "c"]);
+  });
+
+  it("returns a copy of every entry for NO_WINDOW (does not drop no-time rows)", () => {
+    const got = withinWindow(es, NO_WINDOW);
+    expect(got).toHaveLength(es.length);
+    expect(got).not.toBe(es); // a defensive copy
+  });
+
+  it("drops only the no-time entries when the cutoff predates everything", () => {
+    const got = withinWindow(es, Date.parse("2000-01-01T00:00:00.000Z"));
+    expect(got.map((e) => e.runId)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("groupRuns", () => {
+  const es = [
+    { runId: "run-a", phase: "impl", endedAt: "2026-07-01T10:00:00.000Z" },
+    { runId: "run-a", phase: "rev", endedAt: "2026-07-02T10:00:00.000Z" },
+    { runId: "run-b", phase: "impl", endedAt: "2026-07-03T10:00:00.000Z" },
+    { runId: "run-c", phase: "impl", startedAt: "2026-06-20T10:00:00.000Z" },
+  ];
+
+  it("groups by runId and sorts newest-first by max endedAt", () => {
+    const got = groupRuns(es);
+    expect(got.map((r) => r.runId)).toEqual(["run-b", "run-a", "run-c"]);
+    expect(got[0].endedAt).toBe(Date.parse("2026-07-03T10:00:00.000Z"));
+    expect(got[1].endedAt).toBe(Date.parse("2026-07-02T10:00:00.000Z")); // max of run-a
+  });
+
+  it("keeps each run's entries in manifest (append) order", () => {
+    const a = groupRuns(es).find((r) => r.runId === "run-a");
+    expect(a.entries.map((e) => e.phase)).toEqual(["impl", "rev"]);
+  });
+
+  it("returns [] for an empty manifest", () => {
+    expect(groupRuns([])).toEqual([]);
+  });
+
+  it("reports endedAt -1 when none of a run's entries parse", () => {
+    expect(groupRuns([{ runId: "run-x", phase: "impl" }])[0].endedAt).toBe(-1);
+  });
+});
+
+describe("latestRunId (shares entryTime with groupRuns)", () => {
+  it("still returns the runId whose latest entry ended most recently", () => {
+    const es = [
+      { runId: "run-a", endedAt: "2026-07-01T10:00:00.000Z" },
+      { runId: "run-b", endedAt: "2026-07-03T10:00:00.000Z" },
+    ];
+    expect(latestRunId(es)).toBe("run-b");
+    // and matches groupRuns' first element
+    expect(groupRuns(es)[0].runId).toBe("run-b");
   });
 });

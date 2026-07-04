@@ -63,10 +63,10 @@ function RunBlock({ run }: { run: Run }): React.ReactElement {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text bold>
-        Run {run.runId}  ({n} session{n === 1 ? "" : "s"})
+        Run {run.runId} ({n} session{n === 1 ? "" : "s"})
       </Text>
       {run.entries.map((e, i) => (
-        <Text key={i}>  {summarizeEntry(e)}</Text>
+        <Text key={i}> {summarizeEntry(e)}</Text>
       ))}
     </Box>
   );
@@ -160,7 +160,9 @@ async function main(): Promise<void> {
   }
 
   if (entries.length === 0) {
-    render(<Browser runs={[]} windowLabel={windowLabel} message={`Manifest is empty: ${manifestPath}`} />);
+    render(
+      <Browser runs={[]} windowLabel={windowLabel} message={`Manifest is empty: ${manifestPath}`} />
+    );
     return;
   }
 

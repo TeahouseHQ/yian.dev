@@ -27,6 +27,17 @@ RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d 
 # Install pi coding agent
 RUN npm install -g @earendil-works/pi-coding-agent
 
+# Enable pnpm (this repo is pnpm-only; package.json pins
+# "packageManager": "pnpm@9.15.4"). The base node:22 image ships corepack but
+# does not enable it, so without this `pnpm` is not on PATH and every
+# onSandboxReady `pnpm install ...` hook fails with exit 127 (command not found).
+# `corepack enable` installs the pnpm shim; `prepare --activate` pre-fetches the
+# pinned version into COREPACK_HOME so runtime needs no network to resolve it.
+# COREPACK_HOME is set to a fixed path (not $HOME/.cache) so the version baked in
+# at build time is still found at runtime, where HOME=/home/agent.
+ENV COREPACK_HOME=/home/agent/.cache/node/corepack
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
 # Bake glm-5.1 LiteLLM provider config into the image (issue #49).
 # pi reads ~/.pi/agent/models.json at startup; containerUid: 0 means the
 # container runs as root, so /home/agent/.pi/agent is owned by root and no
@@ -35,7 +46,10 @@ RUN npm install -g @earendil-works/pi-coding-agent
 # for why bridge -> Tailscale IP is the only working network path.
 # $LITELLM_API_KEY is resolved at request time from the container env.
 # COPY auto-creates /home/agent/.pi/agent, so no preceding mkdir is needed.
-COPY .sandcastle/models.json /home/agent/.pi/agent/models.json
+# NOTE: `sandcastle docker build-image` uses the .sandcastle/ directory as the
+# build context (docker build <.sandcastle>), so COPY sources are relative to
+# .sandcastle/ — use `models.json`, not `.sandcastle/models.json`.
+COPY models.json /home/agent/.pi/agent/models.json
 
 # Run as root. Under ROOTLESS Docker (this machine), the container's root maps
 # to the host user that owns the bind-mounted worktree, so root is the ONLY

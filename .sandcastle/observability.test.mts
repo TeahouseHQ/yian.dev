@@ -14,6 +14,7 @@ import {
   isVerbose,
   lastSession,
   lifecycle,
+  liveProseStream,
   logPath,
   manifestPath,
   observe,
@@ -107,6 +108,22 @@ describe("isVerbose", () => {
   });
 });
 
+describe("liveProseStream", () => {
+  afterEach(() => {
+    delete process.env.SANDCASTLE_EVENT_FORMAT;
+  });
+
+  it("defaults to stdout in prose mode so headless output is unchanged", () => {
+    expect(liveProseStream({})).toBe("stdout");
+    expect(liveProseStream({ SANDCASTLE_EVENT_FORMAT: undefined })).toBe("stdout");
+    expect(liveProseStream({ SANDCASTLE_EVENT_FORMAT: "prose" })).toBe("stdout");
+  });
+
+  it("yields stdout to the NDJSON stream by moving per-agent prose to stderr", () => {
+    expect(liveProseStream({ SANDCASTLE_EVENT_FORMAT: "ndjson" })).toBe("stderr");
+  });
+});
+
 describe("logPath", () => {
   it("writes a deterministic .log file under .sandcastle/logs, slug-stamped by label", () => {
     const path = logPath("impl #44", new Date("2026-06-28T12:00:00.123Z"));
@@ -122,6 +139,7 @@ describe("logPath", () => {
 describe("observe", () => {
   afterEach(() => {
     delete process.env.SANDCASTLE_VERBOSE;
+    delete process.env.SANDCASTLE_EVENT_FORMAT;
   });
 
   it("returns a file-mode logging config with an onAgentStreamEvent handler", () => {
@@ -154,9 +172,25 @@ describe("observe", () => {
     expect(log).toHaveBeenCalledWith("[impl #44] ▶ Bash(pnpm test)");
     log.mockRestore();
   });
+
+  it("routes stream prose to stderr in structured-event mode so stdout stays pure NDJSON", () => {
+    process.env.SANDCASTLE_EVENT_FORMAT = "ndjson";
+    const cfg = observe("impl #44");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    cfg.onAgentStreamEvent(toolCall());
+    expect(log).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("[impl #44] ▶ Bash(pnpm test)");
+    log.mockRestore();
+    error.mockRestore();
+  });
 });
 
 describe("lifecycle", () => {
+  afterEach(() => {
+    delete process.env.SANDCASTLE_EVENT_FORMAT;
+  });
+
   it("prints the formatted marker line for each kind", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const lc = lifecycle("impl #44");
@@ -169,6 +203,18 @@ describe("lifecycle", () => {
     expect(log).toHaveBeenNthCalledWith(3, "[impl #44] ✓ 2 commits");
     expect(log).toHaveBeenNthCalledWith(4, "[impl #44] ● done");
     log.mockRestore();
+  });
+
+  it("routes markers to stderr in structured-event mode so stdout stays pure NDJSON", () => {
+    process.env.SANDCASTLE_EVENT_FORMAT = "ndjson";
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const lc = lifecycle("impl #44");
+    lc.done();
+    expect(log).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("[impl #44] ● done");
+    log.mockRestore();
+    error.mockRestore();
   });
 });
 

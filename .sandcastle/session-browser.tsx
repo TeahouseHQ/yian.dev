@@ -468,7 +468,7 @@ function Browser({
     setCollapsed(next);
   }, [current, collapsed]);
 
-  /** Toggle the cursor's run between collapsed/expanded (Space / ←/→ / Enter-on-run). */
+  /** Toggle the cursor's run between collapsed/expanded (Space / Enter-on-run). */
   const toggleCurrent = useCallback(() => {
     if (!current) return;
     if (collapsed.has(current.runId)) expandCurrent();

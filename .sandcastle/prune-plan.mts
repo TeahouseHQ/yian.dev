@@ -98,9 +98,7 @@ export function planPrune(state: PruneState): PrunePlan {
 
   // Merger scratch is its own bucket (force-delete); pull it out of the
   // reachability-gated set so a branch is never in two buckets at once.
-  const mergedScoped = new Set(
-    [...mergedBranches].filter((b) => !mergerBranches.has(b))
-  );
+  const mergedScoped = new Set([...mergedBranches].filter((b) => !mergerBranches.has(b)));
 
   const mergedWorktrees = worktrees.filter(
     (w) => w.path !== repoRoot && w.branch !== null && mergedScoped.has(w.branch)
@@ -110,9 +108,7 @@ export function planPrune(state: PruneState): PrunePlan {
 
   // A merged branch whose dirty worktree we are keeping stays in place.
   const blockedBranches = new Set(dirtyWorktrees.map((w) => w.branch as string));
-  const deletableBranches = [...mergedScoped]
-    .filter((b) => !blockedBranches.has(b))
-    .sort();
+  const deletableBranches = [...mergedScoped].filter((b) => !blockedBranches.has(b)).sort();
 
   const mergerWorktrees = worktrees.filter(
     (w) => w.path !== repoRoot && w.branch !== null && mergerBranches.has(w.branch)
@@ -120,9 +116,7 @@ export function planPrune(state: PruneState): PrunePlan {
   const removableMergerWorktrees = mergerWorktrees.filter((w) => !w.dirty);
   const dirtyMergerWorktrees = mergerWorktrees.filter((w) => w.dirty);
 
-  const blockedMergerBranches = new Set(
-    dirtyMergerWorktrees.map((w) => w.branch as string)
-  );
+  const blockedMergerBranches = new Set(dirtyMergerWorktrees.map((w) => w.branch as string));
   const deletableMergerBranches = [...mergerBranches]
     .filter((b) => !blockedMergerBranches.has(b))
     .sort();

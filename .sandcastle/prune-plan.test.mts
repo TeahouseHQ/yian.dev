@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  planPrune,
-  type PruneState,
-  type WorktreeState,
-} from "./prune-plan.mts";
+import { planPrune, type PruneState, type WorktreeState } from "./prune-plan.mts";
 
 /**
  * #79 — the pure half of `sandcastle:prune` (ADR-0004). `planPrune` takes the
@@ -62,7 +58,10 @@ describe("planPrune — merged worktrees", () => {
   it("removes a clean merged worktree and deletes its branch", () => {
     const plan = planPrune(
       state({
-        worktrees: [wt(ROOT, "main"), wt(`${ROOT}/.sandcastle/worktrees/wt-1`, "sandcastle/issue-1")],
+        worktrees: [
+          wt(ROOT, "main"),
+          wt(`${ROOT}/.sandcastle/worktrees/wt-1`, "sandcastle/issue-1"),
+        ],
         mergedBranches: new Set(["sandcastle/issue-1"]),
       })
     );
@@ -115,7 +114,10 @@ describe("planPrune — merged worktrees", () => {
   it("ignores a worktree whose branch is not merged", () => {
     const plan = planPrune(
       state({
-        worktrees: [wt(ROOT, "main"), wt(`${ROOT}/.sandcastle/worktrees/wt-3`, "sandcastle/issue-3")],
+        worktrees: [
+          wt(ROOT, "main"),
+          wt(`${ROOT}/.sandcastle/worktrees/wt-3`, "sandcastle/issue-3"),
+        ],
         mergedBranches: new Set(), // nothing merged
       })
     );
@@ -198,7 +200,11 @@ describe("planPrune — combined behaviour", () => {
   it("sorts both branch lists lexicographically", () => {
     const plan = planPrune(
       state({
-        mergedBranches: new Set(["sandcastle/issue-9", "sandcastle/issue-10", "sandcastle/issue-1"]),
+        mergedBranches: new Set([
+          "sandcastle/issue-9",
+          "sandcastle/issue-10",
+          "sandcastle/issue-1",
+        ]),
         mergerBranches: new Set(["sandcastle/merge-9", "sandcastle/merge-1"]),
       })
     );
@@ -254,7 +260,10 @@ describe("planPrune — combined behaviour", () => {
       })
     );
 
-    expect(plan.runLogs).toEqual([`${ROOT}/.sandcastle/logs/a.log`, `${ROOT}/.sandcastle/logs/b.log`]);
+    expect(plan.runLogs).toEqual([
+      `${ROOT}/.sandcastle/logs/a.log`,
+      `${ROOT}/.sandcastle/logs/b.log`,
+    ]);
     expect(plan.removableWorktrees.map((w) => w.branch)).toEqual(["sandcastle/issue-1"]);
     // issue-2 blocked by its dirty worktree; issue-1 and issue-3 deletable
     expect(plan.deletableBranches).toEqual(["sandcastle/issue-1", "sandcastle/issue-3"]);
@@ -311,26 +320,20 @@ describe("planPrune — equivalence with the pre-refactor categorization", () =>
     // NOTE: the legacy CLI excluded merger branches from mergedBranches at
     // discovery time; planPrune does that exclusion itself, so feed it the
     // un-excluded set and let the legacy path apply the same exclusion.
-    const mergedScoped = new Set(
-      [...mergedBranches].filter((b) => !mergerBranches.has(b))
-    );
+    const mergedScoped = new Set([...mergedBranches].filter((b) => !mergerBranches.has(b)));
     const mergedWorktrees = worktrees.filter(
       (w) => w.path !== repoRoot && w.branch && mergedScoped.has(w.branch)
     );
     const dirtyWorktrees = mergedWorktrees.filter((w) => w.dirty);
     const removableWorktrees = mergedWorktrees.filter((w) => !w.dirty);
     const blockedBranches = new Set(dirtyWorktrees.map((w) => w.branch as string));
-    const deletableBranches = [...mergedScoped]
-      .filter((b) => !blockedBranches.has(b))
-      .sort();
+    const deletableBranches = [...mergedScoped].filter((b) => !blockedBranches.has(b)).sort();
     const mergerWorktrees = worktrees.filter(
       (w) => w.path !== repoRoot && w.branch && mergerBranches.has(w.branch)
     );
     const dirtyMergerWorktrees = mergerWorktrees.filter((w) => w.dirty);
     const removableMergerWorktrees = mergerWorktrees.filter((w) => !w.dirty);
-    const blockedMergerBranches = new Set(
-      dirtyMergerWorktrees.map((w) => w.branch as string)
-    );
+    const blockedMergerBranches = new Set(dirtyMergerWorktrees.map((w) => w.branch as string));
     const deletableMergerBranches = [...mergerBranches]
       .filter((b) => !blockedMergerBranches.has(b))
       .sort();

@@ -103,9 +103,11 @@ const mergedBranches = new Set(
 );
 
 // Tag each worktree with its dirty flag — but only for candidates (a non-root
-// worktree whose branch is in the merged or Merger set). This preserves the
-// original git-call footprint exactly: `isDirty` never runs on the repo root or
-// on non-candidate worktrees, and a candidate is always non-root like before.
+// worktree whose branch is in the merged or Merger set). `isDirty` runs on the
+// same worktrees as before — never on the repo root or a non-candidate — so no
+// new `git status` call can surface or error. (It now runs once per candidate
+// rather than the original's twice; `isDirty` is a pure read, so plan output is
+// unchanged.)
 const candidateBranches = new Set([...mergedBranches, ...mergerBranches]);
 const annotatedWorktrees: WorktreeState[] = worktrees.map((w) => ({
   path: w.path,

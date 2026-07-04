@@ -5,8 +5,12 @@ import {
   COCKPIT_TABS,
   cycleTab,
   describeChildExit,
+  EMPTY_LIVE_VIEW,
   formatEventLog,
+  formatInFlight,
+  formatPoolGauge,
   parseEventLine,
+  reduceLiveEvent,
   spawnOrchestrator,
   splitNdjsonChunk,
   type OrchestratorHandlers,
@@ -208,6 +212,184 @@ describe("appendLogLine", () => {
     const input = ["a", "b"];
     appendLogLine(input, "c", 5);
     expect(input).toEqual(["a", "b"]);
+  });
+});
+
+// ── reduceLiveEvent: the pure event→Live-view fold (pool gauge + in-flight) ──
+
+describe("reduceLiveEvent", () => {
+  it("adds an in-flight entry when a Session is dispatched", () => {
+    const view = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({
+        type: "dispatch",
+        role: "implementer",
+        issue: 12,
+        branch: "sandcastle/issue-12",
+        pr: null,
+        title: "Add the widget",
+      })
+    );
+    expect(view.inflight).toEqual([
+      { issue: 12, role: "implementer", pr: null, title: "Add the widget" },
+    ]);
+  });
+
+  it("removes an in-flight entry when its Session resolves", () => {
+    const dispatched = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({
+        type: "dispatch",
+        role: "implementer",
+        issue: 12,
+        branch: "sandcastle/issue-12",
+        pr: null,
+        title: "Add the widget",
+      })
+    );
+    const resolved = reduceLiveEvent(
+      dispatched,
+      evt({
+        type: "session-resolved",
+        role: "implementer",
+        issue: 12,
+        branch: "sandcastle/issue-12",
+        status: "ok",
+        commits: 2,
+        error: null,
+      })
+    );
+    expect(resolved.inflight).toEqual([]);
+  });
+
+  it("removes on resolution regardless of outcome (a FAILED Session too)", () => {
+    const dispatched = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "dispatch", role: "reviewer", issue: 44, branch: "b", pr: 90, title: null })
+    );
+    const resolved = reduceLiveEvent(
+      dispatched,
+      evt({
+        type: "session-resolved",
+        role: "reviewer",
+        issue: 44,
+        branch: "b",
+        status: "failed",
+        commits: 0,
+        error: "boom",
+      })
+    );
+    expect(resolved.inflight).toEqual([]);
+  });
+
+  it("keeps one entry per issue: a later phase replaces the earlier in place", () => {
+    let view = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "dispatch", role: "implementer", issue: 12, branch: "b", pr: null, title: "T" })
+    );
+    view = reduceLiveEvent(
+      view,
+      evt({ type: "dispatch", role: "reviewer", issue: 12, branch: "b", pr: 90, title: null })
+    );
+    expect(view.inflight).toEqual([{ issue: 12, role: "reviewer", pr: 90, title: null }]);
+  });
+
+  it("tracks several distinct issues in dispatch order", () => {
+    let view = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "dispatch", role: "implementer", issue: 12, branch: "b", pr: null, title: "A" })
+    );
+    view = reduceLiveEvent(
+      view,
+      evt({ type: "dispatch", role: "merger", issue: 44, branch: "b", pr: 90, title: null })
+    );
+    expect(view.inflight.map((e) => e.issue)).toEqual([12, 44]);
+  });
+
+  it("captures the Pool size from a tick for the gauge denominator", () => {
+    const view = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "tick", free: 3, poolSize: 10, inflight: 7 })
+    );
+    expect(view.poolSize).toBe(10);
+    expect(view.inflight).toEqual([]);
+  });
+
+  it("leaves the view unchanged (same reference) for unrelated events", () => {
+    const seeded = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "dispatch", role: "implementer", issue: 12, branch: "b", pr: null, title: "A" })
+    );
+    const after = reduceLiveEvent(seeded, evt({ type: "pool-full" }));
+    expect(after).toBe(seeded);
+  });
+
+  it("ignores a resolution for an issue that is not in flight (no-op)", () => {
+    const seeded = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "dispatch", role: "implementer", issue: 12, branch: "b", pr: null, title: "A" })
+    );
+    const after = reduceLiveEvent(
+      seeded,
+      evt({
+        type: "session-resolved",
+        role: "implementer",
+        issue: 99,
+        branch: "b",
+        status: "ok",
+        commits: 1,
+        error: null,
+      })
+    );
+    expect(after.inflight.map((e) => e.issue)).toEqual([12]);
+  });
+
+  it("does not mutate the input view", () => {
+    const input = EMPTY_LIVE_VIEW;
+    reduceLiveEvent(
+      input,
+      evt({ type: "dispatch", role: "implementer", issue: 12, branch: "b", pr: null, title: "A" })
+    );
+    expect(input.inflight).toEqual([]);
+  });
+});
+
+// ── formatPoolGauge: busy vs total slots, N / POOL_SIZE ──────────────────────
+
+describe("formatPoolGauge", () => {
+  it("shows busy over total once a tick has reported the Pool size", () => {
+    let view = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "tick", free: 8, poolSize: 10, inflight: 2 })
+    );
+    view = reduceLiveEvent(
+      view,
+      evt({ type: "dispatch", role: "implementer", issue: 12, branch: "b", pr: null, title: "A" })
+    );
+    expect(formatPoolGauge(view)).toBe("1 / 10 busy");
+  });
+
+  it("renders the total as ? before the first tick reports the Pool size", () => {
+    expect(formatPoolGauge(EMPTY_LIVE_VIEW)).toBe("0 / ? busy");
+  });
+});
+
+// ── formatInFlight: one in-flight entry → a compact phase line ───────────────
+
+describe("formatInFlight", () => {
+  it("renders an Implementer with its issue and title", () => {
+    expect(
+      formatInFlight({ issue: 12, role: "implementer", pr: null, title: "Add the widget" })
+    ).toBe("impl #12 · Add the widget");
+  });
+
+  it("renders a Reviewer/Merger with the PR it is acting on", () => {
+    expect(formatInFlight({ issue: 44, role: "reviewer", pr: 90, title: null })).toBe(
+      "rev PR #90 (#44)"
+    );
+    expect(formatInFlight({ issue: 44, role: "merger", pr: 90, title: null })).toBe(
+      "merger PR #90 (#44)"
+    );
   });
 });
 

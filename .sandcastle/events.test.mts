@@ -14,7 +14,10 @@ import {
  * formatters are exercised against stable inputs (the prose formatters ignore
  * `ts`; the NDJSON formatter includes it).
  */
-function evt(event: Omit<OrchestratorEvent, "ts">, ts = "2026-07-04T10:00:00.000Z"): OrchestratorEvent {
+function evt(
+  event: Omit<OrchestratorEvent, "ts">,
+  ts = "2026-07-04T10:00:00.000Z"
+): OrchestratorEvent {
   return { ...(event as object), ts } as OrchestratorEvent;
 }
 
@@ -22,12 +25,8 @@ function evt(event: Omit<OrchestratorEvent, "ts">, ts = "2026-07-04T10:00:00.000
 
 describe("formatEventProse", () => {
   it("reproduces the Poll-tick header (leading + trailing blank line)", () => {
-    const line = formatEventProse(
-      evt({ type: "tick", free: 3, poolSize: 10, inflight: 7 })
-    );
-    expect(line).toBe(
-      "\n=== Poll tick — 3/10 Pool slots free, 7 in-flight ===\n"
-    );
+    const line = formatEventProse(evt({ type: "tick", free: 3, poolSize: 10, inflight: 7 }));
+    expect(line).toBe("\n=== Poll tick — 3/10 Pool slots free, 7 in-flight ===\n");
   });
 
   it("reproduces the pool-full skip line", () => {
@@ -38,12 +37,8 @@ describe("formatEventProse", () => {
 
   it("reproduces the buckets counts line", () => {
     expect(
-      formatEventProse(
-        evt({ type: "buckets", merge: 1, review: 2, agent: 5, actionable: 3 })
-      )
-    ).toBe(
-      "buckets: ready-for-merge 1, ready-for-review 2, ready-for-agent 5 (3 actionable)."
-    );
+      formatEventProse(evt({ type: "buckets", merge: 1, review: 2, agent: 5, actionable: 3 }))
+    ).toBe("buckets: ready-for-merge 1, ready-for-review 2, ready-for-agent 5 (3 actionable).");
   });
 
   it("reproduces the Merger dispatch line (pr + issue + branch)", () => {
@@ -58,9 +53,7 @@ describe("formatEventProse", () => {
           title: null,
         })
       )
-    ).toBe(
-      "  → dispatching Merger for PR #90 (issue #44) → sandcastle/issue-44"
-    );
+    ).toBe("  → dispatching Merger for PR #90 (issue #44) → sandcastle/issue-44");
   });
 
   it("reproduces the Reviewer dispatch line", () => {
@@ -75,9 +68,7 @@ describe("formatEventProse", () => {
           title: null,
         })
       )
-    ).toBe(
-      "  → dispatching Reviewer for PR #90 (issue #44) → sandcastle/issue-44"
-    );
+    ).toBe("  → dispatching Reviewer for PR #90 (issue #44) → sandcastle/issue-44");
   });
 
   it("reproduces the Implementer dispatch line (title, no pr)", () => {
@@ -92,9 +83,7 @@ describe("formatEventProse", () => {
           title: "Fix the thing",
         })
       )
-    ).toBe(
-      "  → dispatching Implementer for #44: Fix the thing → sandcastle/issue-44"
-    );
+    ).toBe("  → dispatching Implementer for #44: Fix the thing → sandcastle/issue-44");
   });
 
   it("reproduces the Planner-emitted count line", () => {
@@ -116,9 +105,9 @@ describe("formatEventProse", () => {
   });
 
   it("reproduces the Planner-failed line", () => {
-    expect(
-      formatEventProse(evt({ type: "planner-failed", error: "boom" }))
-    ).toBe("Planner failed: boom");
+    expect(formatEventProse(evt({ type: "planner-failed", error: "boom" }))).toBe(
+      "Planner failed: boom"
+    );
   });
 
   it("reproduces the no-op Implementer escalation line", () => {
@@ -238,9 +227,9 @@ describe("eventStream", () => {
   it("routes the orchestrator progress events to stdout", () => {
     expect(eventStream(evt({ type: "tick", free: 1, poolSize: 10, inflight: 0 }))).toBe("stdout");
     expect(eventStream(evt({ type: "pool-full" }))).toBe("stdout");
-    expect(eventStream(evt({ type: "buckets", merge: 0, review: 0, agent: 0, actionable: 0 }))).toBe(
-      "stdout"
-    );
+    expect(
+      eventStream(evt({ type: "buckets", merge: 0, review: 0, agent: 0, actionable: 0 }))
+    ).toBe("stdout");
     expect(
       eventStream(
         evt({ type: "dispatch", role: "merger", issue: 1, branch: "b", pr: 2, title: null })
@@ -404,9 +393,7 @@ describe("createEvents", () => {
     });
     expect(out).not.toHaveBeenCalled();
     expect(err).toHaveBeenCalledTimes(1);
-    expect(err).toHaveBeenCalledWith(
-      "  ✗ rev #9 (sandcastle/issue-9) failed: kaboom"
-    );
+    expect(err).toHaveBeenCalledWith("  ✗ rev #9 (sandcastle/issue-9) failed: kaboom");
   });
 
   it("in ndjson mode writes every event as one JSON object to `out` (incl. silent-in-prose ones)", () => {
@@ -434,7 +421,13 @@ describe("createEvents", () => {
     const first = JSON.parse(out.mock.calls[0][0] as string) as Record<string, unknown>;
     const second = JSON.parse(out.mock.calls[1][0] as string) as Record<string, unknown>;
     const third = JSON.parse(out.mock.calls[2][0] as string) as Record<string, unknown>;
-    expect(first).toEqual({ type: "tick", free: 3, poolSize: 10, inflight: 7, ts: "2026-07-04T10:00:00.000Z" });
+    expect(first).toEqual({
+      type: "tick",
+      free: 3,
+      poolSize: 10,
+      inflight: 7,
+      ts: "2026-07-04T10:00:00.000Z",
+    });
     expect(second).toEqual({
       type: "session-resolved",
       role: "implementer",
@@ -445,7 +438,11 @@ describe("createEvents", () => {
       error: null,
       ts: "2026-07-04T10:00:00.000Z",
     });
-    expect(third).toEqual({ type: "planner-failed", error: "boom", ts: "2026-07-04T10:00:00.000Z" });
+    expect(third).toEqual({
+      type: "planner-failed",
+      error: "boom",
+      ts: "2026-07-04T10:00:00.000Z",
+    });
   });
 
   it("defaults to prose and reads the format from SANDCASTLE_EVENT_FORMAT when not given", () => {

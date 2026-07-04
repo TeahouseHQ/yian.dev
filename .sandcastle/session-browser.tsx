@@ -132,13 +132,7 @@ async function loadManifest(): Promise<{ entries: Entry[]; message?: string }> {
 }
 
 /** Render a label/value list, colouring a failed Session's Status red. */
-function FieldList({
-  fields,
-  failed,
-}: {
-  fields: Field[];
-  failed?: boolean;
-}): React.ReactElement {
+function FieldList({ fields, failed }: { fields: Field[]; failed?: boolean }): React.ReactElement {
   return (
     <Box flexDirection="column">
       {fields.map((f) => {
@@ -178,8 +172,7 @@ function TreePane({
   return (
     <Box flexDirection="column" width={LEFT_WIDTH} borderStyle="single" borderColor="cyan">
       <Text bold>
-        Sessions{" "}
-        <Text dimColor>({rows.length})</Text>
+        Sessions <Text dimColor>({rows.length})</Text>
       </Text>
       {visible.length === 0 ? (
         <Text dimColor>(empty)</Text>
@@ -238,8 +231,7 @@ function DetailPane({ current }: { current: TreeRow | undefined }): React.ReactE
     body = (
       <Box flexDirection="column">
         <Text bold>
-          Run {current.runId}{" "}
-          <Text dimColor>{issue == null ? "(planner)" : `#${issue}`}</Text>
+          Run {current.runId} <Text dimColor>{issue == null ? "(planner)" : `#${issue}`}</Text>
         </Text>
         <FieldList fields={runSummaryFields(current.run) as Field[]} />
       </Box>
@@ -250,7 +242,7 @@ function DetailPane({ current }: { current: TreeRow | undefined }): React.ReactE
     body = (
       <Box flexDirection="column">
         <Text bold>
-          {(e.phase ?? "?")} {ref}
+          {e.phase ?? "?"} {ref}
         </Text>
         <FieldList fields={detailFields(e) as Field[]} failed={e.status === "failed"} />
       </Box>
@@ -327,8 +319,7 @@ function PagerView({
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="cyan">
       <Text bold>
-        Transcript — {title}{" "}
-        <Text dimColor>Esc back</Text>
+        Transcript — {title} <Text dimColor>Esc back</Text>
       </Text>
       {body}
       <Text dimColor>j/k line · PgUp/PgDn page · g/G top/bottom · Esc back · q quit</Text>

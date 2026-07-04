@@ -11,8 +11,8 @@ The durable, full-fidelity record of a single agent's work, sourced from the cap
 _Avoid_: log, session log.
 
 **Live feed**:
-The real-time, glanceable view of what agents are doing right now, derived from `onAgentStreamEvent`. Lossy by design; optimized for "is it stuck / what is it touching."
-_Avoid_: stream log, console output.
+The real-time, glanceable view of what the orchestrator is doing right now: a single **structured event stream** the orchestrator emits (dispatch, resolved, pool-full, planner-emitted, …), with two renderers — a prose formatter for headless `sandcastle` runs and the Cockpit's live widgets. Optimized for "is it stuck / what is it touching," not durability (that's the Manifest).
+_Avoid_: stream log, console output, the old "whatever we console.log" meaning.
 
 **Run log**:
 Sandcastle's existing human-readable Display output under `.sandcastle/logs/*.log`. Lossy and `TextDeltaBuffer`-fragmented. Distinct from a Transcript; left as-is. Disposable — deleted by Prune.
@@ -25,8 +25,12 @@ _Avoid_: clean, gc.
 **Session**:
 A single pi agent invocation, identified by a session id, whose Transcript is captured as one JSONL file. One per agent run (Planner, Implementer, Reviewer, Merger).
 
+**Cockpit**:
+The single Ink TUI that consolidates the Sandcastle surfaces into tabbed modes — **Live** (monitor the orchestrator: status/Start-Stop, pool gauge, in-flight list, event log), **Sessions** (the Session browser embedded as a tab), **Maintenance** (guarded Prune). It launches idle and **supervises the orchestrator as a child process** (not in-process), starting/stopping it on demand and rendering its structured Live feed. Headless `sandcastle` (no Cockpit) still runs the orchestrator loop directly.
+_Avoid_: dashboard, launcher, menu.
+
 **Session browser**:
-The interactive terminal UI (Ink, run via `tsx`) for navigating recent Runs and their Sessions from the Manifest and reading their Transcripts. Local-only, read-once (manual reload), post-hoc — the audit companion to the real-time Live feed. Two-pane: a run→session tree plus a full-screen Transcript pager. Distinct from `render-transcript`, the one-shot scriptable CLI over the same core.
+The interactive terminal UI (Ink, run via `tsx`) for navigating recent Runs and their Sessions from the Manifest and reading their Transcripts. Mounted both standalone (`sandcastle:browse`) and as the Cockpit's Sessions tab. Local-only, read-once (manual reload), post-hoc — the audit companion to the real-time Live feed. Two-pane: a run→session tree plus a full-screen Transcript pager. Distinct from `render-transcript`, the one-shot scriptable CLI over the same core.
 _Avoid_: viewer, dashboard, monitor.
 
 **Run**:

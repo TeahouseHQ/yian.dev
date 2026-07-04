@@ -424,8 +424,7 @@ export function runIssue(run) {
  */
 export function detailFields(entry) {
   const commits = entry.commits ?? 0;
-  const status =
-    entry.status === "failed" ? `failed: ${entry.error ?? "(unknown)"}` : "ok";
+  const status = entry.status === "failed" ? `failed: ${entry.error ?? "(unknown)"}` : "ok";
   return [
     { label: "Phase", value: String(entry.phase ?? "?") },
     { label: "Issue", value: entry.issue == null ? "(planner)" : `#${entry.issue}` },

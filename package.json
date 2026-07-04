@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sandcastle": "tsx .sandcastle/main.mts",
+    "sandcastle:build-image": "sandcastle docker build-image",
+    "sandcastle": "sandcastle docker build-image && tsx .sandcastle/main.mts",
     "sandcastle:browse": "tsx .sandcastle/session-browser.tsx",
     "sandcastle:prune": "tsx .sandcastle/prune.mts",
     "prepare": "node scripts/link-git-hooks.js"

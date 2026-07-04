@@ -397,7 +397,11 @@ async function dispatchMerger(pr: {
       run: () =>
         sandcastle.run({
           sandbox: dockerSandbox(),
-          copyToWorktree: ["node_modules"],
+          // No copyToWorktree here: the top-level sandcastle.run uses the head
+          // branch strategy (merge-to-head), which bind-mounts the host working
+          // directory directly rather than checking out a separate worktree, so
+          // copyToWorktree is unsupported. node_modules is already visible via
+          // the bind mount and is (re)provisioned by onSandboxReady below.
           hooks: {
             sandbox: {
               onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],

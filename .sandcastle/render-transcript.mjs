@@ -116,6 +116,18 @@ export async function readManifest(path = manifestPath) {
 }
 
 /**
+ * Epoch-ms timestamp of an entry's `endedAt` (falling back to `startedAt`), or
+ * `NaN` when neither parses. Shared by the run-ordering logic — `latestRunId`
+ * below and `groupRuns` (issue #72) — so the "newest = max endedAt" rule lives
+ * in exactly one place.
+ * @param {object} e
+ * @returns {number}
+ */
+function entryTime(e) {
+  return Date.parse(e.endedAt ?? e.startedAt ?? "");
+}
+
+/**
  * The runId whose latest entry ended most recently. The manifest is append-only
  * at session resolution, so the newest Run is the one with the maximum
  * `endedAt` across its entries. Returns null for an empty manifest.
@@ -127,7 +139,7 @@ export function latestRunId(entries) {
   let bestId = null;
   let bestAt = -1;
   for (const e of entries) {
-    const at = Date.parse(e.endedAt ?? e.startedAt ?? "");
+    const at = entryTime(e);
     if (Number.isNaN(at)) continue;
     if (at > bestAt) {
       bestAt = at;
@@ -152,6 +164,137 @@ export function filterEntries(entries, filter) {
     if (filter.run !== undefined && e.runId !== run) return false;
     return true;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Windowing + run grouping (session browser, issue #72)
+// ---------------------------------------------------------------------------
+//
+// The session browser (`.sandcastle/session-browser.tsx`, an Ink TUI run via
+// `tsx`) reads the manifest, keeps only Sessions from the last few days, and
+// groups them into Runs sorted newest-first. That windowing + grouping is pure
+// and has no React/Ink dependency, so it lives here alongside the rest of the
+// query core and is unit-tested by this file's plain-node test — exactly the
+// split ADR-0007 prescribes (the zero-dep core owns query logic; the browser is
+// the interactive layer that imports it).
+
+/** Default recent-Runs window for the session browser: the last 3 days. */
+export const DEFAULT_WINDOW_DAYS = 3;
+
+/** One day in milliseconds, for `--days N` → cutoff math. */
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Sentinel cutoff meaning "no window — include everything". Returned for
+ * `--days 0` (or any non-positive `--days`); also the natural base when there
+ * is nothing to window.
+ */
+export const NO_WINDOW = -Infinity;
+
+/** @typedef {{ days?: number, since?: string }} WindowOpts */
+
+/**
+ * Parse the session-browser window flags `--days N` / `--since DATE` out of
+ * argv. Supports both `--flag value` and `--flag=value`. `--days` must be an
+ * integer; `--since` is any string `Date.parse` accepts. Unknown flags are
+ * ignored (the browser may grow its own). Returns `{}` when neither is set, so
+ * the caller applies the 3-day default.
+ * @param {readonly string[]} argv
+ * @returns {WindowOpts}
+ */
+export function parseWindowArgs(argv) {
+  /** @type {WindowOpts} */
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith("--")) continue;
+    const eq = a.indexOf("=");
+    const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
+    const inline = eq === -1 ? null : a.slice(eq + 1);
+    if (key !== "days" && key !== "since") continue;
+    const value = inline !== null ? inline : argv[i + 1];
+    if (value === undefined) {
+      throw new Error(`--${key} requires a value`);
+    }
+    if (inline === null) i++; // consume the next argv token
+    if (key === "days") {
+      const n = Number(value);
+      if (!Number.isInteger(n)) {
+        throw new Error(`--days must be an integer, got: ${value}`);
+      }
+      out.days = n;
+    } else {
+      out.since = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve a window cutoff (epoch ms) from parsed `{ days, since }`. Precedence:
+ * `--since` (a parseable date) beats `--days`, which beats the 3-day default.
+ * A non-parseable `--since` falls back to `--days`/default rather than throwing
+ * — a bad date string should never hide every Run. `--days 0` (or negative)
+ * disables windowing entirely (`NO_WINDOW`). `now` is injectable for tests.
+ * @param {WindowOpts} [opts]
+ * @param {Date} [now]
+ * @returns {number}
+ */
+export function resolveCutoff({ days, since } = {}, now = new Date()) {
+  if (since !== undefined) {
+    const t = Date.parse(since);
+    if (!Number.isNaN(t)) return t;
+  }
+  const d = days ?? DEFAULT_WINDOW_DAYS;
+  if (d <= 0) return NO_WINDOW;
+  return now.getTime() - d * MS_PER_DAY;
+}
+
+/**
+ * Keep entries whose `endedAt` (falling back to `startedAt`) is at/after the
+ * cutoff. `NO_WINDOW` returns a copy of every entry. Entries with no parseable
+ * time are dropped under a finite cutoff (they can't be placed in any window).
+ * @param {readonly object[]} entries
+ * @param {number} cutoff epoch ms, or `NO_WINDOW` for all
+ * @returns {object[]}
+ */
+export function withinWindow(entries, cutoff) {
+  if (cutoff === NO_WINDOW) return [...entries];
+  return entries.filter((e) => {
+    const at = entryTime(e);
+    return !Number.isNaN(at) && at >= cutoff;
+  });
+}
+
+/**
+ * Group manifest entries into Runs and sort newest-first by each Run's max
+ * `endedAt` (falling back to `startedAt`) — the same ordering `latestRunId`
+ * uses, generalized to every Run (both share `entryTime`). Each Run object
+ * carries its `entries` in manifest (append) order and its max `endedAt` epoch
+ * ms (`-1` when none of its entries parsed, so it sorts last). Ties on `endedAt`
+ * keep manifest order (Array.prototype.sort is stable in Node 12+).
+ * @param {readonly object[]} entries
+ * @returns {{ runId: string, entries: object[], endedAt: number }[]}
+ */
+export function groupRuns(entries) {
+  /** @type {Map<string, object[]>} */
+  const byRun = new Map();
+  for (const e of entries) {
+    if (!byRun.has(e.runId)) byRun.set(e.runId, []);
+    byRun.get(e.runId).push(e);
+  }
+  /** @type {{ runId: string, entries: object[], endedAt: number }[]} */
+  const runs = [];
+  for (const [runId, group] of byRun) {
+    let maxAt = -1;
+    for (const e of group) {
+      const at = entryTime(e);
+      if (!Number.isNaN(at) && at > maxAt) maxAt = at;
+    }
+    runs.push({ runId, entries: group, endedAt: maxAt });
+  }
+  runs.sort((a, b) => b.endedAt - a.endedAt);
+  return runs;
 }
 
 // ---------------------------------------------------------------------------

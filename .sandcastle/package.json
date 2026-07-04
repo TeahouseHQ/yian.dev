@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "comment": "Scoped marker so .sandcastle/session-browser.tsx (JSX) is treated as ESM by tsx/Node. Required because Ink 6's transitive dep yoga-layout@3 uses top-level await, which only works under ESM output. The root package.json is intentionally CommonJS (no \"type\"), and every other file here is .mts/.mjs (already ESM regardless), so this changes nothing else. See ADR-0007."
+}

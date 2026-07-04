@@ -16,6 +16,7 @@ import {
   groupRuns,
   isListMode,
   latestRunId,
+  pagerOffset,
   parseArgs,
   parseTranscript,
   parseWindowArgs,
@@ -746,6 +747,52 @@ describe("runSummaryFields", () => {
     const r = { runId: "run-x", endedAt: -1, entries: [{ phase: "impl", commits: 1 }] };
     const map = Object.fromEntries(runSummaryFields(r).map((f) => [f.label, f.value]));
     expect(map["Newest ended"]).toBe("(unknown)");
+  });
+});
+
+// ---- transcript pager scroll (session browser, issue #74) ------------------
+
+describe("pagerOffset", () => {
+  // 50 rendered lines, 10 visible rows → maxOffset 40.
+  const lineCount = 50;
+  const height = 10;
+
+  it("scrolls down one line and clamps at the bottom", () => {
+    expect(pagerOffset(0, lineCount, height, "down")).toBe(1);
+    expect(pagerOffset(40, lineCount, height, "down")).toBe(40);
+  });
+
+  it("scrolls up one line and clamps at the top", () => {
+    expect(pagerOffset(5, lineCount, height, "up")).toBe(4);
+    expect(pagerOffset(0, lineCount, height, "up")).toBe(0);
+  });
+
+  it("scrolls a full viewport on pageDown/pageUp and clamps at both ends", () => {
+    expect(pagerOffset(0, lineCount, height, "pageDown")).toBe(10);
+    expect(pagerOffset(25, lineCount, height, "pageUp")).toBe(15);
+    // a pageDown that would overshoot lands on maxOffset
+    expect(pagerOffset(38, lineCount, height, "pageDown")).toBe(40);
+  });
+
+  it("jumps to the top (home) or bottom (end)", () => {
+    expect(pagerOffset(20, lineCount, height, "home")).toBe(0);
+    expect(pagerOffset(20, lineCount, height, "end")).toBe(40);
+  });
+
+  it("keeps offset 0 when the transcript is shorter than the viewport", () => {
+    expect(pagerOffset(0, 3, 10, "down")).toBe(0);
+    expect(pagerOffset(0, 3, 10, "pageDown")).toBe(0);
+    expect(pagerOffset(0, 3, 10, "end")).toBe(0);
+  });
+
+  it("clamps a stale offset that exceeds a new (shorter) max", () => {
+    // transcript shrinks to 5 lines / 10 visible → maxOffset 0; old offset 8 clamps.
+    expect(pagerOffset(8, 5, 10, "up")).toBe(0);
+  });
+
+  it("returns the clamped current offset for an unknown action", () => {
+    expect(pagerOffset(5, lineCount, height, "noop")).toBe(5);
+    expect(pagerOffset(99, lineCount, height, "noop")).toBe(40);
   });
 });
 

@@ -80,6 +80,34 @@ function windowLabelOf(opts: { days?: number; since?: string }): string {
 /** A label/value pair, as produced by the core `detailFields` / `runSummaryFields`. */
 type Field = { label: string; value: string };
 
+/**
+ * Read the manifest, mapping the missing / empty / unreadable cases to a
+ * user-facing yellow message. Shared by the initial synchronous read in
+ * `main()` and the in-place `r` reload, so both degrade identically.
+ */
+async function loadManifest(): Promise<{ entries: Entry[]; message?: string }> {
+  if (!existsSync(manifestPath)) {
+    return {
+      entries: [],
+      message: `No manifest found at ${manifestPath}.\nRun sandcastle first; sessions are recorded on Run resolution.`,
+    };
+  }
+  try {
+    const entries = (await readManifest()) as Entry[];
+    return {
+      entries,
+      message: entries.length === 0 ? `Manifest is empty: ${manifestPath}` : undefined,
+    };
+  } catch (err) {
+    return {
+      entries: [],
+      message: `Could not read manifest at ${manifestPath}:\n${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+}
+
 /** Render a label/value list, colouring a failed Session's Status red. */
 function FieldList({
   fields,
@@ -265,31 +293,12 @@ function Browser({
   const maxOffset = Math.max(0, rows.length - inner);
   const offset = Math.min(scroll, maxOffset);
   const current = clampedCursor >= 0 ? rows[clampedCursor] : undefined;
-  // Cap the rendered rows to the viewport so a long tree never overflows the
-  // terminal and the cursor row is always on-screen.
 
   /** Re-read the manifest in place (the `r` key). */
   const reload = useCallback(async () => {
-    if (!existsSync(manifestPath)) {
-      setEntries([]);
-      setMessage(
-        `No manifest found at ${manifestPath}.\nRun sandcastle first; sessions are recorded on Run resolution.`
-      );
-      setCursor(0);
-      return;
-    }
-    try {
-      const e = (await readManifest()) as Entry[];
-      setEntries(e);
-      setMessage(e.length === 0 ? `Manifest is empty: ${manifestPath}` : undefined);
-    } catch (err) {
-      setEntries([]);
-      setMessage(
-        `Could not read manifest at ${manifestPath}:\n${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    }
+    const { entries: reloaded, message: reloadMessage } = await loadManifest();
+    setEntries(reloaded);
+    setMessage(reloadMessage);
     setCursor(0);
   }, []);
 
@@ -392,20 +401,7 @@ async function main(): Promise<void> {
 
   // Initial read in main() so the first paint is synchronous (no loading
   // flash); the Browser's `r` key re-reads from the same source on demand.
-  let initialEntries: Entry[] = [];
-  let initialMessage: string | undefined;
-  if (!existsSync(manifestPath)) {
-    initialMessage = `No manifest found at ${manifestPath}.\nRun sandcastle first; sessions are recorded on Run resolution.`;
-  } else {
-    try {
-      initialEntries = (await readManifest()) as Entry[];
-      if (initialEntries.length === 0) initialMessage = `Manifest is empty: ${manifestPath}`;
-    } catch (err) {
-      initialMessage = `Could not read manifest at ${manifestPath}:\n${
-        err instanceof Error ? err.message : String(err)
-      }`;
-    }
-  }
+  const { entries: initialEntries, message: initialMessage } = await loadManifest();
 
   const instance = render(
     <Browser

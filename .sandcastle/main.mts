@@ -371,8 +371,10 @@ async function dispatchReviewer(pr: {
  * Dispatch one Merger for a ready + `reviewed` PR into the shared Pool
  * (ADR-0006: Per-PR Mergers, not a batch Merger). Occupies a slot (acquire),
  * marks the issue in-flight, and runs merge-prompt.md in a **fresh sandbox**
- * (top-level `sandcastle.run`, which manages its own worktree on main with
- * merge-to-head) that re-runs install+build. The Merger does test-then-merge
+ * (top-level `sandcastle.run` with an explicit `branch` strategy, so it works in
+ * an ISOLATED throwaway worktree forked from main instead of head mode — the
+ * Merger must never mutate the host's live `main`, see below) that re-runs
+ * install+build. The Merger does test-then-merge
  * (`git merge <branch>` → `pnpm typecheck && pnpm test` → `gh pr merge --merge`);
  * its give-up path reverts the PR to draft + `ready-for-human` inside the prompt
  * (#65). Whatever happens, the finally removes the issue from the In-flight set
@@ -397,11 +399,23 @@ async function dispatchMerger(pr: {
       run: () =>
         sandcastle.run({
           sandbox: dockerSandbox(),
-          // No copyToWorktree here: the top-level sandcastle.run uses the head
-          // branch strategy (merge-to-head), which bind-mounts the host working
-          // directory directly rather than checking out a separate worktree, so
-          // copyToWorktree is unsupported. node_modules is already visible via
-          // the bind mount and is (re)provisioned by onSandboxReady below.
+          // Run the Merger in an ISOLATED worktree, NOT head mode. A bind-mount
+          // provider (docker) defaults to the "head" strategy, which bind-mounts
+          // the host repo directly — so the Merger's validation `git merge
+          // <branch>` (merge-prompt.md step 1) would mutate your real local
+          // `main`, fast-forwarding it and leaving it diverged from the
+          // server-side `gh pr merge --merge` commit. The "branch" strategy checks
+          // out a throwaway branch forked from main in a separate worktree: the
+          // local test-merge happens there and is discarded when the worktree is
+          // torn down, while the actual landing stays server-side via
+          // `gh pr merge`. (Leftover local `sandcastle/merge-*` refs are cleaned
+          // by `pnpm sandcastle:prune`.)
+          branchStrategy: {
+            type: "branch",
+            branch: `sandcastle/merge-${pr.issue}`,
+            baseBranch: "main",
+          },
+          copyToWorktree: ["node_modules"],
           hooks: {
             sandbox: {
               onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],

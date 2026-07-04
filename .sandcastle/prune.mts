@@ -1,13 +1,20 @@
 /**
  * `pnpm sandcastle:prune` — reclaim disk and tidy git after Sandcastle runs.
  *
- * Prunes three things, and deliberately NOT a fourth:
+ * Prunes four things, and deliberately NOT a fifth:
  *
  *   1. Run logs   — `.sandcastle/logs/*.log`. Lossy, `TextDeltaBuffer`-fragmented
  *                   Display output (glossary: "Run log"). Safe to delete.
  *   2. Worktrees  — `.sandcastle/worktrees/<wt>` whose branch is merged into main.
  *                   Throwaway sandboxes; removed only once their work has landed.
  *   3. Branches   — local `sandcastle/*` branches merged into `main`.
+ *   4. Merger scratch — leftover `sandcastle/merge-*` branches (and any lingering
+ *                   worktree) left by the Merger's ISOLATED test-merge
+ *                   (branchStrategy "branch" in main.mts). Their merge commit's
+ *                   content already lands on main via `gh pr merge`, but the
+ *                   branch tip is never reachable from main — so unlike (3) they
+ *                   are force-deleted (`-D`), not gated on `--merged main`. Still
+ *                   `sandcastle/*`-scoped and worktree-safe (dirty ones skipped).
  *
  *   NOT pruned: Transcripts (`.sandcastle/sessions/**.jsonl`) and the Manifest.
  *   Per ADR-0001 those are the durable, auditable source of truth — `prune`
@@ -68,11 +75,20 @@ const runLogs = existsSync(logsDir)
       .map((f) => join(logsDir, f))
   : [];
 
+// Leftover Merger validation branches. Handled as their own bucket (force-
+// deleted below), so they are excluded from the reachability-gated set.
+const mergerBranches = new Set(
+  git(["branch", "--list", "sandcastle/merge-*", "--format=%(refname:short)"])
+    .split("\n")
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0)
+);
+
 const mergedBranches = new Set(
   git(["branch", "--merged", "main", "--format=%(refname:short)"])
     .split("\n")
     .map((b) => b.trim())
-    .filter((b) => b.startsWith("sandcastle/"))
+    .filter((b) => b.startsWith("sandcastle/") && !mergerBranches.has(b))
 );
 
 // A merged worktree branch must have its worktree removed before the branch can
@@ -87,6 +103,20 @@ const removableWorktrees = mergedWorktrees.filter((w) => !isDirty(w.path));
 // removing (i.e. the dirty ones).
 const blockedBranches = new Set(dirtyWorktrees.map((w) => w.branch));
 const deletableBranches = [...mergedBranches].filter((b) => !blockedBranches.has(b)).sort();
+
+// Same worktree-before-branch handling for leftover Merger scratch branches.
+// A merger branch usually has no worktree left (run() tears it down), leaving a
+// bare ref; any lingering worktree is removed first (dirty ones are skipped,
+// keeping their branch too).
+const mergerWorktrees = worktrees.filter(
+  (w) => w.path !== repoRoot && w.branch && mergerBranches.has(w.branch)
+);
+const dirtyMergerWorktrees = mergerWorktrees.filter((w) => isDirty(w.path));
+const removableMergerWorktrees = mergerWorktrees.filter((w) => !isDirty(w.path));
+const blockedMergerBranches = new Set(dirtyMergerWorktrees.map((w) => w.branch));
+const deletableMergerBranches = [...mergerBranches]
+  .filter((b) => !blockedMergerBranches.has(b))
+  .sort();
 
 // ── Report the plan ─────────────────────────────────────────────────────────
 
@@ -107,9 +137,20 @@ console.log(`\nMerged sandcastle branches to delete (${deletableBranches.length}
 deletableBranches.forEach((b) => console.log(`  - ${b}`));
 if (deletableBranches.length === 0) console.log("  (none)");
 
-if (dirtyWorktrees.length > 0) {
+console.log(`\nLeftover Merger worktrees to remove (${removableMergerWorktrees.length}):`);
+removableMergerWorktrees.forEach((w) =>
+  console.log(`  - ${w.path.replace(repoRoot + "/", "")} [${w.branch}]`)
+);
+if (removableMergerWorktrees.length === 0) console.log("  (none)");
+
+console.log(`\nLeftover Merger branches to force-delete (${deletableMergerBranches.length}):`);
+deletableMergerBranches.forEach((b) => console.log(`  - ${b}`));
+if (deletableMergerBranches.length === 0) console.log("  (none)");
+
+const allDirtyWorktrees = [...dirtyWorktrees, ...dirtyMergerWorktrees];
+if (allDirtyWorktrees.length > 0) {
   console.log(`\n⚠ Skipped — worktree has uncommitted changes (branch kept too):`);
-  dirtyWorktrees.forEach((w) =>
+  allDirtyWorktrees.forEach((w) =>
     console.log(`  - ${w.path.replace(repoRoot + "/", "")} [${w.branch}]`)
   );
 }
@@ -146,6 +187,33 @@ for (const b of deletableBranches) {
   if (failedWorktreeBranches.has(b)) continue; // its worktree is still present
   try {
     git(["branch", "-d", b]); // -d (not -D): refuses if git thinks it's unmerged
+    console.log(`  deleted br   ${b}`);
+  } catch (err) {
+    console.warn(`  ⚠ could not delete branch ${b}: ${(err as Error).message.split("\n")[0]}`);
+  }
+}
+
+// Leftover Merger scratch: remove any lingering worktree first, then force-
+// delete the branch. `-D` (not `-d`) is intentional — the merge commit is not
+// reachable from main, but its content already landed via `gh pr merge`, so
+// there is nothing to lose.
+const failedMergerWorktreeBranches = new Set<string>();
+for (const w of removableMergerWorktrees) {
+  try {
+    git(["worktree", "remove", w.path]);
+    console.log(`  removed wt   ${w.path.replace(repoRoot + "/", "")}`);
+  } catch (err) {
+    if (w.branch) failedMergerWorktreeBranches.add(w.branch);
+    console.warn(
+      `  ⚠ could not remove worktree ${w.path}: ${(err as Error).message.split("\n")[0]}`
+    );
+  }
+}
+
+for (const b of deletableMergerBranches) {
+  if (failedMergerWorktreeBranches.has(b)) continue; // its worktree is still present
+  try {
+    git(["branch", "-D", b]); // -D: throwaway scratch, content already landed
     console.log(`  deleted br   ${b}`);
   } catch (err) {
     console.warn(`  ⚠ could not delete branch ${b}: ${(err as Error).message.split("\n")[0]}`);

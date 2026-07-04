@@ -460,7 +460,9 @@ async function runPlanner(): Promise<{ number: number; title: string; branch: st
 
 for (;;) {
   const free = pool.free();
-  console.log(`\n=== Poll tick — ${free}/${POOL_SIZE} Pool slots free, ${inflight.size()} in-flight ===\n`);
+  console.log(
+    `\n=== Poll tick — ${free}/${POOL_SIZE} Pool slots free, ${inflight.size()} in-flight ===\n`
+  );
 
   if (!shouldQueryBuckets(free)) {
     console.log("Pool full — skipping gh query this tick.");
@@ -468,10 +470,7 @@ for (;;) {
     // One ready-for-agent issue query + one PR query feeds all three buckets:
     // the PR list is split into ready-for-merge / ready-for-review, and its
     // issue set excludes ready-for-agent issues that already have an open PR.
-    const [readyForAgent, prs] = await Promise.all([
-      queryReadyForAgent(),
-      queryReviewMergePrs(),
-    ]);
+    const [readyForAgent, prs] = await Promise.all([queryReadyForAgent(), queryReviewMergePrs()]);
     const openPrIssues = new Set(prs.map((p) => p.issue));
     const readyForMerge = filterReadyForMerge(prs, inflight);
     const readyForReview = filterReadyForReview(prs, inflight);

@@ -12,14 +12,8 @@ import { describe, expect, it } from "vitest";
  * the prompt source directly (no agent run required), the same way theme.test
  * pins CSS/colour wiring.
  */
-const reviewPrompt = readFileSync(
-  new URL("./review-prompt.md", import.meta.url),
-  "utf8"
-);
-const mergePrompt = readFileSync(
-  new URL("./merge-prompt.md", import.meta.url),
-  "utf8"
-);
+const reviewPrompt = readFileSync(new URL("./review-prompt.md", import.meta.url), "utf8");
+const mergePrompt = readFileSync(new URL("./merge-prompt.md", import.meta.url), "utf8");
 
 /**
  * Slice a top-level (`# `) markdown section, from its heading up to (but not

@@ -203,10 +203,7 @@ export interface BucketPr {
  * all buckets) or its issue is already in the In-flight set (a Merger is
  * running). What remains is the list a Merger may be dispatched for this tick.
  */
-export function filterReadyForMerge(
-  prs: ReadonlyArray<BucketPr>,
-  inflight: Inflight
-): BucketPr[] {
+export function filterReadyForMerge(prs: ReadonlyArray<BucketPr>, inflight: Inflight): BucketPr[] {
   return prs.filter(
     (p) =>
       !p.isDraft &&
@@ -223,10 +220,7 @@ export function filterReadyForMerge(
  * issue is already in the In-flight set (a Reviewer is running). What remains is
  * the list a Reviewer may be dispatched for this tick.
  */
-export function filterReadyForReview(
-  prs: ReadonlyArray<BucketPr>,
-  inflight: Inflight
-): BucketPr[] {
+export function filterReadyForReview(prs: ReadonlyArray<BucketPr>, inflight: Inflight): BucketPr[] {
   return prs.filter(
     (p) =>
       p.isDraft &&

@@ -25,6 +25,10 @@ _Avoid_: clean, gc.
 **Session**:
 A single pi agent invocation, identified by a session id, whose Transcript is captured as one JSONL file. One per agent run (Planner, Implementer, Reviewer, Merger).
 
+**Session browser**:
+The interactive terminal UI (Ink, run via `tsx`) for navigating recent Runs and their Sessions from the Manifest and reading their Transcripts. Local-only, read-once (manual reload), post-hoc — the audit companion to the real-time Live feed. Two-pane: a run→session tree plus a full-screen Transcript pager. Distinct from `render-transcript`, the one-shot scriptable CLI over the same core.
+_Avoid_: viewer, dashboard, monitor.
+
 **Run**:
 One issue's **full lifecycle** through the pool — its Implementer, Reviewer, and Merger Sessions — identified by a `runId` derived deterministically from the issue number (mirrors the `sandcastle/issue-N` branch). Auditing everything that happened to an issue is a single `runId` lookup. The Planner is cross-issue and does **not** belong to any issue's Run; its Sessions are recorded per-invocation with no issue binding. Distinct from sandcastle's `run()` API call, which is one agent invocation. Supersedes the old "one outer loop iteration" meaning (ADR-0006).
 _Avoid_: iteration, cycle (a Poll tick is not a Run).

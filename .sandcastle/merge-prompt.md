@@ -45,7 +45,7 @@ If the merge has conflicts, or anything is red, **do not land it and do not try 
 fix it** — the Merger is a landing role, not a fixing role (ADR-0006). First abort
 any in-progress merge so your checkout is clean for the next branch:
 
-   `git merge --abort`   # only if step 1 left conflicts
+`git merge --abort` # only if step 1 left conflicts
 
 Then follow the GIVE-UP PATH below so a persistent poller does not re-dispatch
 this ready + `reviewed` PR to the Merger every tick.

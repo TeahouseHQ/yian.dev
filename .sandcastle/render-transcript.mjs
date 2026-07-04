@@ -346,6 +346,162 @@ export function renderRunSummary(entries) {
 }
 
 // ---------------------------------------------------------------------------
+// Detail + tree helpers (session browser, issue #73)
+// ---------------------------------------------------------------------------
+//
+// The session browser's right pane renders one Session's metadata (phase,
+// issue, branch, started/ended, a computed duration, commits, tokens, status)
+// and, when a Run header is selected, a Run-level aggregate. The left pane is a
+// navigable run→session tree. Both are driven by pure helpers so the formatting
+// + tree-flattening rules are unit-tested here (ADR-0007: the zero-dep core
+// owns query/render logic; the browser imports it).
+
+/**
+ * Human-readable duration between two ISO-ish timestamps: `Xh Ym` for an hour
+ * or more, `Xm Ys` under an hour, `Xs` under a minute. Returns `(unknown)` for
+ * unparseable timestamps or an inverted range (ended before started). Always
+ * deterministic — no wall-clock or timezone dependency.
+ * @param {string | null | undefined} endedAt
+ * @param {string | null | undefined} startedAt
+ * @returns {string}
+ */
+export function formatDuration(endedAt, startedAt) {
+  const end = Date.parse(endedAt ?? "");
+  const start = Date.parse(startedAt ?? "");
+  if (Number.isNaN(end) || Number.isNaN(start)) return "(unknown)";
+  const ms = end - start;
+  if (ms < 0) return "(unknown)";
+  const totalSec = Math.round(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/**
+ * Format an ISO timestamp as a deterministic `YYYY-MM-DD HH:MM:SS UTC` string.
+ * Always UTC (never the host timezone) so the output is stable across machines
+ * and tests. Returns `(unknown)` for an unparseable timestamp.
+ * @param {string | null | undefined} iso
+ * @returns {string}
+ */
+export function formatTimestamp(iso) {
+  const t = Date.parse(iso ?? "");
+  if (Number.isNaN(t)) return "(unknown)";
+  const d = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`
+  );
+}
+
+/**
+ * The representative GitHub issue number for a Run: the first non-null `issue`
+ * among its entries, or null when every entry is issue-less (a cross-issue
+ * **Planner** Run, per CONTEXT.md). A Run whose entries bind to an issue returns
+ * that number even if some entries are null — robust to mixed fixtures.
+ * @param {{ entries: readonly object[] }} run
+ * @returns {number | null}
+ */
+export function runIssue(run) {
+  for (const e of run.entries) {
+    if (e.issue != null) return e.issue;
+  }
+  return null;
+}
+
+/**
+ * The ordered `label → value` field pairs shown in the right pane for one
+ * Session. Values are fully formatted (timestamps in UTC, duration via
+ * `formatDuration`, tokens via `summarizeUsage`), so the browser renders them
+ * verbatim. Failed Sessions report their `error` in Status; planner Sessions
+ * (issue-less) are labelled `(planner)`.
+ * @param {object} entry
+ * @returns {{ label: string, value: string }[]}
+ */
+export function detailFields(entry) {
+  const commits = entry.commits ?? 0;
+  const status =
+    entry.status === "failed" ? `failed: ${entry.error ?? "(unknown)"}` : "ok";
+  return [
+    { label: "Phase", value: String(entry.phase ?? "?") },
+    { label: "Issue", value: entry.issue == null ? "(planner)" : `#${entry.issue}` },
+    { label: "Branch", value: entry.branch ?? "(none)" },
+    { label: "Started", value: formatTimestamp(entry.startedAt) },
+    { label: "Ended", value: formatTimestamp(entry.endedAt) },
+    { label: "Duration", value: formatDuration(entry.endedAt, entry.startedAt) },
+    { label: "Commits", value: `${commits} commit${commits === 1 ? "" : "s"}` },
+    { label: "Tokens", value: summarizeUsage(entry.usage) },
+    { label: "Status", value: status },
+  ];
+}
+
+/**
+ * The ordered `label → value` field pairs shown in the right pane when a Run
+ * header is selected: aggregate metadata across the Run's Sessions. `Newest
+ * ended` formats the Run's max `endedAt` (the epoch-ms value `groupRuns`
+ * computes; `(unknown)` when the Run recorded none). `Phases` lists the unique
+ * phases in first-seen order.
+ * @param {{ runId: string, entries: readonly object[], endedAt?: number }} run
+ * @returns {{ label: string, value: string }[]}
+ */
+export function runSummaryFields(run) {
+  const issue = runIssue(run);
+  const commits = run.entries.reduce((sum, e) => sum + (e.commits ?? 0), 0);
+  /** @type {string[]} */
+  const phases = [];
+  for (const e of run.entries) {
+    const p = e.phase ?? "?";
+    if (!phases.includes(p)) phases.push(p);
+  }
+  const n = run.entries.length;
+  const newest =
+    run.endedAt != null && run.endedAt >= 0
+      ? formatTimestamp(new Date(run.endedAt).toISOString())
+      : "(unknown)";
+  return [
+    { label: "Run", value: String(run.runId) },
+    { label: "Issue", value: issue == null ? "(planner)" : `#${issue}` },
+    { label: "Sessions", value: `${n} session${n === 1 ? "" : "s"}` },
+    { label: "Total commits", value: `${commits} commit${commits === 1 ? "" : "s"}` },
+    { label: "Phases", value: phases.join(", ") || "(none)" },
+    { label: "Newest ended", value: newest },
+  ];
+}
+
+/**
+ * @typedef {{ kind: "run", runId: string, run: object, depth: 0 } | { kind: "session", runId: string, run: object, entry: object, depth: 1 }} TreeRow
+ */
+
+/**
+ * Flatten grouped Runs + a `collapsed` set into the ordered, navigable row list
+ * the left pane renders and the cursor walks. For each Run (in `groupRuns`
+ * newest-first order): emit a `run` row, then — only when the Run is expanded —
+ * a `session` row per entry. Collapsed Runs contribute just their header, so a
+ * cursor index stays valid as Runs open and close. Pure + injectable so the
+ * tree shape (the heart of keyboard navigation) is unit-tested in isolation.
+ * @param {readonly { runId: string, entries: readonly object[] }[]} runs
+ * @param {Set<string>} collapsed runIds whose sessions are hidden
+ * @returns {TreeRow[]}
+ */
+export function flattenTree(runs, collapsed) {
+  /** @type {TreeRow[]} */
+  const rows = [];
+  for (const run of runs) {
+    rows.push({ kind: "run", runId: run.runId, run, depth: 0 });
+    if (!collapsed.has(run.runId)) {
+      for (const entry of run.entries) {
+        rows.push({ kind: "session", runId: run.runId, run, entry, depth: 1 });
+      }
+    }
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // Transcript parsing + rendering
 // ---------------------------------------------------------------------------
 

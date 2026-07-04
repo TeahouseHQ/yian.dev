@@ -53,6 +53,10 @@ _Avoid_: lock, lease.
 One iteration of the persistent orchestrator loop: every ~60s, if the Pool has a free slot, query the Dispatch buckets and fill free slots by priority. When the Pool is full the `gh` query is skipped entirely; when all buckets are empty the tick is the idle sleep. A freed slot idles at most one tick (~60s) before being refilled. A Poll tick is **not** a Run and has no `runId`.
 _Avoid_: iteration, run, cycle.
 
+**Plan cache**:
+The orchestrator's **in-memory** record of the Planner's last emit list (the unblocked issues `U`), keyed by a content-hash of the `ready-for-agent` issue set — `hash(sorted [(number, updatedAt)])` over the raw `gh issue list --label ready-for-agent` result the Planner reasons over. While the key is unchanged, a Poll tick dispatches from the cached emit with **no Planner (Opus) call**; the Planner is re-invoked only when the key changes (an issue labeled in/out, or a body/label/comment edit). In-flight/PR state is checked live and is **not** in the key, so the cache stays valid across a blocker's whole Run (implement→review→merge). Non-durable — cold after restart (one re-plan), like the In-flight set (ADR-0006, ADR-0010). A cache hit still runs the pure dispatch (`pickImplementers`) over the cached emit, so capped-but-unblocked issues are never starved. Stores only the emit list, not the blocking graph.
+_Avoid_: plan graph, dependency graph, Planner memo, memoization.
+
 **`ready-for-human`**:
 The universal terminal label — on an issue or a PR — meaning "out of all Dispatch buckets; a human owns it." Every give-up / failure path lands here: a no-op Implementer (strips `ready-for-agent`, adds `ready-for-human`), a Reviewer that can't pass a change (leaves it draft, adds `ready-for-human`), and a Merger whose test-then-merge fails or conflicts (removes `reviewed`, reverts the PR to draft, adds `ready-for-human`). This is what keeps the persistent loop from re-dispatching un-actionable work forever.
 _Avoid_: blocked, stuck, wontfix (a distinct triage label).

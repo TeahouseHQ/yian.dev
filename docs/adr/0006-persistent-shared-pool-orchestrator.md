@@ -53,6 +53,8 @@ Each Poll tick (~60s):
   Running Opus to produce a plan we can't dispatch is pure token waste, and
   avoiding it is the stated motivation. The emit list is **not cached**: the
   Planner re-plans every eligible tick (accepted cost, for simplicity).
+  _Revised by ADR-0010:_ the emit list is now cached (the **Plan cache**) and
+  the Planner re-runs only when the `ready-for-agent` set's content changes.
 
 - **A Pool slot is a full agent+sandbox lifecycle.** Because impl and review are now
   decoupled across ticks, the Reviewer can no longer reuse the Implementer's live

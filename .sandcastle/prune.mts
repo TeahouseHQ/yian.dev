@@ -20,6 +20,13 @@
  *   Per ADR-0001 those are the durable, auditable source of truth — `prune`
  *   never touches them (glossary: "Transcript").
  *
+ * This file is the **CLI driver**: it discovers repo state off disk, hands it
+ * to the pure `planPrune` (in `prune-plan.mts`, issue #79) to categorize, then
+ * prints the plan (dry run) or applies it (`--force`). The categorization —
+ * skip-dirty, merged-only, `sandcastle/*` scope, Merger-scratch dedup — lives in
+ * `planPrune` so the future Cockpit Maintenance tab reuses the same plan
+ * (ADR-0009) without forking the logic.
+ *
  * Design decisions (see ADR-0004):
  *   - "merged" means reachable from `main` (`git branch --merged main`). This
  *     preserves branches whose PRs were intentionally left open for a human
@@ -34,6 +41,8 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
+
+import { planPrune, type WorktreeState } from "./prune-plan.mts";
 
 const APPLY = process.argv.slice(2).some((a) => a === "--force" || a === "--yes");
 
@@ -75,8 +84,7 @@ const runLogs = existsSync(logsDir)
       .map((f) => join(logsDir, f))
   : [];
 
-// Leftover Merger validation branches. Handled as their own bucket (force-
-// deleted below), so they are excluded from the reachability-gated set.
+// Leftover Merger validation branches — their own bucket (force-deleted below).
 const mergerBranches = new Set(
   git(["branch", "--list", "sandcastle/merge-*", "--format=%(refname:short)"])
     .split("\n")
@@ -84,73 +92,72 @@ const mergerBranches = new Set(
     .filter((b) => b.length > 0)
 );
 
+// Reachability-gated `sandcastle/*` branches. Scope (`sandcastle/*`) is applied
+// here; the Merger-scratch exclusion is applied inside `planPrune` (it is the
+// "merger is its own bucket" categorization decision, not discovery).
 const mergedBranches = new Set(
   git(["branch", "--merged", "main", "--format=%(refname:short)"])
     .split("\n")
     .map((b) => b.trim())
-    .filter((b) => b.startsWith("sandcastle/") && !mergerBranches.has(b))
+    .filter((b) => b.startsWith("sandcastle/"))
 );
 
-// A merged worktree branch must have its worktree removed before the branch can
-// be deleted. Dirty worktrees are skipped (and so is their branch).
-const mergedWorktrees = worktrees.filter(
-  (w) => w.path !== repoRoot && w.branch && mergedBranches.has(w.branch)
-);
-const dirtyWorktrees = mergedWorktrees.filter((w) => isDirty(w.path));
-const removableWorktrees = mergedWorktrees.filter((w) => !isDirty(w.path));
+// Tag each worktree with its dirty flag — but only for candidates (a non-root
+// worktree whose branch is in the merged or Merger set). This preserves the
+// original git-call footprint exactly: `isDirty` never runs on the repo root or
+// on non-candidate worktrees, and a candidate is always non-root like before.
+const candidateBranches = new Set([...mergedBranches, ...mergerBranches]);
+const annotatedWorktrees: WorktreeState[] = worktrees.map((w) => ({
+  path: w.path,
+  branch: w.branch,
+  dirty:
+    w.path !== repoRoot && w.branch !== null && candidateBranches.has(w.branch)
+      ? isDirty(w.path)
+      : false,
+}));
 
-// Branches we will NOT delete: those still checked out in a worktree we are not
-// removing (i.e. the dirty ones).
-const blockedBranches = new Set(dirtyWorktrees.map((w) => w.branch));
-const deletableBranches = [...mergedBranches].filter((b) => !blockedBranches.has(b)).sort();
+// ── Plan (pure) ─────────────────────────────────────────────────────────────
 
-// Same worktree-before-branch handling for leftover Merger scratch branches.
-// A merger branch usually has no worktree left (run() tears it down), leaving a
-// bare ref; any lingering worktree is removed first (dirty ones are skipped,
-// keeping their branch too).
-const mergerWorktrees = worktrees.filter(
-  (w) => w.path !== repoRoot && w.branch && mergerBranches.has(w.branch)
-);
-const dirtyMergerWorktrees = mergerWorktrees.filter((w) => isDirty(w.path));
-const removableMergerWorktrees = mergerWorktrees.filter((w) => !isDirty(w.path));
-const blockedMergerBranches = new Set(dirtyMergerWorktrees.map((w) => w.branch));
-const deletableMergerBranches = [...mergerBranches]
-  .filter((b) => !blockedMergerBranches.has(b))
-  .sort();
+const plan = planPrune({
+  repoRoot,
+  runLogs,
+  worktrees: annotatedWorktrees,
+  mergedBranches,
+  mergerBranches,
+});
 
 // ── Report the plan ─────────────────────────────────────────────────────────
 
 const tag = APPLY ? "" : " (dry run)";
 console.log(`\nSandcastle prune${tag}\n`);
 
-console.log(`Run logs to delete (${runLogs.length}):`);
-runLogs.forEach((f) => console.log(`  - ${f.replace(repoRoot + "/", "")}`));
-if (runLogs.length === 0) console.log("  (none)");
+console.log(`Run logs to delete (${plan.runLogs.length}):`);
+plan.runLogs.forEach((f) => console.log(`  - ${f.replace(repoRoot + "/", "")}`));
+if (plan.runLogs.length === 0) console.log("  (none)");
 
-console.log(`\nMerged worktrees to remove (${removableWorktrees.length}):`);
-removableWorktrees.forEach((w) =>
+console.log(`\nMerged worktrees to remove (${plan.removableWorktrees.length}):`);
+plan.removableWorktrees.forEach((w) =>
   console.log(`  - ${w.path.replace(repoRoot + "/", "")} [${w.branch}]`)
 );
-if (removableWorktrees.length === 0) console.log("  (none)");
+if (plan.removableWorktrees.length === 0) console.log("  (none)");
 
-console.log(`\nMerged sandcastle branches to delete (${deletableBranches.length}):`);
-deletableBranches.forEach((b) => console.log(`  - ${b}`));
-if (deletableBranches.length === 0) console.log("  (none)");
+console.log(`\nMerged sandcastle branches to delete (${plan.deletableBranches.length}):`);
+plan.deletableBranches.forEach((b) => console.log(`  - ${b}`));
+if (plan.deletableBranches.length === 0) console.log("  (none)");
 
-console.log(`\nLeftover Merger worktrees to remove (${removableMergerWorktrees.length}):`);
-removableMergerWorktrees.forEach((w) =>
+console.log(`\nLeftover Merger worktrees to remove (${plan.removableMergerWorktrees.length}):`);
+plan.removableMergerWorktrees.forEach((w) =>
   console.log(`  - ${w.path.replace(repoRoot + "/", "")} [${w.branch}]`)
 );
-if (removableMergerWorktrees.length === 0) console.log("  (none)");
+if (plan.removableMergerWorktrees.length === 0) console.log("  (none)");
 
-console.log(`\nLeftover Merger branches to force-delete (${deletableMergerBranches.length}):`);
-deletableMergerBranches.forEach((b) => console.log(`  - ${b}`));
-if (deletableMergerBranches.length === 0) console.log("  (none)");
+console.log(`\nLeftover Merger branches to force-delete (${plan.deletableMergerBranches.length}):`);
+plan.deletableMergerBranches.forEach((b) => console.log(`  - ${b}`));
+if (plan.deletableMergerBranches.length === 0) console.log("  (none)");
 
-const allDirtyWorktrees = [...dirtyWorktrees, ...dirtyMergerWorktrees];
-if (allDirtyWorktrees.length > 0) {
+if (plan.skippedDirtyWorktrees.length > 0) {
   console.log(`\n⚠ Skipped — worktree has uncommitted changes (branch kept too):`);
-  allDirtyWorktrees.forEach((w) =>
+  plan.skippedDirtyWorktrees.forEach((w) =>
     console.log(`  - ${w.path.replace(repoRoot + "/", "")} [${w.branch}]`)
   );
 }
@@ -164,26 +171,26 @@ if (!APPLY) {
 
 console.log("\nApplying...\n");
 
-for (const f of runLogs) {
+for (const f of plan.runLogs) {
   rmSync(f, { force: true });
   console.log(`  deleted log  ${f.replace(repoRoot + "/", "")}`);
 }
 
 // Remove worktrees first so their branches become deletable.
 const failedWorktreeBranches = new Set<string>();
-for (const w of removableWorktrees) {
+for (const w of plan.removableWorktrees) {
   try {
     git(["worktree", "remove", w.path]);
     console.log(`  removed wt   ${w.path.replace(repoRoot + "/", "")}`);
   } catch (err) {
-    if (w.branch) failedWorktreeBranches.add(w.branch);
+    failedWorktreeBranches.add(w.branch);
     console.warn(
       `  ⚠ could not remove worktree ${w.path}: ${(err as Error).message.split("\n")[0]}`
     );
   }
 }
 
-for (const b of deletableBranches) {
+for (const b of plan.deletableBranches) {
   if (failedWorktreeBranches.has(b)) continue; // its worktree is still present
   try {
     git(["branch", "-d", b]); // -d (not -D): refuses if git thinks it's unmerged
@@ -198,19 +205,19 @@ for (const b of deletableBranches) {
 // reachable from main, but its content already landed via `gh pr merge`, so
 // there is nothing to lose.
 const failedMergerWorktreeBranches = new Set<string>();
-for (const w of removableMergerWorktrees) {
+for (const w of plan.removableMergerWorktrees) {
   try {
     git(["worktree", "remove", w.path]);
     console.log(`  removed wt   ${w.path.replace(repoRoot + "/", "")}`);
   } catch (err) {
-    if (w.branch) failedMergerWorktreeBranches.add(w.branch);
+    failedMergerWorktreeBranches.add(w.branch);
     console.warn(
       `  ⚠ could not remove worktree ${w.path}: ${(err as Error).message.split("\n")[0]}`
     );
   }
 }
 
-for (const b of deletableMergerBranches) {
+for (const b of plan.deletableMergerBranches) {
   if (failedMergerWorktreeBranches.has(b)) continue; // its worktree is still present
   try {
     git(["branch", "-D", b]); // -D: throwaway scratch, content already landed

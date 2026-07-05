@@ -14,10 +14,27 @@ import {
   routeCockpitInput,
   spawnOrchestrator,
   splitNdjsonChunk,
+  describePruneApply,
+  prunePlanTotal,
+  stepPruneApply,
   type InputKey,
   type OrchestratorHandlers,
 } from "./cockpit-core.mts";
 import type { OrchestratorEvent } from "./events.mts";
+import type { PrunePlan } from "./prune-plan.mts";
+
+/** A PrunePlan fixture; every bucket empty unless overridden. */
+function plan(over: Partial<PrunePlan> = {}): PrunePlan {
+  return {
+    runLogs: [],
+    removableWorktrees: [],
+    deletableBranches: [],
+    removableMergerWorktrees: [],
+    deletableMergerBranches: [],
+    skippedDirtyWorktrees: [],
+    ...over,
+  };
+}
 
 /** Build one event of a given type with a fixed timestamp for the log formatter. */
 function evt(event: Omit<OrchestratorEvent, "ts">): OrchestratorEvent {
@@ -561,5 +578,109 @@ describe("spawnOrchestrator", () => {
       );
     });
     expect(spawnError).toMatch(/ENOENT|not.*found|spawn/i);
+  });
+});
+
+// ── prunePlanTotal: how many deletions a plan carries ───────────────────────
+
+describe("prunePlanTotal", () => {
+  it("sums every deletion bucket", () => {
+    expect(
+      prunePlanTotal(
+        plan({
+          runLogs: ["a.log", "b.log"],
+          removableWorktrees: [{ path: "/w1", branch: "sandcastle/issue-1" }],
+          deletableBranches: ["sandcastle/issue-1"],
+          removableMergerWorktrees: [{ path: "/w2", branch: "sandcastle/merge-2" }],
+          deletableMergerBranches: ["sandcastle/merge-2"],
+        })
+      )
+    ).toBe(6);
+  });
+
+  it("is zero for an empty plan", () => {
+    expect(prunePlanTotal(plan())).toBe(0);
+  });
+
+  it("excludes kept dirty worktrees (they are not deleted)", () => {
+    expect(
+      prunePlanTotal(
+        plan({ skippedDirtyWorktrees: [{ path: "/w1", branch: "sandcastle/issue-1" }] })
+      )
+    ).toBe(0);
+  });
+});
+
+// ── describePruneApply: the ADR-0009 guard behind the Maintenance apply ──────
+
+describe("describePruneApply", () => {
+  it("blocks apply while the orchestrator child is running (ADR-0009)", () => {
+    const decision = describePruneApply({
+      running: true,
+      plan: plan({ deletableBranches: ["sandcastle/issue-1"] }),
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.blockedBy).toBe("running");
+  });
+
+  it("blocks apply when the plan deletes nothing", () => {
+    const decision = describePruneApply({ running: false, plan: plan() });
+    expect(decision.allowed).toBe(false);
+    expect(decision.blockedBy).toBe("empty");
+  });
+
+  it("allows apply when idle and the plan has deletions", () => {
+    const decision = describePruneApply({
+      running: false,
+      plan: plan({ runLogs: ["/repo/.sandcastle/logs/a.log"] }),
+    });
+    expect(decision.allowed).toBe(true);
+    expect(decision.blockedBy).toBeNull();
+  });
+
+  it("prefers the running block over the empty block when both apply", () => {
+    const decision = describePruneApply({ running: true, plan: plan() });
+    expect(decision.blockedBy).toBe("running");
+  });
+
+  it("does not count kept dirty worktrees as deletions (still empty)", () => {
+    const decision = describePruneApply({
+      running: false,
+      plan: plan({
+        skippedDirtyWorktrees: [{ path: "/repo/wt-1", branch: "sandcastle/issue-1" }],
+      }),
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.blockedBy).toBe("empty");
+  });
+});
+
+// ── stepPruneApply: the arm→confirm→apply guard so no stray key deletes ──────
+
+describe("stepPruneApply", () => {
+  it("arms from idle when apply is allowed (no deletion yet)", () => {
+    expect(stepPruneApply("idle", "arm", true)).toEqual({ phase: "armed", apply: false });
+  });
+
+  it("deletes only on confirm from the armed phase", () => {
+    expect(stepPruneApply("armed", "confirm", true)).toEqual({ phase: "idle", apply: true });
+  });
+
+  it("refuses to arm when apply is not allowed (blocked plan)", () => {
+    expect(stepPruneApply("idle", "arm", false)).toEqual({ phase: "idle", apply: false });
+  });
+
+  it("aborts the apply if the guard flipped between arm and confirm (run started)", () => {
+    // A run starting mid-arm makes apply no longer allowed — confirm must NOT
+    // delete, and drops back to idle (ADR-0009).
+    expect(stepPruneApply("armed", "confirm", false)).toEqual({ phase: "idle", apply: false });
+  });
+
+  it("cancels back to idle without deleting", () => {
+    expect(stepPruneApply("armed", "cancel", true)).toEqual({ phase: "idle", apply: false });
+  });
+
+  it("does not delete on a confirm that never armed", () => {
+    expect(stepPruneApply("idle", "confirm", true)).toEqual({ phase: "idle", apply: false });
   });
 });

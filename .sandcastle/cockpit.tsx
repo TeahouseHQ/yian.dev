@@ -28,10 +28,20 @@
  * so its own keybindings (↑/↓, ←/→, Enter, r, the pager keys) are naturally
  * scoped to it; the shell keeps quit + Tab/Shift+Tab tab-switching via the pure
  * `routeCockpitInput`, delegating every other key to the focused tab. The
- * manifest is loaded lazily the first time the tab is opened. **Maintenance**
- * remains a placeholder (`sandcastle:prune` still runs standalone). Headless
- * `pnpm sandcastle` (no Cockpit) still runs the orchestrator loop directly —
- * this file only adds a supervisor on top of that same entry point.
+ * manifest is loaded lazily the first time the tab is opened.
+ *
+ * The **Maintenance** tab (issue #83) runs Prune from inside the Cockpit. It
+ * renders the live **dry-run plan** — the same categorized deletions the CLI
+ * shows — by calling `discoverPruneState` + the pure `planPrune` (#79), so there
+ * is no forked logic. The preview is always available. `a` **arms** an apply and
+ * `y` **confirms** it (the `--force` equivalent, via `applyPrunePlan`); apply is
+ * never blind (the plan is always shown first) and never a single stray key. Per
+ * ADR-0009 apply is **blocked while the orchestrator child is running** — a live
+ * run is concurrently creating the worktrees/branches Prune would delete — so
+ * the guard (`describePruneApply`) refuses to arm/confirm while `status` is
+ * `running`; `r` reloads the plan. Headless `pnpm sandcastle` (no Cockpit) still
+ * runs the orchestrator loop directly — this file only adds a supervisor on top
+ * of that same entry point.
  *
  * All logic with behaviour lives in the pure, unit-tested `cockpit-core.mts`
  * (tab cycling, NDJSON decode, log formatting, child-exit classification); this
@@ -53,18 +63,24 @@ import {
   appendLogLine,
   COCKPIT_TABS,
   cycleTab,
+  describePruneApply,
   EMPTY_LIVE_VIEW,
   formatEventLog,
   formatInFlight,
   formatPoolGauge,
+  prunePlanTotal,
   reduceLiveEvent,
   routeCockpitInput,
   spawnOrchestrator,
+  stepPruneApply,
   type CockpitTab,
   type LiveView,
+  type PruneApplyPhase,
   type Supervisor,
 } from "./cockpit-core.mjs";
 import type { OrchestratorEvent } from "./events.mjs";
+import { planPrune, type PrunePlan, type PruneWorktree } from "./prune-plan.mjs";
+import { applyPrunePlan, discoverPruneState } from "./prune-driver.mjs";
 import {
   loadManifest,
   SessionBrowser,
@@ -85,6 +101,9 @@ const BIN_DIR = path.join(REPO_ROOT, "node_modules", ".bin");
 
 /** Cap on the scrolling event log (bounded ring; oldest entries fall off). */
 const LOG_CAP = 1000;
+
+/** Cap on the Maintenance tab's apply-output log (a short bounded ring). */
+const MAINT_LOG_CAP = 200;
 
 /** The Cockpit Sessions tab uses the browser's default window (last 3 days); the
  *  standalone `sandcastle:browse` still accepts `--days` / `--since` on argv. */
@@ -257,13 +276,167 @@ function LiveTab({
   );
 }
 
-/** A placeholder tab (Sessions / Maintenance) — named, with its standalone route. */
-function PlaceholderTab({ title, hint }: { title: string; hint: string }): React.ReactElement {
+/** The plan the Maintenance tab renders, paired with the repo root its paths are
+ *  reported relative to (and that `applyPrunePlan` deletes against). */
+interface MaintPlan {
+  readonly plan: PrunePlan;
+  readonly repoRoot: string;
+}
+
+/** Render one prune bucket as a labelled count over its items — a worktree
+ *  bucket shows `path [branch]`, a branch bucket the branch name. Paths are
+ *  shown relative to `repoRoot` to stay compact, mirroring the CLI's report. */
+function PruneBucket({
+  label,
+  color,
+  items,
+  repoRoot,
+}: {
+  label: string;
+  color?: string;
+  items: readonly (string | PruneWorktree)[];
+  repoRoot: string;
+}): React.ReactElement {
+  const rel = (p: string) => p.replace(repoRoot + "/", "");
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="single" borderColor="gray" marginTop={1}>
-      <Text bold>{title}</Text>
-      <Text dimColor>Coming soon in the Cockpit.</Text>
-      <Text dimColor>{hint}</Text>
+    <Box flexDirection="column">
+      <Text color={color}>
+        {label} ({items.length})
+      </Text>
+      {items.length === 0 ? (
+        <Text dimColor> (none)</Text>
+      ) : (
+        items.map((it, i) => (
+          <Text key={i} dimColor wrap="truncate-end">
+            {" "}
+            · {typeof it === "string" ? it : `${rel(it.path)} [${it.branch}]`}
+          </Text>
+        ))
+      )}
+    </Box>
+  );
+}
+
+/**
+ * The Maintenance tab: the live Prune dry-run plan (from `planPrune`, #79) with
+ * a guarded, explicit apply. The preview always renders; the apply control's
+ * copy is driven by the pure `describePruneApply` guard + `applyPhase` — blocked
+ * while a run is live (ADR-0009), a no-op when the plan is empty, an arm→confirm
+ * prompt otherwise. All decisions are pure and tested in `cockpit-core.mts`; this
+ * is just their presentation.
+ */
+function MaintenanceTab({
+  maint,
+  error,
+  running,
+  phase,
+  log,
+}: {
+  maint: MaintPlan | null;
+  error: string | null;
+  running: boolean;
+  phase: PruneApplyPhase;
+  log: LogEntry[];
+}): React.ReactElement {
+  if (error !== null) {
+    return (
+      <Box flexDirection="column" flexGrow={1} borderStyle="single" borderColor="red" marginTop={1}>
+        <Text bold>Maintenance — Prune</Text>
+        <Text color="red">could not compute plan: {error}</Text>
+        <Text dimColor>Press r to retry.</Text>
+      </Box>
+    );
+  }
+  if (maint === null) {
+    return (
+      <Box
+        flexDirection="column"
+        flexGrow={1}
+        borderStyle="single"
+        borderColor="gray"
+        marginTop={1}
+      >
+        <Text bold>Maintenance — Prune</Text>
+        <Text dimColor>Computing dry-run plan…</Text>
+      </Box>
+    );
+  }
+
+  const { plan, repoRoot } = maint;
+  const decision = describePruneApply({ running, plan });
+  const total = prunePlanTotal(plan);
+
+  // The apply control line: the confirm prompt when armed, else the guard's
+  // reason (blocked/empty) or the ready-to-arm hint.
+  const control =
+    phase === "armed" ? (
+      <Text color="yellow" bold>
+        ⚠ Delete {total} item(s)? y to confirm · n/Esc to cancel
+      </Text>
+    ) : decision.blockedBy === "running" ? (
+      <Text color="red">
+        apply blocked — orchestrator is running. Stop the run before pruning (ADR-0009).
+      </Text>
+    ) : decision.blockedBy === "empty" ? (
+      <Text dimColor>nothing to prune.</Text>
+    ) : (
+      <Text color="cyan">a to apply — deletes {total} item(s) · r to reload</Text>
+    );
+
+  return (
+    <Box flexDirection="column" flexGrow={1} marginTop={1}>
+      <Box flexDirection="row">
+        <Text bold>Maintenance — Prune </Text>
+        <Text dimColor>dry-run plan · {total} deletion(s)</Text>
+      </Box>
+      <Box
+        flexDirection="column"
+        marginTop={1}
+        borderStyle="single"
+        borderColor="gray"
+        paddingX={1}
+      >
+        <PruneBucket label="Run logs to delete" items={plan.runLogs} repoRoot={repoRoot} />
+        <PruneBucket
+          label="Merged worktrees to remove"
+          items={plan.removableWorktrees}
+          repoRoot={repoRoot}
+        />
+        <PruneBucket
+          label="Merged sandcastle branches to delete"
+          items={plan.deletableBranches}
+          repoRoot={repoRoot}
+        />
+        <PruneBucket
+          label="Leftover Merger worktrees to remove"
+          items={plan.removableMergerWorktrees}
+          repoRoot={repoRoot}
+        />
+        <PruneBucket
+          label="Leftover Merger branches to force-delete"
+          items={plan.deletableMergerBranches}
+          repoRoot={repoRoot}
+        />
+        {plan.skippedDirtyWorktrees.length > 0 && (
+          <PruneBucket
+            label="⚠ Skipped — uncommitted changes (kept)"
+            color="yellow"
+            items={plan.skippedDirtyWorktrees}
+            repoRoot={repoRoot}
+          />
+        )}
+      </Box>
+      <Box marginTop={1}>{control}</Box>
+      {log.length > 0 && (
+        <Box flexDirection="column" marginTop={1} borderStyle="single" borderColor="cyan">
+          <Text bold>Apply output</Text>
+          {log.map((entry, i) => (
+            <Text key={i} wrap="truncate-end" color={entry.color} dimColor={entry.dim}>
+              {entry.text}
+            </Text>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -284,15 +457,76 @@ function Cockpit(): React.ReactElement {
   const [view, setView] = useState<LiveView>(EMPTY_LIVE_VIEW);
   // The Sessions tab's manifest, loaded lazily on first open (null until then).
   const [sessions, setSessions] = useState<ManifestLoad | null>(null);
+  // The Maintenance tab's dry-run prune plan (null until first computed), the
+  // last discovery error (if any), the arm→confirm apply phase, and the bounded
+  // apply-output log.
+  const [maint, setMaint] = useState<MaintPlan | null>(null);
+  const [maintError, setMaintError] = useState<string | null>(null);
+  const [applyPhase, setApplyPhase] = useState<PruneApplyPhase>("idle");
+  const [maintLog, setMaintLog] = useState<LogEntry[]>([]);
 
   // The live supervisor (null when no child is running). A ref, not state, so
   // the async stdout/exit handlers always see the current child without stale
   // closures and toggling it never triggers a re-render on its own.
   const supervisorRef = useRef<Supervisor | null>(null);
+  // Guards prune discovery against re-entrancy: the lazy-load effect and the `r`
+  // key can both fire while a discovery microtask is already pending.
+  const maintLoadingRef = useRef(false);
 
   const pushLog = useCallback((entry: LogEntry) => {
     setLog((l) => appendLogLine(l, entry, LOG_CAP));
   }, []);
+
+  const pushMaintLog = useCallback((entry: LogEntry) => {
+    setMaintLog((l) => appendLogLine(l, entry, MAINT_LOG_CAP));
+  }, []);
+
+  /** Recompute the dry-run prune plan off disk (lazy first open + `r` reload +
+   *  after an apply). Discovery is synchronous git I/O, so it is deferred to a
+   *  microtask to keep the Ink render loop responsive, and guarded against
+   *  re-entrancy. The preview is always a dry run; nothing is deleted here. */
+  const reloadPlan = useCallback(() => {
+    if (maintLoadingRef.current) return;
+    maintLoadingRef.current = true;
+    setMaint(null);
+    setMaintError(null);
+    void Promise.resolve().then(() => {
+      try {
+        const state = discoverPruneState(REPO_ROOT);
+        setMaint({ plan: planPrune(state), repoRoot: state.repoRoot });
+      } catch (err) {
+        setMaintError(err instanceof Error ? err.message : String(err));
+      } finally {
+        maintLoadingRef.current = false;
+      }
+    });
+  }, []);
+
+  /** Apply the plan (the `--force` equivalent) once the confirm guard passes,
+   *  streaming each deletion into the apply log, then reload so the preview
+   *  reflects what is left. `applyPrunePlan` is synchronous git/fs. */
+  const runApply = useCallback(
+    (target: MaintPlan) => {
+      pushMaintLog({
+        text: `▶ applying prune (${prunePlanTotal(target.plan)} item(s))…`,
+        color: "cyan",
+      });
+      try {
+        applyPrunePlan(target.plan, target.repoRoot, {
+          onProgress: (line) => pushMaintLog({ text: `  ${line}` }),
+          onWarning: (line) => pushMaintLog({ text: `  ⚠ ${line}`, color: "yellow" }),
+        });
+        pushMaintLog({ text: "✓ prune applied", color: "green" });
+      } catch (err) {
+        pushMaintLog({
+          text: `✗ prune failed: ${err instanceof Error ? err.message : String(err)}`,
+          color: "red",
+        });
+      }
+      reloadPlan();
+    },
+    [pushMaintLog, reloadPlan]
+  );
 
   /** Start the orchestrator child (no-op if one is already running). */
   const start = useCallback(() => {
@@ -357,6 +591,21 @@ function Cockpit(): React.ReactElement {
     };
   }, [tab, sessions]);
 
+  // Lazily compute the prune plan the first time the Maintenance tab is opened
+  // (and after a reload/apply clears it); `r` recomputes in place thereafter. A
+  // prior discovery error is NOT auto-retried (it would loop) — `r` retries.
+  useEffect(() => {
+    if (tab === "maintenance" && maint === null && maintError === null) reloadPlan();
+  }, [tab, maint, maintError, reloadPlan]);
+
+  // Disarm any pending apply the instant a run starts: a live orchestrator makes
+  // apply unsafe (ADR-0009), so the confirm prompt must not linger. The confirm
+  // path is re-guarded too (`stepPruneApply` aborts on a flipped guard), so this
+  // is belt-and-suspenders for the UI.
+  useEffect(() => {
+    if (status === "running") setApplyPhase("idle");
+  }, [status]);
+
   useInput(
     (input, key) => {
       // The Cockpit reserves only global keys — quit and Tab/Shift+Tab tab-switch
@@ -378,6 +627,33 @@ function Cockpit(): React.ReactElement {
       if (key.return && tab === "live") {
         if (status === "running") stop();
         else start();
+        return;
+      }
+      // The Maintenance tab likewise has no child component: the shell drives its
+      // guarded apply. `r` reloads the plan; `a`/`y`/`n`+Esc step the pure
+      // arm→confirm machine, re-gated on the live guard so a run starting between
+      // arm and confirm aborts the delete (ADR-0009).
+      if (tab === "maintenance") {
+        if (input === "r") {
+          setApplyPhase("idle");
+          reloadPlan();
+          return;
+        }
+        const intent =
+          input === "a"
+            ? "arm"
+            : input === "y"
+              ? "confirm"
+              : input === "n" || key.escape
+                ? "cancel"
+                : null;
+        if (intent === null) return;
+        const allowed =
+          maint !== null &&
+          describePruneApply({ running: status === "running", plan: maint.plan }).allowed;
+        const step = stepPruneApply(applyPhase, intent, allowed);
+        setApplyPhase(step.phase);
+        if (step.apply && maint !== null) runApply(maint);
       }
     },
     { isActive: inputActive }
@@ -414,12 +690,24 @@ function Cockpit(): React.ReactElement {
             <Text dimColor>Loading sessions…</Text>
           )
         ) : (
-          <PlaceholderTab title="Maintenance" hint="Standalone: `pnpm sandcastle:prune`" />
+          <MaintenanceTab
+            maint={maint}
+            error={maintError}
+            running={status === "running"}
+            phase={applyPhase}
+            log={maintLog}
+          />
         )}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          Tab/⇧Tab switch tab{tab === "live" ? " · Enter Start/Stop" : ""} · q quit
+          Tab/⇧Tab switch tab
+          {tab === "live"
+            ? " · Enter Start/Stop"
+            : tab === "maintenance"
+              ? " · a apply · r reload"
+              : ""}{" "}
+          · q quit
         </Text>
       </Box>
     </Box>

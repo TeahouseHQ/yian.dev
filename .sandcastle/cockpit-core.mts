@@ -20,6 +20,7 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import type { OrchestratorEvent } from "./events.mts";
+import type { PrunePlan } from "./prune-plan.mts";
 
 /** The Cockpit's tabbed modes, in cycle order (CONTEXT.md: Cockpit). */
 export const COCKPIT_TABS = ["live", "sessions", "maintenance"] as const;
@@ -434,4 +435,94 @@ function roleAbbr(role: "implementer" | "reviewer" | "merger"): string {
     case "merger":
       return "merger";
   }
+}
+
+/** Why the Maintenance tab may not apply the prune plan right now, or `null`
+ *  when it may: `running` = the orchestrator child is live (ADR-0009), `empty`
+ *  = the plan deletes nothing. */
+export type PruneApplyBlock = "running" | "empty" | null;
+
+/** The Maintenance apply guard's verdict — whether apply is available and why
+ *  not, the presentational copy derived from `blockedBy`. */
+export interface PruneApplyDecision {
+  readonly allowed: boolean;
+  readonly blockedBy: PruneApplyBlock;
+}
+
+/**
+ * Decide whether the Cockpit Maintenance tab may apply the prune plan. Apply is
+ * refused while the orchestrator child is running — a live run is concurrently
+ * creating the worktrees/branches Prune would delete, so "Stop the run before
+ * pruning" (ADR-0009) — and is a no-op when the plan deletes nothing. Pure so
+ * the guard is unit-testable without the Ink layer or a live child.
+ */
+export function describePruneApply(input: {
+  running: boolean;
+  plan: PrunePlan;
+}): PruneApplyDecision {
+  if (input.running) return { allowed: false, blockedBy: "running" };
+  if (prunePlanTotal(input.plan) === 0) return { allowed: false, blockedBy: "empty" };
+  return { allowed: true, blockedBy: null };
+}
+
+/**
+ * Count how many things a prune plan would actually delete — run logs, merged
+ * worktrees, merged branches, and the Merger-scratch worktrees/branches.
+ * Deliberately excludes `skippedDirtyWorktrees`: those are *kept* (ADR-0004), so
+ * a plan whose only entries are skipped-dirty deletes nothing. Drives the
+ * Maintenance header count and the empty-plan guard. Pure.
+ */
+export function prunePlanTotal(plan: PrunePlan): number {
+  return (
+    plan.runLogs.length +
+    plan.removableWorktrees.length +
+    plan.deletableBranches.length +
+    plan.removableMergerWorktrees.length +
+    plan.deletableMergerBranches.length
+  );
+}
+
+/** The Maintenance apply flow's phase: `idle` shows the plan preview + apply
+ *  hint; `armed` shows the "delete N? confirm" prompt. Kept tiny (two states)
+ *  so a destructive apply always passes through an explicit confirm. */
+export type PruneApplyPhase = "idle" | "armed";
+
+/** A Maintenance key mapped to an apply-flow intent: `arm` requests confirm,
+ *  `confirm` proceeds with the deletion, `cancel` dismisses the prompt. */
+export type PruneApplyInput = "arm" | "confirm" | "cancel";
+
+/** The result of one {@link stepPruneApply} transition: the next phase, plus
+ *  `apply` set true on exactly the transition that should run the deletion. */
+export interface PruneApplyStep {
+  readonly phase: PruneApplyPhase;
+  readonly apply: boolean;
+}
+
+/**
+ * Advance the Maintenance apply flow one step. Applying is the `--force`
+ * equivalent (it deletes branches/worktrees), so it is never blind and never a
+ * single stray key: `arm` from `idle` only opens the confirm prompt, and only a
+ * `confirm` from `armed` sets `apply`. Both transitions are re-gated on the
+ * caller's live `allowed` (from {@link describePruneApply}) so a run starting
+ * between arm and confirm aborts the apply rather than racing the orchestrator
+ * (ADR-0009). Pure so the whole guard is unit-testable without the Ink layer.
+ */
+export function stepPruneApply(
+  phase: PruneApplyPhase,
+  input: PruneApplyInput,
+  allowed: boolean
+): PruneApplyStep {
+  if (phase === "idle" && input === "arm") {
+    // Only open the confirm prompt for a plan that may actually be applied.
+    return { phase: allowed ? "armed" : "idle", apply: false };
+  }
+  if (phase === "armed" && input === "confirm") {
+    // Re-gate on the live guard: a run that started since arming aborts here
+    // rather than deleting worktrees/branches out from under the orchestrator.
+    return { phase: "idle", apply: allowed };
+  }
+  if (phase === "armed" && input === "cancel") {
+    return { phase: "idle", apply: false };
+  }
+  return { phase, apply: false };
 }

@@ -98,6 +98,12 @@ describe("formatEventProse", () => {
     );
   });
 
+  it("reproduces the plan-reused (cache hit) line", () => {
+    expect(formatEventProse(evt({ type: "plan-reused", count: 3 }))).toBe(
+      "Plan cache hit — reusing 3 emitted issue(s), no Planner call this tick."
+    );
+  });
+
   it("reproduces the no-<plan> tag line", () => {
     expect(formatEventProse(evt({ type: "planner-no-plan" }))).toBe(
       "Planner did not produce a <plan> tag."
@@ -209,6 +215,7 @@ describe("formatEventProse", () => {
         title: "t",
       },
       { type: "planner-emitted", count: 0 },
+      { type: "plan-reused", count: 0 },
       { type: "planner-skipped" },
       { type: "planner-no-plan" },
       { type: "planner-failed", error: "x" },

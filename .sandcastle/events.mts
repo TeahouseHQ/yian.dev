@@ -71,6 +71,13 @@ interface PlannerEmittedEvent extends BaseEvent {
   readonly count: number;
 }
 
+/** Plan cache hit (ADR-0010): the raw ready-for-agent set was unchanged, so the
+ *  cached emit list was reused and the Planner (Opus) was NOT called this tick. */
+interface PlanReusedEvent extends BaseEvent {
+  readonly type: "plan-reused";
+  readonly count: number;
+}
+
 /** No actionable ready-for-agent issues, or no free slot after merge+review. */
 interface PlannerSkippedEvent extends BaseEvent {
   readonly type: "planner-skipped";
@@ -124,6 +131,7 @@ export type OrchestratorEvent =
   | BucketsEvent
   | DispatchEvent
   | PlannerEmittedEvent
+  | PlanReusedEvent
   | PlannerSkippedEvent
   | PlannerNoPlanEvent
   | PlannerFailedEvent
@@ -158,6 +166,8 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return `  → dispatching ${roleWord(event.role)} for PR #${event.pr} (issue #${event.issue}) → ${event.branch}`;
     case "planner-emitted":
       return `Planner emitted ${event.count} unblocked issue(s).`;
+    case "plan-reused":
+      return `Plan cache hit — reusing ${event.count} emitted issue(s), no Planner call this tick.`;
     case "planner-skipped":
       return "No actionable ready-for-agent issues, or no free slot after merge+review draining — skipping Planner this tick.";
     case "planner-no-plan":
@@ -256,6 +266,8 @@ export interface OrchestratorEvents {
   dispatchMerger(pr: number, issue: number, branch: string): void;
   /** The Planner emitted `count` unblocked issues. */
   plannerEmitted(count: number): void;
+  /** Plan cache hit — the cached emit (`count` issues) was reused, no Opus call. */
+  planReused(count: number): void;
   /** No actionable issues / no free slot — the Planner is skipped this tick. */
   plannerSkipped(): void;
   /** The Planner resolved but produced no `<plan>` tag. */
@@ -326,6 +338,7 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
     dispatchMerger: (pr, issue, branch) =>
       emit({ type: "dispatch", role: "merger", issue, branch, pr, title: null, ts: stamp() }),
     plannerEmitted: (count) => emit({ type: "planner-emitted", count, ts: stamp() }),
+    planReused: (count) => emit({ type: "plan-reused", count, ts: stamp() }),
     plannerSkipped: () => emit({ type: "planner-skipped", ts: stamp() }),
     plannerNoPlan: () => emit({ type: "planner-no-plan", ts: stamp() }),
     plannerFailed: (error) => emit({ type: "planner-failed", error, ts: stamp() }),

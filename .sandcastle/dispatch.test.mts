@@ -14,10 +14,15 @@ import {
   issueFromBranch,
   pickImplementers,
   pickPrs,
+  planCacheKey,
+  resolvePlanEmit,
   shouldQueryBuckets,
+  shouldReusePlan,
   shouldRunPlanner,
   type BucketPr,
+  type EmittedIssue,
   type GhRunner,
+  type PlanCache,
   type ReadyForAgentIssue,
 } from "./dispatch.mts";
 
@@ -30,10 +35,15 @@ import {
  * logic while `main.mts` drives live sandboxes.
  */
 
-const issue = (number: number, labels: string[] = []): ReadyForAgentIssue => ({
+const issue = (
+  number: number,
+  labels: string[] = [],
+  updatedAt = `2026-01-01T00:00:0${number}Z`
+): ReadyForAgentIssue => ({
   number,
   title: `Issue #${number}`,
   labels,
+  updatedAt,
 });
 
 /** A recording GhRunner that optionally throws on the defensive label-create. */
@@ -488,6 +498,155 @@ describe("pickPrs", () => {
   });
 });
 
+// ---- #86 — Plan cache: skip the Planner while the ready-set is unchanged (ADR-0010) --
+
+/**
+ * #86 — the Plan cache (ADR-0010). The orchestrator caches the Planner's last
+ * emit list keyed by a content-hash of the RAW `ready-for-agent` issue set it
+ * reasons over (`hash(sorted [(number, updatedAt)])`). While that key is
+ * unchanged a Poll tick dispatches from the cached emit with zero Opus calls;
+ * the Planner is re-invoked only when the key moves. The pure key + the
+ * reuse-vs-replan predicate live here, mirroring `shouldRunPlanner` /
+ * `pickImplementers`; the cache value itself lives in `main.mts` beside
+ * `inflight`.
+ */
+describe("planCacheKey", () => {
+  it("produces a stable string for the same raw ready-for-agent set", () => {
+    const set = [issue(1), issue(2)];
+    expect(planCacheKey(set)).toBe(planCacheKey(set));
+    expect(typeof planCacheKey(set)).toBe("string");
+  });
+
+  it("is order-independent (gh list order must not move the key)", () => {
+    const a = [issue(1), issue(2), issue(3)];
+    const b = [issue(3), issue(1), issue(2)];
+    expect(planCacheKey(a)).toBe(planCacheKey(b));
+  });
+
+  it("changes when an issue is added to the set", () => {
+    const before = planCacheKey([issue(1), issue(2)]);
+    const after = planCacheKey([issue(1), issue(2), issue(3)]);
+    expect(after).not.toBe(before);
+  });
+
+  it("changes when an issue is removed from the set (e.g. a blocker merges out)", () => {
+    const before = planCacheKey([issue(1), issue(2), issue(3)]);
+    const after = planCacheKey([issue(2), issue(3)]);
+    expect(after).not.toBe(before);
+  });
+
+  it("changes when an issue's updatedAt changes (edit/comment/label bump)", () => {
+    const before = planCacheKey([issue(1, [], "2026-01-01T00:00:00Z"), issue(2)]);
+    const after = planCacheKey([issue(1, [], "2026-06-01T00:00:00Z"), issue(2)]);
+    expect(after).not.toBe(before);
+  });
+
+  it("is stable when only in-flight/PR state (not in the key) would differ", () => {
+    // Same numbers + updatedAt → same key, regardless of labels the key ignores.
+    const a = [issue(1, ["ready-for-agent"]), issue(2, ["ready-for-agent"])];
+    const b = [issue(1, ["ready-for-agent", "needs-triage"]), issue(2, [])];
+    expect(planCacheKey(a)).toBe(planCacheKey(b));
+  });
+});
+
+describe("shouldReusePlan", () => {
+  const emit: EmittedIssue[] = [{ number: 1, title: "A", branch: "sandcastle/issue-1" }];
+
+  it("re-plans when the cache is cold (null)", () => {
+    expect(shouldReusePlan("k", null)).toBe(false);
+  });
+
+  it("reuses the cached emit when the key matches", () => {
+    const cache: PlanCache = { key: "k", emit };
+    expect(shouldReusePlan("k", cache)).toBe(true);
+  });
+
+  it("re-plans when the key has moved (ready-set changed)", () => {
+    const cache: PlanCache = { key: "old", emit };
+    expect(shouldReusePlan("new", cache)).toBe(false);
+  });
+});
+
+describe("resolvePlanEmit", () => {
+  const emitted = (...ns: number[]): EmittedIssue[] =>
+    ns.map((n) => ({ number: n, title: `#${n}`, branch: `sandcastle/issue-${n}` }));
+
+  it("runs the Planner once across two ticks with an unchanged raw set", async () => {
+    const raw = [issue(1), issue(2)];
+    let calls = 0;
+    const runPlanner = async () => (calls++, emitted(1));
+
+    let cache: PlanCache = null;
+    const t1 = await resolvePlanEmit(raw, cache, runPlanner);
+    cache = t1.cache;
+    const t2 = await resolvePlanEmit(raw, cache, runPlanner);
+
+    expect(calls).toBe(1); // one Opus Planner Session, not two
+    expect(t1.plannerRan).toBe(true);
+    expect(t2.plannerRan).toBe(false);
+    expect(t2.emit).toEqual(t1.emit); // cache hit serves the same emit
+  });
+
+  it("re-plans when the raw set changes (a blocker merges out of the query)", async () => {
+    let calls = 0;
+    const runPlanner = async () => (calls++, emitted());
+
+    let cache: PlanCache = null;
+    const first = await resolvePlanEmit([issue(1), issue(2), issue(3)], cache, runPlanner);
+    cache = first.cache;
+    // #1 merged → closed → leaves the ready-for-agent query. Key flips → re-plan.
+    const second = await resolvePlanEmit([issue(2), issue(3)], cache, runPlanner);
+
+    expect(calls).toBe(2);
+    expect(second.plannerRan).toBe(true);
+  });
+
+  it("cache hit still dispatches: capped emit {A,D,E} + 1 slot → A, then D,E, no re-plan", async () => {
+    // The starvation guard (ADR-0010): a cache hit skips the LLM, NOT the
+    // dispatch — so a capped emit still drains on later ticks without re-planning.
+    let calls = 0;
+    const runPlanner = async () => (calls++, emitted(1, 4, 5)); // A, D, E
+    const raw = [issue(1), issue(4), issue(5)];
+    const inflight = createInflight();
+
+    let cache: PlanCache = null;
+
+    // Tick 1 — cold cache → plan; only 1 free slot caps the emit to A.
+    const t1 = await resolvePlanEmit(raw, cache, runPlanner);
+    cache = t1.cache;
+    const picked1 = pickImplementers(t1.emit, 1, inflight);
+    picked1.forEach((i) => inflight.add(i.number));
+    expect(picked1.map((i) => i.number)).toEqual([1]);
+
+    // Tick 2 — A still in-flight its whole Run; same raw set → cache hit (no
+    // Planner). Dispatch from cached emit skips in-flight A → D, E fill 2 slots.
+    const t2 = await resolvePlanEmit(raw, cache, runPlanner);
+    cache = t2.cache;
+    const picked2 = pickImplementers(t2.emit, 2, inflight);
+
+    expect(t2.plannerRan).toBe(false);
+    expect(picked2.map((i) => i.number)).toEqual([4, 5]);
+    expect(calls).toBe(1); // one plan served both ticks — no starvation, no Opus
+  });
+
+  it("keys off the RAW set passed in, not any post-filter actionable subset", async () => {
+    // Passing the full raw set keeps the cache valid across a blocker's Run; the
+    // caller must pass queryReadyForAgent's result, never `actionable`.
+    let calls = 0;
+    const runPlanner = async () => (calls++, emitted(1));
+    const raw = [issue(1), issue(2), issue(3)];
+
+    let cache: PlanCache = null;
+    const a = await resolvePlanEmit(raw, cache, runPlanner);
+    cache = a.cache;
+    // Same raw set on the next tick (even though actionable would have shrunk to
+    // {2,3} once #1 went in-flight) → cache hit, no second Planner call.
+    const b = await resolvePlanEmit(raw, cache, runPlanner);
+    expect(b.plannerRan).toBe(false);
+    expect(calls).toBe(1);
+  });
+});
+
 // ---- main.mts structural guards (read source, never import — it runs the loop) --
 
 const mainSource = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
@@ -550,5 +709,35 @@ describe("main.mts — persistent shared-pool orchestrator (ADR-0006)", () => {
     // plan — `remaining` is the post-drain free count passed to shouldRunPlanner.
     expect(mainSource).toMatch(/remaining/);
     expect(mainSource).toMatch(/shouldRunPlanner\(actionable, remaining\)/);
+  });
+});
+
+describe("main.mts — Plan cache wiring (ADR-0010, #86)", () => {
+  it("fetches updatedAt for the ready-for-agent bucket (the key needs it)", () => {
+    expect(mainSource).toMatch(/number,title,labels,updatedAt/);
+  });
+
+  it("holds one in-memory Plan cache value beside the In-flight set", () => {
+    expect(mainSource).toMatch(/let planCache: PlanCache = null/);
+  });
+
+  it("resolves the implement-stage emit through the cache (resolvePlanEmit)", () => {
+    // The gate reuses the cached emit while the ready-set is unchanged; the cache
+    // value is threaded back in (`planCache = resolved.cache`).
+    expect(mainSource).toMatch(/resolvePlanEmit\(/);
+    expect(mainSource).toMatch(/planCache = resolved\.cache/);
+  });
+
+  it("keys the cache on the RAW query result, not the post-filter actionable set", () => {
+    // Load-bearing (ADR-0010): passing `readyForAgent` (pre-filter) keeps the
+    // cache honest when a blocker merges out; `actionable` would go stale.
+    expect(mainSource).toMatch(/resolvePlanEmit\(readyForAgent,/);
+    expect(mainSource).not.toMatch(/resolvePlanEmit\(actionable,/);
+  });
+
+  it("still runs the pure dispatch (pickImplementers) over the resolved emit", () => {
+    // A cache hit skips the LLM, never the dispatch — capped emits still drain.
+    expect(mainSource).toMatch(/resolved\.emit\.filter/);
+    expect(mainSource).toMatch(/pickImplementers\(dispatchable, remaining, inflight\)/);
   });
 });

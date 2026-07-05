@@ -14,9 +14,12 @@ import {
   pickPrs,
   POLL_INTERVAL_MS,
   POOL_SIZE,
+  resolvePlanEmit,
   shouldQueryBuckets,
   shouldRunPlanner,
   type BucketPr,
+  type EmittedIssue,
+  type PlanCache,
   type ReadyForAgentIssue,
 } from "./dispatch.mts";
 import {
@@ -150,17 +153,19 @@ async function queryReadyForAgent(): Promise<ReadyForAgentIssue[]> {
     "--limit",
     "200",
     "--json",
-    "number,title,labels",
+    "number,title,labels,updatedAt",
   ]);
   const rows = JSON.parse(out || "[]") as {
     number: number;
     title: string;
     labels: { name: string }[];
+    updatedAt: string;
   }[];
   return rows.map((r) => ({
     number: r.number,
     title: r.title,
     labels: r.labels.map((l) => l.name),
+    updatedAt: r.updatedAt,
   }));
 }
 
@@ -231,6 +236,13 @@ const events = createEvents();
 // so it is not re-dispatched; Reviewer/Merger give-up paths live in the prompts (#65).
 const pool = createPool(POOL_SIZE);
 const inflight = createInflight();
+
+// The Plan cache (ADR-0010): the Planner's last emit list keyed by a
+// content-hash of the raw `ready-for-agent` set. In-memory / non-durable (cold
+// after restart → one re-plan), living beside the In-flight set. While the key
+// is unchanged, the implement stage dispatches from `planCache.emit` with no
+// Opus Planner call; `resolvePlanEmit` re-invokes the Planner only on a miss.
+let planCache: PlanCache = null;
 
 /**
  * Dispatch one Implementer for an issue into the shared Pool. Occupies a slot
@@ -497,7 +509,7 @@ async function dispatchMerger(pr: {
  * itself (see plan-prompt.md); the orchestrator only invokes it when there is
  * actionable work to analyze. Returns `[]` if the Planner produced no plan.
  */
-async function runPlanner(): Promise<{ number: number; title: string; branch: string }[]> {
+async function runPlanner(): Promise<EmittedIssue[]> {
   const plannerRunId = generateRunId();
   const planLC = lifecycle("planner");
   planLC.start();
@@ -572,19 +584,29 @@ for (;;) {
     }
     remaining -= reviewers.length;
 
-    // 3) ready-for-agent — the Planner runs in its own Pool-exempt slot ONLY
-    // when actionable issues exist AND a slot remains after merge+review
-    // draining (don't spend Opus on a plan we can't dispatch). It re-plans
-    // every eligible tick (no caching); pickImplementers caps at `remaining`.
+    // 3) ready-for-agent — the implement stage runs ONLY when actionable issues
+    // exist AND a slot remains after merge+review draining (don't spend a slot
+    // on work we can't start). The Plan cache (ADR-0010) skips the Opus Planner
+    // while the RAW ready-for-agent set is unchanged: `resolvePlanEmit` keys on
+    // `readyForAgent` (the pre-filter query result, NOT `actionable` — else the
+    // cache goes stale when a blocker merges out), reuses the cached emit on a
+    // hit, and re-invokes the Planner only on a miss. Either way the pure
+    // dispatch below runs over the emit, so a capped emit still drains on later
+    // ticks (no starvation). `pickImplementers` caps at `remaining`.
     if (shouldRunPlanner(actionable, remaining)) {
       try {
-        const emitted = await runPlanner();
-        events.plannerEmitted(emitted.length);
+        const resolved = await resolvePlanEmit(readyForAgent, planCache, runPlanner);
+        planCache = resolved.cache;
+        if (resolved.plannerRan) {
+          events.plannerEmitted(resolved.emit.length);
+        } else {
+          events.planReused(resolved.emit.length);
+        }
 
         // The Planner re-queries gh, so it can emit an issue that just got a PR
         // this tick — drop those before dispatching. (In-flight dedupe + the
         // remaining-slot cap happen in pickImplementers.)
-        const dispatchable = emitted.filter((i) => !openPrIssues.has(i.number));
+        const dispatchable = resolved.emit.filter((i) => !openPrIssues.has(i.number));
         const toDispatch = pickImplementers(dispatchable, remaining, inflight);
 
         for (const issue of toDispatch) {

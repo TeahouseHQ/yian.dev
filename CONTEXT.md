@@ -57,8 +57,16 @@ _Avoid_: iteration, run, cycle.
 The orchestrator's **in-memory** record of the Planner's last emit list (the unblocked issues `U`), keyed by a content-hash of the `ready-for-agent` issue set — `hash(sorted [(number, updatedAt)])` over the raw `gh issue list --label ready-for-agent` result the Planner reasons over. While the key is unchanged, a Poll tick dispatches from the cached emit with **no Planner (Opus) call**; the Planner is re-invoked only when the key changes (an issue labeled in/out, or a body/label/comment edit). In-flight/PR state is checked live and is **not** in the key, so the cache stays valid across a blocker's whole Run (implement→review→merge). Non-durable — cold after restart (one re-plan), like the In-flight set (ADR-0006, ADR-0010). A cache hit still runs the pure dispatch (`pickImplementers`) over the cached emit, so capped-but-unblocked issues are never starved. Stores only the emit list, not the blocking graph.
 _Avoid_: plan graph, dependency graph, Planner memo, memoization.
 
+**Outcome**:
+The structured self-report an agent Session ends with — pass, or give-up with a reason — that the orchestrator parses and acts on. The agent judges; the orchestrator mutates. All dispatch-controlling GitHub state transitions (labels, draft flips, the merge itself) are performed by orchestrator code from the reported Outcome, never by the agent running `gh` from prompt instructions (ADR-0011). A Session that resolves without a parseable Outcome is treated as a failed attempt against its Retry budget.
+_Avoid_: verdict, result (a Manifest field), status.
+
+**Retry budget**:
+The per-issue-per-phase allowance of failed attempts — a crashed Session or one that resolved without a parseable Outcome — before the orchestrator escalates the item to `ready-for-human` with a comment citing the attempts (N=3: one attempt plus two retries). In-memory beside the In-flight set and Plan cache (same non-durability philosophy, ADR-0006/0010); cleared on escalation, so a human re-labeling an issue gets a fresh budget; reset by restart, which at worst grants extra attempts — benign under at-least-once dispatch.
+_Avoid_: strike count, attempt counter, backoff.
+
 **`ready-for-human`**:
-The universal terminal label — on an issue or a PR — meaning "out of all Dispatch buckets; a human owns it." Every give-up / failure path lands here: a no-op Implementer (strips `ready-for-agent`, adds `ready-for-human`), a Reviewer that can't pass a change (leaves it draft, adds `ready-for-human`), and a Merger whose test-then-merge fails or conflicts (removes `reviewed`, reverts the PR to draft, adds `ready-for-human`). This is what keeps the persistent loop from re-dispatching un-actionable work forever.
+The universal terminal label — on an issue or a PR — meaning "out of all Dispatch buckets; a human owns it." Every give-up / failure path lands here: a no-op Implementer (strips `ready-for-agent`, adds `ready-for-human`), a Reviewer or Merger whose Outcome is give-up (the Reviewer's PR stays draft; the Merger's PR loses `reviewed` and reverts to draft), and an item whose Retry budget is exhausted. The transitions themselves are applied by orchestrator code acting on the reported Outcome (ADR-0011), in crash-safe order (terminal label added before bucket state is removed). This is what keeps the persistent loop from re-dispatching un-actionable work forever.
 _Avoid_: blocked, stuck, wontfix (a distinct triage label).
 
 **Manifest**:

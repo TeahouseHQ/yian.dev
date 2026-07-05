@@ -89,13 +89,16 @@ export function createInflight(): Inflight {
 
 /**
  * A `ready-for-agent` issue as the Dispatch bucket sees it: its number, title,
- * and current labels (so an issue that ALSO carries `ready-for-human` can be
- * excluded without a second query).
+ * current labels (so an issue that ALSO carries `ready-for-human` can be
+ * excluded without a second query), and `updatedAt` — GitHub's ISO timestamp,
+ * bumped on any edit/comment/label change, which the Plan cache key hashes so a
+ * content change to an issue the Planner reasons over forces a re-plan (ADR-0010).
  */
 export interface ReadyForAgentIssue {
   readonly number: number;
   readonly title: string;
   readonly labels: ReadonlyArray<string>;
+  readonly updatedAt: string;
 }
 
 /**
@@ -173,6 +176,91 @@ export function pickImplementers<T extends { number: number }>(
     if (!inflight.has(item.number)) picked.push(item);
   }
   return picked;
+}
+
+/**
+ * An issue the Planner emitted as safe to start — the unblocked subset `U` of
+ * its input set. The Plan cache stores exactly this list (never the blocking
+ * graph): the orchestrator only needs *which* issues are safe to dispatch, not
+ * *who* blocks *whom* (ADR-0010).
+ */
+export interface EmittedIssue {
+  readonly number: number;
+  readonly title: string;
+  readonly branch: string;
+}
+
+/**
+ * The **Plan cache** (CONTEXT.md; ADR-0010): the Planner's last `emit` list
+ * keyed by a content-hash of the raw `ready-for-agent` set it reasoned over.
+ * `null` when cold (process start / no plan yet). In-memory / non-durable — it
+ * lives in `main.mts` beside the In-flight set, the pure key + reuse predicate
+ * live here.
+ */
+export type PlanCache = { readonly key: string; readonly emit: EmittedIssue[] } | null;
+
+/**
+ * Content-hash of the raw `ready-for-agent` set the Planner reasons over —
+ * `hash(sorted [(number, updatedAt)])` (ADR-0010). Sorting by number makes the
+ * key **order-independent** (`gh` list order must not matter); including
+ * `updatedAt` makes it change on any add/remove of an issue OR any edit/comment/
+ * label change (GitHub bumps `updatedAt`), and stay stable otherwise.
+ *
+ * IMPORTANT: callers must pass the **raw** `queryReadyForAgent` result (before
+ * `filterReadyForAgent`), never the post-filter `actionable` set — otherwise the
+ * cache goes stale silently when a blocker merges out of the query (ADR-0010).
+ *
+ * The "hash" is the canonical sorted-pairs JSON itself (a content-identity key):
+ * two sets compare equal iff they hold the same `(number, updatedAt)` pairs. A
+ * digest would only add opacity — the key is compared by string equality and is
+ * far more debuggable as the readable pair list.
+ */
+export function planCacheKey(issues: ReadonlyArray<{ number: number; updatedAt: string }>): string {
+  const pairs = issues.map((i) => [i.number, i.updatedAt] as const).sort((a, b) => a[0] - b[0]);
+  return JSON.stringify(pairs);
+}
+
+/**
+ * The reuse-vs-replan predicate (ADR-0010). Returns `true` — **reuse the cached
+ * emit, no Planner call** — only when the cache is warm AND its key matches the
+ * current raw-set key. Returns `false` — **re-plan** — when the cache is cold
+ * (`null`) or the key moved (an issue labeled in/out, or a content edit). Either
+ * way the caller still runs the pure `pickImplementers` dispatch over the emit,
+ * so a cache hit never skips dispatch and capped-but-unblocked issues never
+ * starve.
+ */
+export function shouldReusePlan(key: string, cache: PlanCache): boolean {
+  return cache !== null && cache.key === key;
+}
+
+/**
+ * Resolve the emit list to dispatch from this tick, running the injected
+ * `runPlanner` **only on a cache miss** (ADR-0010). Returns the emit, the
+ * (possibly updated) cache to store, and `plannerRan` so the caller can observe
+ * whether Opus was spent.
+ *
+ * - **Cache hit** (`shouldReusePlan`): serve `cache.emit` verbatim, `runPlanner`
+ *   is never called, cache is returned unchanged.
+ * - **Cache miss** (cold cache / key moved): call `runPlanner`, store
+ *   `{ key, emit }`, return the fresh emit.
+ *
+ * The caller passes the **raw** `queryReadyForAgent` result (before
+ * `filterReadyForAgent`) as `readyForAgent`, then runs the same
+ * `openPrIssues`/`inflight` filters + `pickImplementers` over the returned emit
+ * regardless of hit or miss — a cache hit skips the LLM, never the dispatch, so
+ * a capped emit still drains on later ticks (no starvation).
+ */
+export async function resolvePlanEmit(
+  readyForAgent: ReadonlyArray<{ number: number; updatedAt: string }>,
+  cache: PlanCache,
+  runPlanner: () => Promise<EmittedIssue[]>
+): Promise<{ emit: EmittedIssue[]; cache: PlanCache; plannerRan: boolean }> {
+  const key = planCacheKey(readyForAgent);
+  if (shouldReusePlan(key, cache)) {
+    return { emit: cache!.emit, cache, plannerRan: false };
+  }
+  const emit = await runPlanner();
+  return { emit, cache: { key, emit }, plannerRan: true };
 }
 
 /**

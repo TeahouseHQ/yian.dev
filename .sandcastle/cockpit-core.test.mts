@@ -122,6 +122,11 @@ describe("parseEventLine", () => {
     });
   });
 
+  it("recognizes the plan-reused cache-hit event (#86)", () => {
+    const line = JSON.stringify({ type: "plan-reused", count: 3, ts: "x" });
+    expect(parseEventLine(line)).toEqual({ type: "plan-reused", count: 3, ts: "x" });
+  });
+
   it("returns null for a blank line", () => {
     expect(parseEventLine("")).toBeNull();
     expect(parseEventLine("   ")).toBeNull();
@@ -242,6 +247,9 @@ describe("formatEventLog", () => {
     ).toBe("buckets · merge 1 · review 2 · agent 5 (3 actionable)");
     expect(formatEventLog(evt({ type: "planner-emitted", count: 3 }))).toBe(
       "planner emitted 3 issue(s)"
+    );
+    expect(formatEventLog(evt({ type: "plan-reused", count: 2 }))).toBe(
+      "plan cache hit · reused 2 issue(s) · no planner call"
     );
     expect(formatEventLog(evt({ type: "planner-skipped" }))).toBe("planner skipped");
     expect(formatEventLog(evt({ type: "planner-no-plan" }))).toBe("planner produced no plan");

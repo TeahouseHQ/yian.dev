@@ -80,6 +80,7 @@ const KNOWN_EVENT_TYPES = new Set<OrchestratorEvent["type"]>([
   "buckets",
   "dispatch",
   "planner-emitted",
+  "plan-reused",
   "planner-skipped",
   "planner-no-plan",
   "planner-failed",
@@ -175,6 +176,8 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return `buckets · merge ${event.merge} · review ${event.review} · agent ${event.agent} (${event.actionable} actionable)`;
     case "planner-emitted":
       return `planner emitted ${event.count} issue(s)`;
+    case "plan-reused":
+      return `plan cache hit · reused ${event.count} issue(s) · no planner call`;
     case "planner-skipped":
       return "planner skipped";
     case "planner-no-plan":

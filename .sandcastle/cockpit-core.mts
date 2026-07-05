@@ -42,6 +42,34 @@ export function cycleTab(current: CockpitTab, direction: CycleDirection): Cockpi
   return COCKPIT_TABS[(i + delta + n) % n];
 }
 
+/** The structural slice of Ink's `Key` that {@link routeCockpitInput} inspects —
+ *  the modifiers the Cockpit's global keys are built from. */
+export interface InputKey {
+  readonly tab: boolean;
+  readonly shift: boolean;
+  readonly ctrl: boolean;
+}
+
+/** What the Cockpit's top-level input handler should do with a key chord:
+ *  `quit` the Cockpit, `switch-tab` in a direction, or `delegate` the key to
+ *  the focused tab (e.g. the embedded Session browser). */
+export type CockpitInputAction =
+  | { kind: "quit" }
+  | { kind: "switch-tab"; direction: CycleDirection }
+  | { kind: "delegate" };
+
+/**
+ * Route one key chord for the Cockpit's top-level input handler. The Cockpit
+ * reserves a minimal set of **global** keys and delegates everything else to
+ * whichever tab is focused, so an embedded tab (the Session browser, issue #82)
+ * keeps its own keybindings without colliding with the shell.
+ */
+export function routeCockpitInput(input: string, key: InputKey): CockpitInputAction {
+  if (input === "q" || (key.ctrl && input === "c")) return { kind: "quit" };
+  if (key.tab) return { kind: "switch-tab", direction: key.shift ? "prev" : "next" };
+  return { kind: "delegate" };
+}
+
 /** Every `type` discriminator the orchestrator can emit — the allow-list
  *  `parseEventLine` checks so a stray non-event JSON line (or a future unknown
  *  type) is dropped rather than mis-rendered. */

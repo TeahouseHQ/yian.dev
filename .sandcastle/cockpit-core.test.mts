@@ -11,8 +11,10 @@ import {
   formatPoolGauge,
   parseEventLine,
   reduceLiveEvent,
+  routeCockpitInput,
   spawnOrchestrator,
   splitNdjsonChunk,
+  type InputKey,
   type OrchestratorHandlers,
 } from "./cockpit-core.mts";
 import type { OrchestratorEvent } from "./events.mts";
@@ -39,6 +41,47 @@ describe("cycleTab", () => {
 
   it("lists the three tabs in Live → Sessions → Maintenance order", () => {
     expect(COCKPIT_TABS).toEqual(["live", "sessions", "maintenance"]);
+  });
+});
+
+// ── routeCockpitInput: Cockpit-global vs tab-local key routing ───────────────
+
+/** Build an Ink-style key chord, defaulting every modifier/arrow to false. */
+function chord(over: Partial<InputKey> = {}): InputKey {
+  return { tab: false, shift: false, ctrl: false, ...over };
+}
+
+describe("routeCockpitInput", () => {
+  it("routes q to quit", () => {
+    expect(routeCockpitInput("q", chord())).toEqual({ kind: "quit" });
+  });
+
+  it("routes Ctrl-C to quit", () => {
+    expect(routeCockpitInput("c", chord({ ctrl: true }))).toEqual({ kind: "quit" });
+  });
+
+  it("routes Tab to a next-tab switch", () => {
+    expect(routeCockpitInput("", chord({ tab: true }))).toEqual({
+      kind: "switch-tab",
+      direction: "next",
+    });
+  });
+
+  it("routes Shift+Tab to a previous-tab switch", () => {
+    expect(routeCockpitInput("", chord({ tab: true, shift: true }))).toEqual({
+      kind: "switch-tab",
+      direction: "prev",
+    });
+  });
+
+  it("delegates arrow keys to the focused tab (the embedded browser owns ←/→)", () => {
+    // Ink reports arrows as input "" with the arrow flag set — no global key
+    // matches, so the Cockpit hands them to whichever tab is focused (#82).
+    expect(routeCockpitInput("", chord())).toEqual({ kind: "delegate" });
+  });
+
+  it("delegates ordinary keys like r to the focused tab", () => {
+    expect(routeCockpitInput("r", chord())).toEqual({ kind: "delegate" });
   });
 });
 

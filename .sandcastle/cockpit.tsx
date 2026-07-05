@@ -22,10 +22,16 @@
  * in the same log. A child crash/exit is reported in the UI (status line + a
  * coloured log line) without unmounting the Cockpit.
  *
- * **Sessions** and **Maintenance** are placeholder tabs in this slice (their
- * standalone commands, `sandcastle:browse` / `sandcastle:prune`, still work).
- * Headless `pnpm sandcastle` (no Cockpit) still runs the orchestrator loop
- * directly — this file only adds a supervisor on top of that same entry point.
+ * The **Sessions** tab embeds the reusable {@link SessionBrowser} component
+ * (issue #82) — the *same* implementation the standalone `sandcastle:browse`
+ * command mounts, no duplication. It is mounted only while the tab is focused,
+ * so its own keybindings (↑/↓, ←/→, Enter, r, the pager keys) are naturally
+ * scoped to it; the shell keeps quit + Tab/Shift+Tab tab-switching via the pure
+ * `routeCockpitInput`, delegating every other key to the focused tab. The
+ * manifest is loaded lazily the first time the tab is opened. **Maintenance**
+ * remains a placeholder (`sandcastle:prune` still runs standalone). Headless
+ * `pnpm sandcastle` (no Cockpit) still runs the orchestrator loop directly —
+ * this file only adds a supervisor on top of that same entry point.
  *
  * All logic with behaviour lives in the pure, unit-tested `cockpit-core.mts`
  * (tab cycling, NDJSON decode, log formatting, child-exit classification); this
@@ -52,12 +58,19 @@ import {
   formatInFlight,
   formatPoolGauge,
   reduceLiveEvent,
+  routeCockpitInput,
   spawnOrchestrator,
   type CockpitTab,
   type LiveView,
   type Supervisor,
 } from "./cockpit-core.mjs";
 import type { OrchestratorEvent } from "./events.mjs";
+import {
+  loadManifest,
+  SessionBrowser,
+  windowLabelOf,
+  type ManifestLoad,
+} from "./SessionBrowser.jsx";
 
 /** Absolute path to the orchestrator entry, resolved from THIS file so the
  *  child launches regardless of the caller's cwd. */
@@ -72,6 +85,11 @@ const BIN_DIR = path.join(REPO_ROOT, "node_modules", ".bin");
 
 /** Cap on the scrolling event log (bounded ring; oldest entries fall off). */
 const LOG_CAP = 1000;
+
+/** The Cockpit Sessions tab uses the browser's default window (last 3 days); the
+ *  standalone `sandcastle:browse` still accepts `--days` / `--since` on argv. */
+const SESSIONS_WINDOW = {};
+const SESSIONS_WINDOW_LABEL = windowLabelOf(SESSIONS_WINDOW);
 
 /** The Live tab's supervised-child status. Launches `idle`; `running` while a
  *  child is alive; `stopped` after a clean Stop/exit; `crashed` after an
@@ -264,6 +282,8 @@ function Cockpit(): React.ReactElement {
   // The derived Live monitor state (pool gauge + in-flight list), folded from
   // the event stream by the pure `reduceLiveEvent` — never the Manifest.
   const [view, setView] = useState<LiveView>(EMPTY_LIVE_VIEW);
+  // The Sessions tab's manifest, loaded lazily on first open (null until then).
+  const [sessions, setSessions] = useState<ManifestLoad | null>(null);
 
   // The live supervisor (null when no child is running). A ref, not state, so
   // the async stdout/exit handlers always see the current child without stale
@@ -323,22 +343,38 @@ function Cockpit(): React.ReactElement {
   // child — SIGTERM it on teardown.
   useEffect(() => () => supervisorRef.current?.stop(), []);
 
+  // Lazily load the manifest the first time the Sessions tab is opened, so the
+  // embedded browser has data to seed from; its own `r` key reloads in place
+  // from the same source thereafter.
+  useEffect(() => {
+    if (tab !== "sessions" || sessions !== null) return;
+    let cancelled = false;
+    void loadManifest().then((loaded) => {
+      if (!cancelled) setSessions(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, sessions]);
+
   useInput(
     (input, key) => {
-      if (input === "q" || (key.ctrl && input === "c")) {
+      // The Cockpit reserves only global keys — quit and Tab/Shift+Tab tab-switch
+      // — and delegates every other key to the focused tab (#82). On the Sessions
+      // tab that means the embedded SessionBrowser (which registers its own
+      // useInput while mounted) owns ↑/↓, ←/→, Enter, r, and the pager keys.
+      // `routeCockpitInput` is the pure, tested classifier.
+      const action = routeCockpitInput(input, key);
+      if (action.kind === "quit") {
         quit();
         return;
       }
-      if (key.leftArrow) {
-        setTab((t) => cycleTab(t, "prev"));
+      if (action.kind === "switch-tab") {
+        setTab((t) => cycleTab(t, action.direction));
         return;
       }
-      if (key.rightArrow) {
-        setTab((t) => cycleTab(t, "next"));
-        return;
-      }
-      // Enter toggles Start/Stop, but only on the Live tab (the only functional
-      // one this slice); it is inert on the placeholder tabs.
+      // Delegated. The Live tab has no child component, so its Start/Stop still
+      // lives in the shell: Enter toggles it, and is inert on the other tabs.
       if (key.return && tab === "live") {
         if (status === "running") stop();
         else start();
@@ -366,13 +402,25 @@ function Cockpit(): React.ReactElement {
             height={logHeight}
           />
         ) : tab === "sessions" ? (
-          <PlaceholderTab title="Sessions" hint="Standalone: `pnpm sandcastle:browse`" />
+          sessions ? (
+            <SessionBrowser
+              initialEntries={sessions.entries}
+              initialMessage={sessions.message}
+              windowOpts={SESSIONS_WINDOW}
+              windowLabel={SESSIONS_WINDOW_LABEL}
+              standalone={false}
+            />
+          ) : (
+            <Text dimColor>Loading sessions…</Text>
+          )
         ) : (
           <PlaceholderTab title="Maintenance" hint="Standalone: `pnpm sandcastle:prune`" />
         )}
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>←/→ switch tab · Enter Start/Stop · q quit</Text>
+        <Text dimColor>
+          Tab/⇧Tab switch tab{tab === "live" ? " · Enter Start/Stop" : ""} · q quit
+        </Text>
       </Box>
     </Box>
   );

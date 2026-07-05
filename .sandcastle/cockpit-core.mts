@@ -7,19 +7,25 @@
  * - the **tab model** (`COCKPIT_TABS` + `cycleTab`) behind the tab-switch keybind,
  * - the **NDJSON stream** decode (`splitNdjsonChunk` + `parseEventLine`) that turns
  *   the supervised child's stdout chunks into typed orchestrator events,
- * - the **event log** (`formatEventLog` + `appendLogLine`) that renders those
- *   events as bounded, scrolling one-liners, and
+ * - the **event log** ring (`appendLogLine`) that bounds those rendered one-liners, and
  * - the **child-exit** classification (`describeChildExit`) that decides whether a
  *   child that went away was a clean Stop or a crash to surface.
  *
  * - the **supervisor** (`spawnOrchestrator`) that launches the orchestrator as a
  *   child process and threads its stdout/stderr through the decode above.
  *
- * The event *shape* is owned by `events.mts` (the contract the orchestrator emits
- * and the Cockpit consumes); this module only decodes and presents it.
+ * The event *shape* AND its rendering are owned by `events.mts` — the single
+ * event-rendering seam (`formatEventLog`, `eventSeverity`, `roleAbbr`, the
+ * `isKnownEventType` allow-list). This module only decodes the stream and folds
+ * it into view state; it renders no event strings of its own.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import type { OrchestratorEvent } from "./events.mts";
+import {
+  isKnownEventType,
+  roleAbbr,
+  type OrchestratorEvent,
+  type OrchestratorRole,
+} from "./events.mts";
 import type { PrunePlan } from "./prune-plan.mts";
 
 /** The Cockpit's tabbed modes, in cycle order (CONTEXT.md: Cockpit). */
@@ -71,24 +77,6 @@ export function routeCockpitInput(input: string, key: InputKey): CockpitInputAct
   return { kind: "delegate" };
 }
 
-/** Every `type` discriminator the orchestrator can emit — the allow-list
- *  `parseEventLine` checks so a stray non-event JSON line (or a future unknown
- *  type) is dropped rather than mis-rendered. */
-const KNOWN_EVENT_TYPES = new Set<OrchestratorEvent["type"]>([
-  "tick",
-  "pool-full",
-  "buckets",
-  "dispatch",
-  "planner-emitted",
-  "plan-reused",
-  "planner-skipped",
-  "planner-no-plan",
-  "planner-failed",
-  "noop-escalated",
-  "gh-error",
-  "session-resolved",
-]);
-
 /**
  * Decode one line of the child's NDJSON stdout into a typed
  * {@link OrchestratorEvent}, or `null` when the line is not a usable event.
@@ -99,6 +87,9 @@ const KNOWN_EVENT_TYPES = new Set<OrchestratorEvent["type"]>([
  * returns `null` for a blank line, non-JSON, non-object JSON, or a JSON object
  * whose `type` is not a known orchestrator event — the Cockpit simply skips
  * those rather than crashing or showing garbage.
+ *
+ * The allow-list is `isKnownEventType` from `events.mts`, derived from the event
+ * union — so it can never drift from the shipped events by hand.
  */
 export function parseEventLine(line: string): OrchestratorEvent | null {
   const trimmed = line.trim();
@@ -111,9 +102,7 @@ export function parseEventLine(line: string): OrchestratorEvent | null {
   }
   if (typeof parsed !== "object" || parsed === null) return null;
   const type = (parsed as { type?: unknown }).type;
-  if (typeof type !== "string" || !KNOWN_EVENT_TYPES.has(type as OrchestratorEvent["type"])) {
-    return null;
-  }
+  if (typeof type !== "string" || !isKnownEventType(type)) return null;
   return parsed as OrchestratorEvent;
 }
 
@@ -144,57 +133,6 @@ export function splitNdjsonChunk(buffer: string, chunk: string): ChunkSplit {
   const parts = combined.split("\n");
   const rest = parts.pop() ?? "";
   return { lines: parts, rest };
-}
-
-/**
- * Render one orchestrator event as a single compact line for the Live tab's
- * scrolling event log. Distinct from `formatEventProse` in `events.mts`: this is
- * a **total** formatter — every event produces exactly one glanceable line,
- * including a *successful* `session-resolved` (which prose deliberately renders
- * to nothing because the headless `lifecycle` markers cover it). The Cockpit's
- * job is the opposite of headless: surface every live resolution.
- *
- * No timestamp is included — the log line is the event's semantics only; the
- * React layer prefixes a wall-clock time from `event.ts`. Pure so the exact
- * strings are unit-testable in isolation.
- */
-export function formatEventLog(event: OrchestratorEvent): string {
-  switch (event.type) {
-    case "tick":
-      return `tick · ${event.free}/${event.poolSize} free · ${event.inflight} in-flight`;
-    case "dispatch":
-      return event.role === "implementer"
-        ? `▶ dispatch impl #${event.issue}: ${event.title}`
-        : `▶ dispatch ${roleAbbr(event.role)} PR #${event.pr} (#${event.issue})`;
-    case "session-resolved":
-      return event.status === "ok"
-        ? `✓ ${roleAbbr(event.role)} #${event.issue} resolved · ${event.commits} commits`
-        : `✗ ${roleAbbr(event.role)} #${event.issue} failed · ${event.error}`;
-    case "pool-full":
-      return "pool full · gh query skipped";
-    case "buckets":
-      return `buckets · merge ${event.merge} · review ${event.review} · agent ${event.agent} (${event.actionable} actionable)`;
-    case "planner-emitted":
-      return `planner emitted ${event.count} issue(s)`;
-    case "plan-reused":
-      return `plan cache hit · reused ${event.count} issue(s) · no planner call`;
-    case "planner-skipped":
-      return "planner skipped";
-    case "planner-no-plan":
-      return "planner produced no plan";
-    case "planner-failed":
-      return `⚠ planner failed · ${event.error}`;
-    case "noop-escalated":
-      return `⚠ #${event.issue} no commits · escalated to ready-for-human`;
-    case "gh-error":
-      return `⚠ gh ${event.args.join(" ")} failed · ${event.error}`;
-    default: {
-      // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
-      // line here is a compile error, so the Live log can never silently omit one.
-      const unreachable: never = event;
-      return unreachable;
-    }
-  }
 }
 
 /**
@@ -346,7 +284,7 @@ export function spawnOrchestrator(config: SpawnConfig, handlers: OrchestratorHan
  *  Session resolves, ADR-0008). */
 export interface InFlightEntry {
   readonly issue: number;
-  readonly role: "implementer" | "reviewer" | "merger";
+  readonly role: OrchestratorRole;
   /** The PR under review/merge; null for an Implementer (no PR yet). */
   readonly pr: number | null;
   /** The issue title (Implementer dispatch only; null for Reviewer/Merger). */
@@ -425,19 +363,6 @@ export function formatInFlight(entry: InFlightEntry): string {
     return `impl #${entry.issue}${entry.title ? ` · ${entry.title}` : ""}`;
   }
   return `${roleAbbr(entry.role)} PR #${entry.pr} (#${entry.issue})`;
-}
-
-/** The compact role tag used in log lines: `impl` / `rev` / `merger`. Mirrors
- *  the labels the orchestrator's `lifecycle`/prose output already uses. */
-function roleAbbr(role: "implementer" | "reviewer" | "merger"): string {
-  switch (role) {
-    case "implementer":
-      return "impl";
-    case "reviewer":
-      return "rev";
-    case "merger":
-      return "merger";
-  }
 }
 
 /** Why the Maintenance tab may not apply the prune plan right now, or `null`

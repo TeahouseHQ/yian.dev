@@ -6,7 +6,6 @@ import {
   cycleTab,
   describeChildExit,
   EMPTY_LIVE_VIEW,
-  formatEventLog,
   formatInFlight,
   formatPoolGauge,
   parseEventLine,
@@ -20,7 +19,7 @@ import {
   type InputKey,
   type OrchestratorHandlers,
 } from "./cockpit-core.mts";
-import type { OrchestratorEvent } from "./events.mts";
+import { formatEventLog, type OrchestratorEvent } from "./events.mts";
 import type { PrunePlan } from "./prune-plan.mts";
 
 /** A PrunePlan fixture; every bucket empty unless overridden. */

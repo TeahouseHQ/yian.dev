@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createEvents,
+  EVENT_TYPES,
+  eventSeverity,
   eventStream,
   formatEventNdjson,
   formatEventProse,
+  isKnownEventType,
   resolveEventFormat,
   type OrchestratorEvent,
 } from "./events.mts";
@@ -486,5 +489,83 @@ describe("createEvents", () => {
     const b = JSON.parse(out.mock.calls[1][0] as string) as { ts: string };
     expect(a.ts).toBe("2026-07-04T10:00:00.000Z");
     expect(b.ts).toBe("2026-07-04T11:00:00.000Z");
+  });
+});
+
+// ── EVENT_TYPES / isKnownEventType: the decode allow-list, derived from the union ─
+
+describe("EVENT_TYPES / isKnownEventType", () => {
+  /** The canonical roster of every OrchestratorEvent tag. This test's job is to
+   *  catch divergence between the shipped allow-list and the union: a variant
+   *  added to the union (and thus to the exhaustive tag map) but forgotten here
+   *  fails the size assertion. */
+  const ALL_TYPES: OrchestratorEvent["type"][] = [
+    "tick",
+    "pool-full",
+    "buckets",
+    "dispatch",
+    "planner-emitted",
+    "plan-reused",
+    "planner-skipped",
+    "planner-no-plan",
+    "planner-failed",
+    "noop-escalated",
+    "gh-error",
+    "session-resolved",
+  ];
+
+  it("contains exactly every orchestrator event type, no more, no fewer", () => {
+    expect([...EVENT_TYPES].sort()).toEqual([...ALL_TYPES].sort());
+  });
+
+  it("recognizes every event type and rejects unknown ones", () => {
+    for (const type of ALL_TYPES) expect(isKnownEventType(type)).toBe(true);
+    expect(isKnownEventType("mystery")).toBe(false);
+    expect(isKnownEventType("")).toBe(false);
+  });
+});
+
+// ── eventSeverity: failure | warn | normal (drives the Cockpit log colour) ────
+
+describe("eventSeverity", () => {
+  it("classifies failures as failure", () => {
+    expect(eventSeverity(evt({ type: "gh-error", args: ["a"], error: "x" }))).toBe("failure");
+    expect(eventSeverity(evt({ type: "planner-failed", error: "x" }))).toBe("failure");
+    expect(
+      eventSeverity(
+        evt({
+          type: "session-resolved",
+          role: "reviewer",
+          issue: 1,
+          branch: "b",
+          status: "failed",
+          commits: 0,
+          error: "x",
+        })
+      )
+    ).toBe("failure");
+  });
+
+  it("classifies soft escalations as warn", () => {
+    expect(eventSeverity(evt({ type: "noop-escalated", issue: 1 }))).toBe("warn");
+    expect(eventSeverity(evt({ type: "planner-no-plan" }))).toBe("warn");
+  });
+
+  it("classifies progress events (incl. a successful resolution) as normal", () => {
+    expect(eventSeverity(evt({ type: "tick", free: 1, poolSize: 10, inflight: 0 }))).toBe("normal");
+    expect(eventSeverity(evt({ type: "planner-emitted", count: 1 }))).toBe("normal");
+    expect(
+      eventSeverity(
+        evt({
+          type: "session-resolved",
+          role: "implementer",
+          issue: 1,
+          branch: "b",
+          status: "ok",
+          commits: 2,
+          error: null,
+        })
+      )
+    ).toBe("normal");
   });
 });

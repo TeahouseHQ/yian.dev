@@ -65,7 +65,6 @@ import {
   cycleTab,
   describePruneApply,
   EMPTY_LIVE_VIEW,
-  formatEventLog,
   formatInFlight,
   formatPoolGauge,
   prunePlanTotal,
@@ -78,7 +77,7 @@ import {
   type PruneApplyPhase,
   type Supervisor,
 } from "./cockpit-core.mjs";
-import type { OrchestratorEvent } from "./events.mjs";
+import { formatEventLog, eventSeverity, type OrchestratorEvent } from "./events.mjs";
 import { planPrune, type PrunePlan, type PruneWorktree } from "./prune-plan.mjs";
 import { applyPrunePlan, discoverPruneState } from "./prune-driver.mjs";
 import {
@@ -135,18 +134,22 @@ function clock(ts: string): string {
   return Number.isNaN(d.getTime()) ? "--:--:--" : d.toLocaleTimeString("en-GB", { hour12: false });
 }
 
-/** Turn one parsed orchestrator event into a coloured log entry: failures red,
- *  soft warnings yellow, everything else default. The line text is the pure,
- *  tested `formatEventLog`; only the colour choice is presentational. */
+/** Map an event's severity to a log-line colour: failures red, soft warnings
+ *  yellow, everything else default. The classification lives in the event seam
+ *  (`eventSeverity`); this is only the presentational colour choice. */
+const SEVERITY_COLOR: Record<ReturnType<typeof eventSeverity>, string | undefined> = {
+  failure: "red",
+  warn: "yellow",
+  normal: undefined,
+};
+
+/** Turn one parsed orchestrator event into a coloured log entry. The line text
+ *  is the pure, tested `formatEventLog`; the colour is `eventSeverity` mapped
+ *  through {@link SEVERITY_COLOR}. */
 function eventEntry(ev: OrchestratorEvent): LogEntry {
-  const failure =
-    ev.type === "gh-error" ||
-    ev.type === "planner-failed" ||
-    (ev.type === "session-resolved" && ev.status === "failed");
-  const warn = ev.type === "noop-escalated" || ev.type === "planner-no-plan";
   return {
     text: `${clock(ev.ts)}  ${formatEventLog(ev)}`,
-    color: failure ? "red" : warn ? "yellow" : undefined,
+    color: SEVERITY_COLOR[eventSeverity(ev)],
   };
 }
 

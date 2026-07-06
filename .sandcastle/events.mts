@@ -3,16 +3,25 @@
  *
  * This is the seam extracted from `main.mts`'s ad-hoc `console.log`s (ADR-0008):
  * every orchestrator progress moment flows through ONE typed event emitter as a
- * discriminated union, and TWO renderers hang off that single source:
+ * discriminated union. This module is also the **single event-rendering seam**:
+ * every surface's view of an event is defined here, once, so adding a new event
+ * type is a one-place, compile-error-driven change (issue #92). The views:
  *
- * - **prose renderer** (default, headless `pnpm sandcastle`) — reproduces today's
- *   exact human-readable lines, routing error-shaped events to stderr and the
- *   rest to stdout, so output is byte-for-byte unchanged.
- * - **NDJSON renderer** (`SANDCASTLE_EVENT_FORMAT=ndjson`) — emits the same events
- *   as one JSON object per line on stdout, for a supervising Cockpit to parse.
+ * - **prose renderer** (`formatEventProse` + `eventStream`; default, headless
+ *   `pnpm sandcastle`) — reproduces today's exact human-readable lines, routing
+ *   error-shaped events to stderr and the rest to stdout, byte-for-byte unchanged.
+ * - **NDJSON renderer** (`formatEventNdjson`, `SANDCASTLE_EVENT_FORMAT=ndjson`) —
+ *   emits the same events as one JSON object per line for a supervising Cockpit.
+ * - **Cockpit log renderer** (`formatEventLog` + `eventSeverity`) — one compact,
+ *   coloured line per event for the Live tab's scrolling log.
  *
- * One event definition, two views. The orchestrator loop is untouched — this is
- * an output seam only (no behavioural change to dispatch/pool logic).
+ * All three share one role→string mapping ({@link ROLE_LABELS}), and the Cockpit's
+ * decode allow-list ({@link EVENT_TYPES}) is derived from the event union rather
+ * than hand-maintained. Every per-variant rendering is exhaustive over the union,
+ * so a new event type without a rendering fails to type-check in this one module.
+ *
+ * The orchestrator loop is untouched — this is an output seam only (no
+ * behavioural change to dispatch/pool logic).
  *
  * Scope note: the per-agent stream (`observe`/`lifecycle` in `observability.mts`)
  * is a separate, already-structured sub-feed (toolCall lines + lifecycle markers)
@@ -24,6 +33,10 @@
  */
 /** Renderer mode for the event stream. */
 export type EventFormat = "prose" | "ndjson";
+
+/** The three pooled agent roles a Session can run as. The single role vocabulary
+ *  every renderer speaks (see {@link ROLE_LABELS}). */
+export type OrchestratorRole = "implementer" | "reviewer" | "merger";
 
 /** Shared fields carried by every event. The NDJSON renderer keeps `ts`. */
 interface BaseEvent {
@@ -58,7 +71,7 @@ interface BucketsEvent extends BaseEvent {
  *  no fetched title). */
 interface DispatchEvent extends BaseEvent {
   readonly type: "dispatch";
-  readonly role: "implementer" | "reviewer" | "merger";
+  readonly role: OrchestratorRole;
   readonly issue: number;
   readonly branch: string;
   readonly pr: number | null;
@@ -113,7 +126,7 @@ interface GhErrorEvent extends BaseEvent {
  *  case (a successful resolution has no orchestrator prose line). */
 interface SessionResolvedEvent extends BaseEvent {
   readonly type: "session-resolved";
-  readonly role: "implementer" | "reviewer" | "merger";
+  readonly role: OrchestratorRole;
   readonly issue: number;
   readonly branch: string;
   readonly status: "ok" | "failed";
@@ -184,24 +197,35 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
   }
 }
 
-/** The capitalized role word for the dispatch line (`Reviewer`/`Merger`). */
-function roleWord(role: "reviewer" | "merger"): string {
-  return role === "reviewer" ? "Reviewer" : "Merger";
+/**
+ * The single role→string mapping every renderer speaks — the one authoritative
+ * source for role wording across the headless prose lines, the Cockpit event
+ * log, and the in-flight list. `word` is the capitalized long form (prose
+ * dispatch: `Reviewer`); `abbr` is the compact tag (log / in-flight: `rev`).
+ */
+const ROLE_LABELS: Record<OrchestratorRole, { readonly word: string; readonly abbr: string }> = {
+  implementer: { word: "Implementer", abbr: "impl" },
+  reviewer: { word: "Reviewer", abbr: "rev" },
+  merger: { word: "Merger", abbr: "merger" },
+};
+
+/** The capitalized role word for a dispatch line (`Implementer`/`Reviewer`/`Merger`). */
+export function roleWord(role: OrchestratorRole): string {
+  return ROLE_LABELS[role].word;
+}
+
+/** The compact role tag used in log / in-flight lines: `impl` / `rev` / `merger`.
+ *  Mirrors the labels the orchestrator's `lifecycle`/prose output already uses. */
+export function roleAbbr(role: OrchestratorRole): string {
+  return ROLE_LABELS[role].abbr;
 }
 
 /** The role prefix on a failed-resolution line. The Implementer has none (just
  *  `#N`), while Reviewer/Merger read `rev #N`/`merger #N` — preserving today's
- *  asymmetry exactly. Returns the role word + trailing space (or empty), so the
+ *  asymmetry exactly. Returns the role tag + trailing space (or empty), so the
  *  caller always appends `#<issue>`. */
-function roleFailedPrefix(role: "implementer" | "reviewer" | "merger"): string {
-  switch (role) {
-    case "reviewer":
-      return "rev ";
-    case "merger":
-      return "merger ";
-    case "implementer":
-      return ""; // `#${issue}` with no role word
-  }
+function roleFailedPrefix(role: OrchestratorRole): string {
+  return role === "implementer" ? "" : `${roleAbbr(role)} `;
 }
 
 /**
@@ -222,6 +246,129 @@ export function eventStream(event: OrchestratorEvent): EventStream {
     default:
       return "stdout";
   }
+}
+
+/**
+ * Render one orchestrator event as a single compact line for the Cockpit Live
+ * tab's scrolling event log. Distinct from {@link formatEventProse}: this is a
+ * **total** formatter — every event produces exactly one glanceable line,
+ * including a *successful* `session-resolved` (which prose deliberately renders
+ * to nothing because the headless `lifecycle` markers cover it). The Cockpit's
+ * job is the opposite of headless: surface every live resolution.
+ *
+ * No timestamp is included — the log line is the event's semantics only; the
+ * React layer prefixes a wall-clock time from `event.ts`. Pure so the exact
+ * strings are unit-testable in isolation. Exhaustive over the union, so a new
+ * event type without a log line is a compile error, not a silently-omitted one.
+ */
+export function formatEventLog(event: OrchestratorEvent): string {
+  switch (event.type) {
+    case "tick":
+      return `tick · ${event.free}/${event.poolSize} free · ${event.inflight} in-flight`;
+    case "dispatch":
+      return event.role === "implementer"
+        ? `▶ dispatch impl #${event.issue}: ${event.title}`
+        : `▶ dispatch ${roleAbbr(event.role)} PR #${event.pr} (#${event.issue})`;
+    case "session-resolved":
+      return event.status === "ok"
+        ? `✓ ${roleAbbr(event.role)} #${event.issue} resolved · ${event.commits} commits`
+        : `✗ ${roleAbbr(event.role)} #${event.issue} failed · ${event.error}`;
+    case "pool-full":
+      return "pool full · gh query skipped";
+    case "buckets":
+      return `buckets · merge ${event.merge} · review ${event.review} · agent ${event.agent} (${event.actionable} actionable)`;
+    case "planner-emitted":
+      return `planner emitted ${event.count} issue(s)`;
+    case "plan-reused":
+      return `plan cache hit · reused ${event.count} issue(s) · no planner call`;
+    case "planner-skipped":
+      return "planner skipped";
+    case "planner-no-plan":
+      return "planner produced no plan";
+    case "planner-failed":
+      return `⚠ planner failed · ${event.error}`;
+    case "noop-escalated":
+      return `⚠ #${event.issue} no commits · escalated to ready-for-human`;
+    case "gh-error":
+      return `⚠ gh ${event.args.join(" ")} failed · ${event.error}`;
+    default: {
+      // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
+      // line here is a compile error, so the Live log can never silently omit one.
+      const unreachable: never = event;
+      return unreachable;
+    }
+  }
+}
+
+/** How prominent a log line is: a hard `failure`, a soft `warn`, or `normal`.
+ *  The Cockpit maps this to a colour; the classification lives here so it stays
+ *  in lock-step with the other renderers in the one seam. */
+export type EventSeverity = "failure" | "warn" | "normal";
+
+/**
+ * Classify an event's severity for the Cockpit log's colour (failures red, soft
+ * escalations yellow, everything else default). Exhaustive over the union so a
+ * new event type must be given a severity here — one place, compile-enforced.
+ */
+export function eventSeverity(event: OrchestratorEvent): EventSeverity {
+  switch (event.type) {
+    case "gh-error":
+    case "planner-failed":
+      return "failure";
+    case "session-resolved":
+      return event.status === "failed" ? "failure" : "normal";
+    case "noop-escalated":
+    case "planner-no-plan":
+      return "warn";
+    case "tick":
+    case "pool-full":
+    case "buckets":
+    case "dispatch":
+    case "planner-emitted":
+    case "plan-reused":
+    case "planner-skipped":
+      return "normal";
+    default: {
+      const unreachable: never = event;
+      return unreachable;
+    }
+  }
+}
+
+/**
+ * The exhaustive tag map — every `OrchestratorEvent` variant MUST appear as a
+ * key, or this literal fails to type-check (a missing key is a compile error).
+ * This is what makes the Cockpit's decode allow-list ({@link EVENT_TYPES}) a
+ * projection of the union rather than a hand-maintained parallel list that can
+ * silently drift when a new event type is added.
+ */
+const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
+  tick: true,
+  "pool-full": true,
+  buckets: true,
+  dispatch: true,
+  "planner-emitted": true,
+  "plan-reused": true,
+  "planner-skipped": true,
+  "planner-no-plan": true,
+  "planner-failed": true,
+  "noop-escalated": true,
+  "gh-error": true,
+  "session-resolved": true,
+};
+
+/** Every `type` discriminator the orchestrator can emit, derived from the union
+ *  via {@link EVENT_TYPE_TAGS}. The Cockpit's decode path checks membership here
+ *  so a stray non-event JSON line (or a future unknown type) is dropped rather
+ *  than mis-rendered. */
+export const EVENT_TYPES: ReadonlySet<OrchestratorEvent["type"]> = new Set(
+  Object.keys(EVENT_TYPE_TAGS) as OrchestratorEvent["type"][]
+);
+
+/** Narrowing guard: is `type` a known orchestrator event discriminator? Used by
+ *  the Cockpit's `parseEventLine` to accept only union members. */
+export function isKnownEventType(type: string): type is OrchestratorEvent["type"] {
+  return (EVENT_TYPES as ReadonlySet<string>).has(type);
 }
 
 /**
@@ -276,7 +423,7 @@ export interface OrchestratorEvents {
   plannerFailed(error: string): void;
   /** A dispatched Session resolved (ok = `commits`; failed = `error`). */
   sessionResolved(args: {
-    role: "implementer" | "reviewer" | "merger";
+    role: OrchestratorRole;
     issue: number;
     branch: string;
     status: "ok" | "failed";

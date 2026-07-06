@@ -11,17 +11,21 @@ import {
   filterReadyForMerge,
   filterReadyForReview,
   handleImplementerOutcome,
+  handleReviewerOutcome,
   issueFromBranch,
+  parseOutcome,
   pickImplementers,
   pickPrs,
   planCacheKey,
   resolvePlanEmit,
+  reviewerGiveUpComment,
   shouldQueryBuckets,
   shouldReusePlan,
   shouldRunPlanner,
   type BucketPr,
   type EmittedIssue,
   type GhRunner,
+  type ParsedOutcome,
   type PlanCache,
   type ReadyForAgentIssue,
 } from "./dispatch.mts";
@@ -301,6 +305,129 @@ describe("handleImplementerOutcome", () => {
   it("comments with the CONTEXT.md ready-for-human semantics", async () => {
     expect(NOOP_IMPLEMENTER_COMMENT).toMatch(/no commits/i);
     expect(NOOP_IMPLEMENTER_COMMENT).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+});
+
+// ---- #96 — the Outcome contract (ADR-0011) --------------------------------
+//
+// The Reviewer ends its Session with a structured Outcome tag the orchestrator
+// parses (like the Planner's <plan> block) and acts on. `parseOutcome` is the
+// pure parser; `handleReviewerOutcome` is the pure transition logic over an
+// injectable gh runner. A garbled / missing tag parses to `null` — no GitHub
+// mutation, the Session is a failed attempt against the (future) Retry budget.
+
+describe("parseOutcome", () => {
+  it("parses a pass verdict", () => {
+    expect(parseOutcome("all good\n<outcome>pass</outcome>\n")).toEqual({ kind: "pass" });
+  });
+
+  it("parses a give-up verdict with its one-line reason", () => {
+    expect(parseOutcome("<outcome>give-up: the suite is red and I can't fix it</outcome>")).toEqual(
+      {
+        kind: "give-up",
+        reason: "the suite is red and I can't fix it",
+      }
+    );
+  });
+
+  it("tolerates whitespace inside the tag", () => {
+    expect(parseOutcome("<outcome>  pass  </outcome>")).toEqual({ kind: "pass" });
+    expect(parseOutcome("<outcome> give-up:   missing dependency </outcome>")).toEqual({
+      kind: "give-up",
+      reason: "missing dependency",
+    });
+  });
+
+  it("takes the LAST tag when the agent restated the format earlier", () => {
+    const text = "example: <outcome>pass</outcome>\n...\nfinal: <outcome>give-up: nope</outcome>";
+    expect(parseOutcome(text)).toEqual({ kind: "give-up", reason: "nope" });
+  });
+
+  it("returns null when no tag is present (folds into the Retry budget)", () => {
+    expect(parseOutcome("I reviewed it and it looks fine.")).toBeNull();
+  });
+
+  it("returns null for a garbled verdict (not pass, not give-up:reason)", () => {
+    expect(parseOutcome("<outcome>looks good to me</outcome>")).toBeNull();
+    expect(parseOutcome("<outcome>give-up</outcome>")).toBeNull(); // no reason
+    expect(parseOutcome("<outcome>give-up:   </outcome>")).toBeNull(); // empty reason
+  });
+});
+
+describe("handleReviewerOutcome", () => {
+  const pass: ParsedOutcome = { kind: "pass" };
+  const giveUp: ParsedOutcome = { kind: "give-up", reason: "the suite is red" };
+
+  it("pass → opens the review gate: adds reviewed then flips the PR to ready", async () => {
+    const gh = mockGh();
+    const transition = await handleReviewerOutcome(pass, { prNumber: 7 }, gh);
+    expect(transition).toBe("gate");
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label reviewed/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr ready 7/.test(s))).toBe(true);
+    // no terminal escalation on a pass
+    expect(calls.some((s) => /ready-for-human/.test(s))).toBe(false);
+  });
+
+  it("pass → adds the reviewed label BEFORE flipping to ready (never ready+unreviewed)", async () => {
+    const gh = mockGh();
+    await handleReviewerOutcome(pass, { prNumber: 7 }, gh);
+    const labelIdx = gh.calls.findIndex((c) => c.includes("--add-label"));
+    const readyIdx = gh.calls.findIndex((c) => c[0] === "pr" && c[1] === "ready");
+    expect(labelIdx).toBeGreaterThan(-1);
+    expect(readyIdx).toBeGreaterThan(-1);
+    expect(labelIdx).toBeLessThan(readyIdx);
+  });
+
+  it("pass → creates the reviewed label defensively and tolerates 'already exists'", async () => {
+    const gh = mockGh(true); // the label create throws
+    const transition = await handleReviewerOutcome(pass, { prNumber: 7 }, gh);
+    expect(transition).toBe("gate"); // best-effort create must not abort the gate
+    expect(gh.calls.some((c) => c[0] === "label" && c[1] === "create" && c[2] === "reviewed")).toBe(
+      true
+    );
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label reviewed/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr ready 7/.test(s))).toBe(true);
+  });
+
+  it("give-up → escalates to ready-for-human and posts the reason; PR stays draft", async () => {
+    const gh = mockGh();
+    const transition = await handleReviewerOutcome(giveUp, { prNumber: 7 }, gh);
+    expect(transition).toBe("give-up");
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr comment 7 --body/.test(s))).toBe(true);
+    // the PR is NOT flipped to ready and is NOT marked reviewed
+    expect(calls.some((s) => /pr ready 7/.test(s))).toBe(false);
+    expect(calls.some((s) => /--add-label reviewed/.test(s))).toBe(false);
+  });
+
+  it("give-up → applies ready-for-human BEFORE any other state change (crash-safe)", async () => {
+    const gh = mockGh();
+    await handleReviewerOutcome(giveUp, { prNumber: 7 }, gh);
+    const addIdx = gh.calls.findIndex((c) => c.includes("--add-label"));
+    const commentIdx = gh.calls.findIndex((c) => c[1] === "comment");
+    expect(addIdx).toBeGreaterThan(-1);
+    expect(commentIdx).toBeGreaterThan(-1);
+    expect(addIdx).toBeLessThan(commentIdx);
+  });
+
+  it("give-up → posts the reason with the ready-for-human semantics", async () => {
+    const gh = mockGh();
+    await handleReviewerOutcome(giveUp, { prNumber: 7 }, gh);
+    const comment = gh.calls.find((c) => c[1] === "comment")!;
+    const body = comment[comment.length - 1];
+    expect(body).toContain("the suite is red");
+    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+});
+
+describe("reviewerGiveUpComment", () => {
+  it("includes the reason and the CONTEXT.md ready-for-human semantics", () => {
+    const body = reviewerGiveUpComment("missing dependency");
+    expect(body).toContain("missing dependency");
+    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
   });
 });
 
@@ -739,5 +866,36 @@ describe("main.mts — Plan cache wiring (ADR-0010, #86)", () => {
     // A cache hit skips the LLM, never the dispatch — capped emits still drain.
     expect(mainSource).toMatch(/resolved\.emit\.filter/);
     expect(mainSource).toMatch(/pickImplementers\(dispatchable, remaining, inflight\)/);
+  });
+});
+
+describe("main.mts — Reviewer Outcome handling (ADR-0011, #96)", () => {
+  it("parses the Reviewer's Outcome from its output (like the Planner's <plan>)", () => {
+    expect(mainSource).toMatch(/parseOutcome\(/);
+  });
+
+  it("performs the terminal transition itself via handleReviewerOutcome", () => {
+    expect(mainSource).toMatch(/handleReviewerOutcome\(/);
+  });
+
+  it("only mutates GitHub state when an Outcome actually parsed (null → no mutation)", () => {
+    // A missing/garbled Outcome parses to null; handleReviewerOutcome is guarded
+    // behind an `if (outcome)` so no GitHub mutation happens (Retry-budget path).
+    expect(mainSource).toMatch(/if\s*\(\s*outcome\s*\)/);
+  });
+
+  it("emits Live-feed events for the parsed Outcome and the applied transition", () => {
+    expect(mainSource).toMatch(/events\.reviewerOutcome\(/);
+    expect(mainSource).toMatch(/events\.reviewTransition\(/);
+  });
+
+  it("records the parsed Outcome in the Manifest (recordedRun outcome extractor)", () => {
+    expect(mainSource).toMatch(/outcome:\s*\(r\)\s*=>\s*parseOutcome\(r\.stdout\)/);
+  });
+
+  it("no longer leaves the review gate / give-up path to the prompt", () => {
+    // The old comment claimed "Reviewer/Merger give-up paths live in the prompts";
+    // the Reviewer's now lives in code (ADR-0011).
+    expect(mainSource).not.toMatch(/give-up path.*live.*in the prompt/i);
   });
 });

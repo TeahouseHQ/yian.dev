@@ -2,15 +2,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * #65 — give the Reviewer and Merger prompts a durable `ready-for-human`
- * escape hatch so the upcoming persistent poller can't re-dispatch
- * un-actionable work forever (ADR-0006). A persistent loop re-sees the same
- * PR every tick, so every give-up path must durably change GitHub state.
+ * Prompt-contract tests. They read the prompt source directly (no agent run
+ * required), the same way theme.test pins CSS/colour wiring.
  *
- * These tests pin the wording/commands the two prompts must contain (and the
- * ones they must NOT) when an item escalates to `ready-for-human`. They read
- * the prompt source directly (no agent run required), the same way theme.test
- * pins CSS/colour wiring.
+ * - **review-prompt.md** now follows the **Outcome contract** (ADR-0011, #96):
+ *   the Reviewer no longer runs `gh` to flip labels/draft state; it reviews,
+ *   commits fixes (Model A), posts a prose review-summary comment, and ends its
+ *   Session with a structured `<outcome>` tag the orchestrator acts on. These
+ *   tests pin that tag contract and assert the dispatch-controlling `gh`
+ *   commands are gone.
+ * - **merge-prompt.md** still owns its give-up path in the prompt (the Merger →
+ *   Landing move is ADR-0012, a separate issue); its tests are unchanged.
  */
 const reviewPrompt = readFileSync(new URL("./review-prompt.md", import.meta.url), "utf8");
 const mergePrompt = readFileSync(new URL("./merge-prompt.md", import.meta.url), "utf8");
@@ -29,39 +31,38 @@ function topSection(md: string, heading: string): string {
   return next === -1 ? md.slice(start) : md.slice(start, next);
 }
 
-describe("review-prompt.md — ready-for-human give-up path", () => {
-  const giveUp = topSection(reviewPrompt, "GIVE-UP PATH");
-
-  it("exists as its own section", () => {
-    expect(giveUp.length).toBeGreaterThan(0);
+describe("review-prompt.md — Outcome contract (ADR-0011)", () => {
+  it("instructs a pass verdict via the <outcome>pass</outcome> tag", () => {
+    expect(reviewPrompt).toMatch(/<outcome>pass<\/outcome>/);
   });
 
-  it("triggers when the Reviewer cannot make the change pass", () => {
-    expect(giveUp).toMatch(/cannot make the change pass/i);
+  it("instructs a give-up verdict with a one-line reason via the outcome tag", () => {
+    expect(reviewPrompt).toMatch(/<outcome>give-up: .*<\/outcome>/);
   });
 
-  it("posts a COMMENT-type review explaining why", () => {
-    expect(giveUp).toMatch(/gh pr review .* --comment/);
+  it("triggers give-up when the Reviewer cannot make the change pass", () => {
+    expect(reviewPrompt).toMatch(/cannot make the change pass/i);
   });
 
-  it("adds the ready-for-human label to the PR", () => {
-    expect(giveUp).toMatch(/--add-label ready-for-human/);
+  it("still commits fixes itself (Model A)", () => {
+    expect(reviewPrompt).toMatch(/RALPH: Review/);
   });
 
-  it("keeps the PR as a draft", () => {
-    expect(giveUp).toMatch(/draft/i);
+  it("still posts a prose review-summary comment (a comment is not dispatch-controlling)", () => {
+    expect(reviewPrompt).toMatch(/gh pr review .* --comment/);
   });
 
-  it("does not mark the PR ready, add reviewed, or merge", () => {
-    // No positive ready/reviewed/merge instructions in the escalation. Prose
-    // negations ("do not") deliberately avoid the literal command strings.
-    expect(giveUp).not.toMatch(/gh pr ready\b/);
-    expect(giveUp).not.toMatch(/--add-label reviewed/);
-    expect(giveUp).not.toMatch(/gh pr merge/);
+  it("contains no label, draft-flip, or merge commands — the orchestrator owns those (ADR-0011)", () => {
+    expect(reviewPrompt).not.toMatch(/--add-label/);
+    expect(reviewPrompt).not.toMatch(/--remove-label/);
+    expect(reviewPrompt).not.toMatch(/gh label create/);
+    expect(reviewPrompt).not.toMatch(/gh pr ready/);
+    expect(reviewPrompt).not.toMatch(/gh pr merge/);
   });
 
-  it("uses the CONTEXT.md ready-for-human semantics", () => {
-    expect(giveUp).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  it("does not tell the agent to touch the reviewed / ready-for-human labels", () => {
+    expect(reviewPrompt).not.toMatch(/ready-for-human/);
+    expect(reviewPrompt).not.toMatch(/`reviewed`/);
   });
 });
 

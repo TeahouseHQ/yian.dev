@@ -352,7 +352,33 @@ describe("buildManifestEntry", () => {
       startedAt: "2026-06-28T12:00:00.000Z",
       endedAt: "2026-06-28T12:05:00.000Z",
       status: "ok",
+      outcome: null,
     });
+  });
+
+  it("records the parsed Outcome when one is supplied (ADR-0011)", () => {
+    const entry = buildManifestEntry({
+      runId: "run-x",
+      phase: "rev",
+      issue: 53,
+      branch: "sandcastle/issue-53",
+      result: okResult(),
+      startedAt: new Date(0),
+      endedAt: new Date(0),
+      outcome: { kind: "give-up", reason: "the suite is red" },
+    });
+    expect(entry.outcome).toEqual({ kind: "give-up", reason: "the suite is red" });
+  });
+
+  it("defaults the Outcome to null for phases that report none (impl/planner/merger)", () => {
+    const entry = buildManifestEntry({
+      runId: "run-x",
+      phase: "impl",
+      result: okResult(),
+      startedAt: new Date(0),
+      endedAt: new Date(0),
+    });
+    expect(entry.outcome).toBeNull();
   });
 
   it("nulls missing session fields, nulls issue/branch by default, counts zero commits", () => {
@@ -401,6 +427,7 @@ describe("buildFailedManifestEntry", () => {
       endedAt: "2026-06-28T12:01:00.000Z",
       status: "failed",
       error: "boom",
+      outcome: null,
     });
   });
 

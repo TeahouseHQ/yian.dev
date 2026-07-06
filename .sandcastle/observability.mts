@@ -47,6 +47,7 @@ import type {
   IterationUsage,
   LoggingOption,
 } from "@ai-hero/sandcastle";
+import type { ParsedOutcome } from "./dispatch.mts";
 
 const TOOL_GLYPH = "▶";
 const TEXT_GLYPH = "»";
@@ -291,6 +292,11 @@ export interface ManifestEntry {
   readonly endedAt: string;
   /** "ok" for a resolved run, "failed" for a rejected one. */
   readonly status: "ok" | "failed";
+  /** The structured Outcome the Session self-reported (ADR-0011), or null when
+   *  the phase reports none (impl/planner/merger) or the Session produced no
+   *  parseable Outcome (a failed attempt against the Retry budget). Lets the
+   *  Session browser show pass/give-up/no-outcome at a glance. */
+  readonly outcome: ParsedOutcome | null;
   /** Present only on failed entries: the error message. */
   readonly error?: string;
 }
@@ -309,7 +315,9 @@ interface ManifestEntryArgs {
  * Build a manifest entry for a successfully resolved agent run. Pure and
  * env-free so the field set + nulling rules are unit-testable in isolation.
  */
-export function buildManifestEntry(args: ManifestEntryArgs & { result: RunLike }): ManifestEntry {
+export function buildManifestEntry(
+  args: ManifestEntryArgs & { result: RunLike; outcome?: ParsedOutcome | null }
+): ManifestEntry {
   const session = lastSession(args.result);
   return {
     runId: args.runId,
@@ -323,6 +331,7 @@ export function buildManifestEntry(args: ManifestEntryArgs & { result: RunLike }
     startedAt: args.startedAt.toISOString(),
     endedAt: args.endedAt.toISOString(),
     status: "ok",
+    outcome: args.outcome ?? null,
   };
 }
 
@@ -362,6 +371,7 @@ export function buildFailedManifestEntry(
     startedAt: args.startedAt.toISOString(),
     endedAt: args.endedAt.toISOString(),
     status: "failed",
+    outcome: null,
     error: errorMessage(args.error),
   };
 }

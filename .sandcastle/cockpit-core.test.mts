@@ -270,6 +270,23 @@ describe("formatEventLog", () => {
     expect(
       formatEventLog(evt({ type: "gh-error", args: ["issue", "list"], error: "rate limited" }))
     ).toBe("⚠ gh issue list failed · rate limited");
+    expect(
+      formatEventLog(evt({ type: "reviewer-outcome", issue: 7, outcome: "pass", reason: null }))
+    ).toBe("✓ rev #7 outcome · pass");
+    expect(
+      formatEventLog(
+        evt({ type: "reviewer-outcome", issue: 7, outcome: "give-up", reason: "the suite is red" })
+      )
+    ).toBe("⚠ rev #7 outcome · give-up · the suite is red");
+    expect(
+      formatEventLog(evt({ type: "reviewer-outcome", issue: 7, outcome: "none", reason: null }))
+    ).toBe("⚠ rev #7 outcome · none");
+    expect(formatEventLog(evt({ type: "review-transition", issue: 7, transition: "gate" }))).toBe(
+      "→ #7 gate opened · reviewed + ready"
+    );
+    expect(
+      formatEventLog(evt({ type: "review-transition", issue: 7, transition: "give-up" }))
+    ).toBe("→ #7 escalated to ready-for-human");
   });
 });
 

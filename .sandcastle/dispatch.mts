@@ -343,11 +343,99 @@ export function pickPrs<T extends BucketPr>(
 /**
  * How the orchestrator talks to the `gh` CLI for terminal handling. `run`
  * executes one command and rejects on a non-zero exit (like `execFile`);
- * `handleImplementerOutcome` only tolerates failure on the defensive
- * `label create` step.
+ * `handleImplementerOutcome` / `handleReviewerOutcome` only tolerate failure on
+ * the defensive `label create` step.
  */
 export interface GhRunner {
   run(args: string[]): Promise<unknown>;
+}
+
+/** A `gh` label's create spec — its name plus the description/colour used the
+ *  first time it is created. */
+interface LabelSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly color: string;
+}
+
+/** The universal terminal label (CONTEXT.md: ready-for-human) every give-up /
+ *  failure path lands on. */
+const READY_FOR_HUMAN: LabelSpec = {
+  name: "ready-for-human",
+  description: "Out of all Dispatch buckets; a human owns it",
+  color: "0052CC",
+};
+
+/** The review-gate label a passing Reviewer's PR carries so a Merger can land it. */
+const REVIEWED: LabelSpec = {
+  name: "reviewed",
+  description: "Reviewed by the Sandcastle Reviewer",
+  color: "0E8A16",
+};
+
+/**
+ * Best-effort `gh label create`: defensively ensure a label exists before a
+ * transition adds it. A non-zero exit (the label already exists) is expected and
+ * swallowed — a terminal transition must never abort because a label was already
+ * there. Mirrors the `gh label create … || true` the prompts used to run.
+ */
+async function ensureLabel(gh: GhRunner, label: LabelSpec): Promise<void> {
+  try {
+    await gh.run([
+      "label",
+      "create",
+      label.name,
+      "--description",
+      label.description,
+      "--color",
+      label.color,
+    ]);
+  } catch {
+    /* label already exists — best effort */
+  }
+}
+
+// ---- The Outcome contract (ADR-0011) --------------------------------------
+
+/**
+ * The structured self-report a Reviewer Session ends with (CONTEXT.md: Outcome):
+ * `pass` (the change is good — open the review gate) or `give-up` with a
+ * one-line reason (hand the PR to a human). The orchestrator parses it from the
+ * agent's final output and performs every dispatch-controlling transition
+ * itself; the agent never runs `gh` to mutate labels/draft state (ADR-0011).
+ */
+export type ParsedOutcome =
+  | { readonly kind: "pass" }
+  | { readonly kind: "give-up"; readonly reason: string };
+
+/**
+ * Parse the Outcome tag out of a Reviewer's final output — the same shape as the
+ * Planner's `<plan>` block (`main.mts`):
+ *
+ * ```
+ * <outcome>pass</outcome>
+ * <outcome>give-up: <one-line reason></outcome>
+ * ```
+ *
+ * The **last** tag wins (an agent may restate the format earlier in its
+ * reasoning; the closing verdict is authoritative). Whitespace inside the tag is
+ * tolerated. Returns `null` for a missing OR garbled verdict (anything that is
+ * not exactly `pass` or `give-up: <non-empty reason>`) — a null is NOT a
+ * give-up: it triggers no GitHub mutation and is recorded as a failed attempt
+ * against the (future) Retry budget, so one formatting lapse never escalates
+ * automatable work to a human (ADR-0011).
+ *
+ * Pure and side-effect-free so the contract is unit-testable in isolation.
+ */
+export function parseOutcome(text: string): ParsedOutcome | null {
+  const matches = [...text.matchAll(/<outcome>([\s\S]*?)<\/outcome>/g)];
+  const last = matches[matches.length - 1];
+  if (!last) return null;
+  const body = last[1].trim();
+  if (body === "pass") return { kind: "pass" };
+  const giveUp = body.match(/^give-up:\s*(\S[\s\S]*)$/);
+  if (giveUp) return { kind: "give-up", reason: giveUp[1].trim() };
+  return null;
 }
 
 /**
@@ -360,6 +448,67 @@ export const NOOP_IMPLEMENTER_COMMENT =
   "Escalating to `ready-for-human` (out of all Dispatch buckets; a human owns it) so the " +
   "issue is not re-dispatched every tick. One no-op is a strong signal the issue is not " +
   "actually agent-ready.";
+
+/** Which terminal transition `handleReviewerOutcome` applied: the review `gate`
+ *  (pass → reviewed + ready) or a `give-up` escalation (→ ready-for-human). */
+export type ReviewTransition = "gate" | "give-up";
+
+/**
+ * Comment body the orchestrator posts when a Reviewer's Outcome is `give-up`
+ * (ADR-0011). Carries the agent's one-line reason plus the CONTEXT.md
+ * `ready-for-human` semantics — pins the wording that used to live in the
+ * review prompt's GIVE-UP PATH, now owned by orchestrator code. Exported so it
+ * is documented and unit-testable.
+ */
+export function reviewerGiveUpComment(reason: string): string {
+  return (
+    `Sandcastle Reviewer could not pass this change: ${reason}\n\n` +
+    "Escalating to `ready-for-human` (out of all Dispatch buckets; a human owns it). " +
+    "The PR stays a draft — it is never marked ready or merged from here."
+  );
+}
+
+/**
+ * Reviewer Outcome terminal handling (CONTEXT.md: Outcome; ADR-0011). The agent
+ * judged; this code mutates the dispatch-controlling GitHub state — the agent no
+ * longer runs `gh` to flip labels/draft from prompt instructions. Pure logic
+ * over an injectable {@link GhRunner}, so every transition is unit-testable.
+ *
+ * - **pass** → open the review gate so a Merger can land the PR: defensively
+ *   ensure the `reviewed` label exists, **add `reviewed` before flipping the PR
+ *   draft → ready** (so the PR is never momentarily ready without `reviewed`,
+ *   which would sit in no Dispatch bucket). Returns `"gate"`.
+ * - **give-up** → hand the PR to a human: defensively ensure `ready-for-human`
+ *   exists, **add `ready-for-human` before any other state change** (the
+ *   crash-safe ordering rule — the terminal label lands first, so no crash point
+ *   strands the PR outside every bucket), then post the reason as a PR comment.
+ *   The PR is left a draft. Returns `"give-up"`.
+ *
+ * The caller only invokes this for a *parsed* Outcome; a missing/garbled Outcome
+ * (`parseOutcome` → null) performs no mutation at all and is left to the Retry
+ * budget (ADR-0011).
+ */
+export async function handleReviewerOutcome(
+  outcome: ParsedOutcome,
+  pr: { readonly prNumber: number },
+  gh: GhRunner
+): Promise<ReviewTransition> {
+  const n = String(pr.prNumber);
+  if (outcome.kind === "pass") {
+    await ensureLabel(gh, REVIEWED);
+    // Add `reviewed` BEFORE flipping to ready so the PR is never ready-without-
+    // reviewed (which would sit in no bucket).
+    await gh.run(["pr", "edit", n, "--add-label", "reviewed"]);
+    await gh.run(["pr", "ready", n]);
+    return "gate";
+  }
+
+  // give-up: apply the terminal label FIRST (crash-safe), then comment.
+  await ensureLabel(gh, READY_FOR_HUMAN);
+  await gh.run(["pr", "edit", n, "--add-label", "ready-for-human"]);
+  await gh.run(["pr", "comment", n, "--body", reviewerGiveUpComment(outcome.reason)]);
+  return "give-up";
+}
 
 /**
  * No-op Implementer terminal handling (CONTEXT.md: ready-for-human; ADR-0006).
@@ -388,22 +537,9 @@ export async function handleImplementerOutcome(
   if (commits > 0) return false;
 
   const n = String(issueNumber);
-  // Defensive: ensure the terminal label exists (mirrors the review/merge
-  // prompts' `gh label create … || true`). A non-zero exit here (label already
-  // exists) is expected and ignored — escalation must not abort.
-  try {
-    await gh.run([
-      "label",
-      "create",
-      "ready-for-human",
-      "--description",
-      "Out of all Dispatch buckets; a human owns it",
-      "--color",
-      "0052CC",
-    ]);
-  } catch {
-    /* label already exists — best effort */
-  }
+  // Defensive: ensure the terminal label exists before adding it (escalation
+  // must not abort if the label is already there).
+  await ensureLabel(gh, READY_FOR_HUMAN);
   // Add the terminal label BEFORE removing the bucket label so the issue is
   // never without either.
   await gh.run(["issue", "edit", n, "--add-label", "ready-for-human"]);

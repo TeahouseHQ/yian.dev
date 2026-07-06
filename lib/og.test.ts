@@ -8,8 +8,8 @@ describe("formatOgDate", () => {
   });
 
   it("preserves the authored day regardless of timezone offset", () => {
-    // The authored string is parsed as-is; date-fns parseISO keeps the wall-clock
-    // components so the OG card shows the date the author wrote, not UTC-shifted.
+    // Formatted from the UTC calendar day, so the OG card shows the date the
+    // author wrote even on a runner west of UTC (where this instant is May 30).
     expect(formatOgDate("2024-05-31T03:48:47Z")).toBe("May 31, 2024");
   });
 });

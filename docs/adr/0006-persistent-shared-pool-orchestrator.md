@@ -116,5 +116,3 @@ Each Poll tick (~60s):
   merged) is unchanged and is exactly what the Dispatch buckets key off.
 - **`plan-prompt.md` barely changes** — the Planner's contract (analyze
   `ready-for-agent`, emit unblocked `sandcastle/issue-N`) is preserved.
-  </content>
-  </invoke>

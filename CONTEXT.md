@@ -85,6 +85,26 @@ _Avoid_: index, log.
 The per-issue review surface on GitHub that makes the Implementer→Reviewer interaction visible and auditable. One PR per issue branch; opened as a draft by the Implementer and reviewed in place by the Reviewer, who marks it ready when it passes. A first-class part of the audit surface alongside the Transcript and Manifest.
 _Avoid_: MR, change request.
 
+**Teahouse**:
+The orchestration engine to be extracted from `.sandcastle/` into its own repo and npm package (ADR-0014): the orchestrator loop, dispatch logic, events, observability, Cockpit, Session browser, Prune, and the Canonical prompts. Consumed per-repo via manual version bumps; each consumer repo runs its own orchestrator process. Distinct from **TeahouseHQ** (the GitHub org) and from **sandcastle**, which after extraction means only the `@ai-hero/sandcastle` sandbox library underneath.
+_Avoid_: sandcastle (for the engine, post-extraction), the harness.
+
+**Repo profile**:
+The typed per-repo config file that is a consumer repo's entire behavioral surface toward Teahouse: install/build hook, verify commands, base branch, per-role models, pool size (small default, 3–4), branch prefix, and the path to the repo-owned `CODING_STANDARDS.md`. Schema-versioned — an engine reading a profile from an incompatible schema version fails loudly at startup, never reinterprets (ADR-0014).
+_Avoid_: repo config, settings, sandcastle.config.
+
+**Host profile**:
+The per-machine config (e.g. `~/.teahouse/`) holding facts about the box, not any repo: LiteLLM base URL, API-key env-var name, rootless-Docker flag. Sources the `models.json` that is mounted into containers at runtime rather than baked into images, so a host change never means rebuilding per-repo images (ADR-0014).
+_Avoid_: machine config, env file.
+
+**Canonical prompts**:
+The four agent prompts (plan, implement, review, and the Conflict resolver's), owned and shipped by Teahouse as templates. Repos parameterize them through the Repo profile (verify commands, standards path) but cannot shadow a prompt file wholesale — a forked prompt silently misses engine prompt fixes (ADR-0014).
+_Avoid_: prompt overrides, prompt templates (as a repo-owned thing).
+
+**Overlay image**:
+A consumer repo's optional small Dockerfile `FROM` the Teahouse base image, adding stack extras only (e.g. yian.dev's corepack + pnpm pin). The base image owns the sandbox contract — git, gh, pi, the uid/HOME/worktree-mount layout — so no repo re-owns that subtle logic (ADR-0014).
+_Avoid_: repo Dockerfile, custom image.
+
 ### Blog reader theming
 
 **Blog reader**:

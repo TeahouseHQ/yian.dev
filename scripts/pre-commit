@@ -1,3 +1,4 @@
 #!/usr/bin/env sh
-pnpm format
-git diff --quiet || git add -A
+# Format only staged files and re-stage exactly those; never touches unstaged
+# work or untracked files. Run `pnpm format` for a whole-repo pass.
+pnpm exec lint-staged

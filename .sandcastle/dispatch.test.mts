@@ -6,7 +6,12 @@ import {
   NOOP_IMPLEMENTER_COMMENT,
   POOL_SIZE,
   POLL_INTERVAL_MS,
+  RETRY_BUDGET_N,
+  budgetExhaustedComment,
   createInflight,
+  createRetryBudget,
+  escalateBudgetExhausted,
+  isBudgetExhausted,
   implementerSandboxSpec,
   landingSandboxSpec,
   createPool,
@@ -14,10 +19,8 @@ import {
   filterReadyForMerge,
   filterReadyForReview,
   handleImplementerOutcome,
-  handleLandingFailure,
   handleReviewerOutcome,
   issueFromBranch,
-  landingFailureComment,
   parseOutcome,
   pickImplementers,
   pickPrs,
@@ -68,6 +71,157 @@ function mockGh(throwOnCreate = false): GhRunner & { calls: string[][] } {
   };
   return Object.assign(gh, { calls });
 }
+
+// ---- #98 — the Retry budget (ADR-0011) ------------------------------------
+//
+// An in-memory counter keyed by issue+phase, living beside the In-flight set and
+// Plan cache (same non-durability philosophy). A failed attempt — a crashed
+// Session, a Session with no parseable Outcome, or a failed Landing — increments
+// it; a successful Session clears it. On the N=3rd failed attempt for an
+// issue+phase the orchestrator escalates the item to `ready-for-human` and clears
+// the counter, so a human who re-labels the item gets a fresh budget.
+
+describe("createRetryBudget", () => {
+  it("counts failed attempts per issue+phase, starting from zero", () => {
+    const budget = createRetryBudget();
+    expect(budget.count(42, "impl")).toBe(0);
+    expect(budget.fail(42, "impl")).toBe(1);
+    expect(budget.fail(42, "impl")).toBe(2);
+    expect(budget.count(42, "impl")).toBe(2);
+  });
+
+  it("keeps issue+phase counters independent", () => {
+    const budget = createRetryBudget();
+    budget.fail(42, "impl");
+    budget.fail(42, "rev"); // same issue, different phase
+    budget.fail(7, "impl"); // different issue, same phase
+    expect(budget.count(42, "impl")).toBe(1);
+    expect(budget.count(42, "rev")).toBe(1);
+    expect(budget.count(7, "impl")).toBe(1);
+    // the Conflict-resolver phase is just another phase string — no special-casing
+    expect(budget.count(42, "resolve")).toBe(0);
+  });
+
+  it("clears a counter on a successful Session (fresh budget after)", () => {
+    const budget = createRetryBudget();
+    budget.fail(42, "impl");
+    budget.fail(42, "impl");
+    budget.clear(42, "impl");
+    expect(budget.count(42, "impl")).toBe(0);
+    expect(budget.fail(42, "impl")).toBe(1); // counting resumes from zero
+  });
+
+  it("reaches the threshold on the N=3rd failed attempt", () => {
+    const budget = createRetryBudget();
+    expect(isBudgetExhausted(budget.fail(42, "impl"))).toBe(false); // 1
+    expect(isBudgetExhausted(budget.fail(42, "impl"))).toBe(false); // 2
+    expect(isBudgetExhausted(budget.fail(42, "impl"))).toBe(true); //  3 → escalate
+  });
+});
+
+describe("isBudgetExhausted", () => {
+  it("pins N=3 (one attempt plus two retries)", () => {
+    expect(RETRY_BUDGET_N).toBe(3);
+    expect(isBudgetExhausted(2)).toBe(false);
+    expect(isBudgetExhausted(3)).toBe(true);
+    expect(isBudgetExhausted(4)).toBe(true);
+  });
+});
+
+describe("budgetExhaustedComment", () => {
+  it("cites the phase and attempt count with the ready-for-human semantics", () => {
+    const body = budgetExhaustedComment("rev", 3);
+    expect(body).toMatch(/rev/);
+    expect(body).toMatch(/3/);
+    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+
+  it("appends the last-failure detail when given one", () => {
+    const body = budgetExhaustedComment("land", 3, "CONFLICT in app/page.tsx");
+    expect(body).toContain("CONFLICT in app/page.tsx");
+  });
+});
+
+describe("escalateBudgetExhausted", () => {
+  it("issue shape (implement): adds ready-for-human, strips ready-for-agent, comments", async () => {
+    const gh = mockGh();
+    await escalateBudgetExhausted({ kind: "issue", issue: 42 }, "impl", 3, gh);
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /issue edit 42 --add-label ready-for-human/.test(s))).toBe(true);
+    expect(calls.some((s) => /issue edit 42 --remove-label ready-for-agent/.test(s))).toBe(true);
+    expect(calls.some((s) => /issue comment 42 --body/.test(s))).toBe(true);
+  });
+
+  it("issue shape: adds ready-for-human BEFORE stripping ready-for-agent (crash-safe)", async () => {
+    const gh = mockGh();
+    await escalateBudgetExhausted({ kind: "issue", issue: 42 }, "impl", 3, gh);
+    const addIdx = gh.calls.findIndex((c) => c.includes("--add-label"));
+    const removeIdx = gh.calls.findIndex((c) => c.includes("--remove-label"));
+    expect(addIdx).toBeGreaterThan(-1);
+    expect(addIdx).toBeLessThan(removeIdx);
+  });
+
+  it("pr-draft shape (review/resolve): adds ready-for-human + comments, leaves the draft alone", async () => {
+    const gh = mockGh();
+    await escalateBudgetExhausted({ kind: "pr", prNumber: 7, gated: false }, "rev", 3, gh);
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr comment 7 --body/.test(s))).toBe(true);
+    // a draft PR under review carries no reviewed label and is not ready — don't touch either
+    expect(calls.some((s) => /--remove-label reviewed/.test(s))).toBe(false);
+    expect(calls.some((s) => /pr ready 7/.test(s))).toBe(false);
+  });
+
+  it("pr-gated shape (land): strips the review gate (reviewed + ready) then comments", async () => {
+    const gh = mockGh();
+    await escalateBudgetExhausted({ kind: "pr", prNumber: 7, gated: true }, "land", 3, gh);
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr edit 7 --remove-label reviewed/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr ready 7 --undo/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr comment 7 --body/.test(s))).toBe(true);
+    // the PR is NEVER merged from the exhaustion path
+    expect(calls.some((s) => /pr merge/.test(s))).toBe(false);
+  });
+
+  it("pr-gated shape: applies ready-for-human BEFORE it strips reviewed / reverts to draft (crash-safe)", async () => {
+    const gh = mockGh();
+    await escalateBudgetExhausted({ kind: "pr", prNumber: 7, gated: true }, "land", 3, gh);
+    const addIdx = gh.calls.findIndex((c) => c.includes("--add-label"));
+    const removeIdx = gh.calls.findIndex((c) => c.includes("--remove-label"));
+    const readyIdx = gh.calls.findIndex((c) => c[0] === "pr" && c[1] === "ready");
+    expect(addIdx).toBeGreaterThan(-1);
+    expect(addIdx).toBeLessThan(removeIdx);
+    expect(addIdx).toBeLessThan(readyIdx);
+  });
+
+  it("creates the ready-for-human label defensively and tolerates 'already exists'", async () => {
+    const gh = mockGh(true); // the label create throws
+    await escalateBudgetExhausted({ kind: "issue", issue: 42 }, "impl", 3, gh);
+    expect(
+      gh.calls.some((c) => c[0] === "label" && c[1] === "create" && c[2] === "ready-for-human")
+    ).toBe(true);
+    // best-effort create must not abort the escalation
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /issue edit 42 --add-label ready-for-human/.test(s))).toBe(true);
+  });
+
+  it("posts the attempt-citing comment (with any detail)", async () => {
+    const gh = mockGh();
+    await escalateBudgetExhausted(
+      { kind: "pr", prNumber: 7, gated: true },
+      "land",
+      3,
+      gh,
+      "red suite"
+    );
+    const comment = gh.calls.find((c) => c[1] === "comment")!;
+    const body = comment[comment.length - 1];
+    expect(body).toMatch(/3/);
+    expect(body).toContain("red suite");
+    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+});
 
 describe("constants", () => {
   it("pins the shared Pool size to 10 (ADR-0006)", () => {
@@ -319,7 +473,7 @@ describe("handleImplementerOutcome", () => {
 // parses (like the Planner's <plan> block) and acts on. `parseOutcome` is the
 // pure parser; `handleReviewerOutcome` is the pure transition logic over an
 // injectable gh runner. A garbled / missing tag parses to `null` — no GitHub
-// mutation, the Session is a failed attempt against the (future) Retry budget.
+// mutation, the Session is a failed attempt against the Retry budget (#98).
 
 describe("parseOutcome", () => {
   it("parses a pass verdict", () => {
@@ -432,69 +586,6 @@ describe("reviewerGiveUpComment", () => {
   it("includes the reason and the CONTEXT.md ready-for-human semantics", () => {
     const body = reviewerGiveUpComment("missing dependency");
     expect(body).toContain("missing dependency");
-    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
-  });
-});
-
-// ---- #97 — failed-Landing terminal handling (ADR-0012) --------------------
-//
-// A Landing (the agent-free merge phase) that hits a textual conflict or a red
-// suite escalates the ready + `reviewed` PR to `ready-for-human` via the same
-// crash-safe PR-shaped transition runner the Reviewer give-up uses (ADR-0011):
-// the terminal label is applied BEFORE the bucket state (`reviewed` / ready) is
-// removed, so no crash point strands the PR outside every Dispatch bucket.
-
-describe("handleLandingFailure", () => {
-  const failure = "CONFLICT (content): merge conflict in app/page.tsx";
-
-  it("escalates to ready-for-human: strips reviewed, reverts to draft, posts the failure", async () => {
-    const gh = mockGh();
-    await handleLandingFailure({ prNumber: 7 }, failure, gh);
-    const calls = gh.calls.map((c) => c.join(" "));
-    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
-    expect(calls.some((s) => /pr edit 7 --remove-label reviewed/.test(s))).toBe(true);
-    expect(calls.some((s) => /pr ready 7 --undo/.test(s))).toBe(true);
-    expect(calls.some((s) => /pr comment 7 --body/.test(s))).toBe(true);
-    // the PR is NEVER merged from the failure path
-    expect(calls.some((s) => /pr merge/.test(s))).toBe(false);
-  });
-
-  it("applies ready-for-human BEFORE it removes reviewed / reverts to draft (crash-safe)", async () => {
-    const gh = mockGh();
-    await handleLandingFailure({ prNumber: 7 }, failure, gh);
-    const addIdx = gh.calls.findIndex((c) => c.includes("--add-label"));
-    const removeIdx = gh.calls.findIndex((c) => c.includes("--remove-label"));
-    const undoIdx = gh.calls.findIndex((c) => c[0] === "pr" && c[1] === "ready");
-    expect(addIdx).toBeGreaterThan(-1);
-    expect(addIdx).toBeLessThan(removeIdx);
-    expect(addIdx).toBeLessThan(undoIdx);
-  });
-
-  it("creates the ready-for-human label defensively and tolerates 'already exists'", async () => {
-    const gh = mockGh(true); // the label create throws
-    await handleLandingFailure({ prNumber: 7 }, failure, gh);
-    expect(
-      gh.calls.some((c) => c[0] === "label" && c[1] === "create" && c[2] === "ready-for-human")
-    ).toBe(true);
-    // best-effort create must not abort the escalation
-    const calls = gh.calls.map((c) => c.join(" "));
-    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
-  });
-
-  it("posts the failure output with the ready-for-human semantics", async () => {
-    const gh = mockGh();
-    await handleLandingFailure({ prNumber: 7 }, failure, gh);
-    const comment = gh.calls.find((c) => c[1] === "comment")!;
-    const body = comment[comment.length - 1];
-    expect(body).toContain(failure);
-    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
-  });
-});
-
-describe("landingFailureComment", () => {
-  it("includes the failure output and the CONTEXT.md ready-for-human semantics", () => {
-    const body = landingFailureComment("pnpm test — 3 failing");
-    expect(body).toContain("pnpm test — 3 failing");
     expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
   });
 });
@@ -1064,9 +1155,14 @@ describe("main.mts — deterministic Landing (ADR-0012, #97)", () => {
     expect(landing).toMatch(/gh\(\["pr", "merge", String\(pr\.prNumber\), "--merge"\]\)/);
   });
 
-  it("escalates a failed Landing to ready-for-human via handleLandingFailure", () => {
+  it("spends a Retry-budget attempt on a failed Landing (no immediate escalation)", () => {
+    // #98: a failed Landing no longer escalates on the first failure — it spends a
+    // budget attempt (gated PR shape) and only escalates on exhaustion.
     const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
-    expect(landing).toMatch(/handleLandingFailure\(/);
+    expect(landing).toMatch(/recordFailedAttempt\(/);
+    expect(landing).not.toMatch(/handleLandingFailure/);
+    expect(landing).toMatch(/kind:\s*"pr"[\s\S]*?gated:\s*true/);
+    expect(landing).toMatch(/"land"/);
   });
 
   it("emits the Landing Live-feed events (started, landed, failed)", () => {
@@ -1081,5 +1177,56 @@ describe("main.mts — deterministic Landing (ADR-0012, #97)", () => {
     expect(landing).toMatch(/generateRunId\(pr\.issue\)/);
     expect(landing).toMatch(/phase:\s*"land"/);
     expect(landing).toMatch(/result:\s*agentFreeResult/);
+  });
+});
+
+describe("main.mts — Retry budget (ADR-0011, #98)", () => {
+  it("holds one in-memory Retry budget beside the In-flight set and Plan cache", () => {
+    expect(mainSource).toMatch(/createRetryBudget\(\)/);
+    expect(mainSource).toMatch(/const budget = createRetryBudget\(\)/);
+  });
+
+  it("escalates on exhaustion via the pure isBudgetExhausted + escalateBudgetExhausted helpers", () => {
+    // The threshold + shape-aware escalation are the unit-tested pure functions;
+    // main.mts only wires them (and clears the counter on escalation).
+    expect(mainSource).toMatch(/isBudgetExhausted\(/);
+    expect(mainSource).toMatch(/escalateBudgetExhausted\(/);
+    expect(mainSource).toMatch(/budget\.clear\(/);
+  });
+
+  it("emits attempt-failed below the threshold and budget-exhausted on escalation", () => {
+    expect(mainSource).toMatch(/events\.attemptFailed\(/);
+    expect(mainSource).toMatch(/events\.budgetExhausted\(/);
+  });
+
+  it("a crashed Implementer spends an issue-shaped attempt; a success clears the impl counter", () => {
+    const impl = mainSource.slice(
+      mainSource.indexOf("async function dispatchImplementer"),
+      mainSource.indexOf("async function dispatchReviewer")
+    );
+    expect(impl).toMatch(/recordFailedAttempt\(\s*\{\s*kind:\s*"issue"/);
+    expect(impl).toMatch(/budget\.clear\([^,]+,\s*"impl"\)/);
+  });
+
+  it("a crashed OR no-Outcome Reviewer spends a PR-shaped attempt; a parsed Outcome clears it", () => {
+    const rev = mainSource.slice(
+      mainSource.indexOf("async function dispatchReviewer"),
+      mainSource.indexOf("async function dispatchLanding")
+    );
+    // both the catch (crash) and the null-Outcome branch record an attempt
+    expect(rev.match(/recordFailedAttempt\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(rev).toMatch(/budget\.clear\([^,]+,\s*"rev"\)/);
+    // review-phase PR is a plain draft → gated:false (leave the draft alone)
+    expect(rev).toMatch(/kind:\s*"pr"[\s\S]*?gated:\s*false/);
+  });
+
+  it("clears the counter on the Nth attempt so a re-labeled item gets a fresh budget", () => {
+    // recordFailedAttempt clears BEFORE escalating (a human re-labeling starts fresh).
+    const helper = mainSource.slice(mainSource.indexOf("function recordFailedAttempt"));
+    const clearIdx = helper.indexOf("budget.clear");
+    const escalateIdx = helper.indexOf("escalateBudgetExhausted");
+    expect(clearIdx).toBeGreaterThan(-1);
+    expect(escalateIdx).toBeGreaterThan(-1);
+    expect(clearIdx).toBeLessThan(escalateIdx);
   });
 });

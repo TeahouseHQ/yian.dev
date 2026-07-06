@@ -5,13 +5,15 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import {
   createInflight,
   createPool,
+  createRetryBudget,
+  escalateBudgetExhausted,
   filterReadyForAgent,
   filterReadyForMerge,
   filterReadyForReview,
   handleImplementerOutcome,
-  handleLandingFailure,
   handleReviewerOutcome,
   implementerSandboxSpec,
+  isBudgetExhausted,
   issueFromBranch,
   landingSandboxSpec,
   parseOutcome,
@@ -19,10 +21,12 @@ import {
   pickPrs,
   POLL_INTERVAL_MS,
   POOL_SIZE,
+  RETRY_BUDGET_N,
   resolvePlanEmit,
   shouldQueryBuckets,
   shouldRunPlanner,
   type BucketPr,
+  type BudgetTarget,
   type EmittedIssue,
   type ParsedOutcome,
   type PlanCache,
@@ -286,6 +290,45 @@ const inflight = createInflight();
 // Opus Planner call; `resolvePlanEmit` re-invokes the Planner only on a miss.
 let planCache: PlanCache = null;
 
+// The Retry budget (ADR-0011, #98): the in-memory failed-attempt counter keyed by
+// issue+phase, living beside the In-flight set and Plan cache (same non-durability
+// philosophy). A crashed Session, a Session with no parseable Outcome, or a failed
+// Landing is one failed attempt; a successful Session clears the counter. On the
+// N=3rd attempt for an issue+phase, `recordFailedAttempt` escalates to
+// ready-for-human and clears the counter (a re-labeling human gets a fresh budget).
+const budget = createRetryBudget();
+
+/**
+ * Record one failed attempt against the Retry budget for `issue`+`phase` and act
+ * on it (ADR-0011, #98). Below the threshold: no GitHub state changes — the item
+ * stays in its Dispatch bucket for re-dispatch — and an `attempt-failed` event
+ * makes the struggling item visible. On the N=3rd attempt: clear the counter
+ * (BEFORE escalating, so a human re-labeling the item starts fresh) and escalate
+ * to `ready-for-human` via the shape-aware {@link escalateBudgetExhausted}
+ * (issue-shaped for implement, PR-shaped for review/land), then emit
+ * `budget-exhausted`. A gh failure during escalation is tolerated — it must not
+ * crash the orchestrator loop; the next tick re-dispatches and re-attempts.
+ */
+async function recordFailedAttempt(
+  target: BudgetTarget,
+  phase: string,
+  issue: number,
+  detail?: string
+): Promise<void> {
+  const attempts = budget.fail(issue, phase);
+  if (isBudgetExhausted(attempts)) {
+    budget.clear(issue, phase);
+    try {
+      await escalateBudgetExhausted(target, phase, attempts, ghRunner, detail);
+    } catch (escErr) {
+      events.ghError(["budget-escalate", phase, String(issue)], errorMessage(escErr));
+    }
+    events.budgetExhausted(issue, phase, attempts);
+  } else {
+    events.attemptFailed(issue, phase, attempts, RETRY_BUDGET_N);
+  }
+}
+
 /**
  * Dispatch one Implementer for an issue into the shared Pool. Occupies a slot
  * (acquire), marks the issue in-flight, opens a fresh sandbox, runs the
@@ -347,6 +390,9 @@ async function dispatchImplementer(issue: {
       status: "ok",
       commits: result.commits.length,
     });
+    // A successful Session (the run resolved, crash-free) clears the impl Retry
+    // budget for this issue (ADR-0011): a later transient failure starts fresh.
+    budget.clear(issue.number, "impl");
 
     // No-op terminal handling (ADR-0006): zero commits → no draft PR → strip
     // ready-for-agent, add ready-for-human, comment, so it is not re-dispatched.
@@ -363,6 +409,16 @@ async function dispatchImplementer(issue: {
       commits: 0,
       error: errorMessage(err),
     });
+    // A CRASHED Implementer is a failed attempt against the Retry budget (ADR-0011,
+    // #98) — not escalated on its own (a crash may be transient, ADR-0006), but
+    // bounded so a deterministically-crashing issue no longer re-dispatches forever.
+    // Issue-shaped: on exhaustion, strip ready-for-agent + add ready-for-human.
+    await recordFailedAttempt(
+      { kind: "issue", issue: issue.number },
+      "impl",
+      issue.number,
+      errorMessage(err)
+    );
   } finally {
     implLC.done();
     inflight.delete(issue.number);
@@ -443,7 +499,7 @@ async function dispatchReviewer(pr: {
     // ADR-0011: the agent judged; the orchestrator mutates. Parse the reported
     // Outcome and perform the terminal transition ourselves. A missing/garbled
     // Outcome (parseOutcome → null) triggers NO GitHub mutation — the review is
-    // left for re-dispatch (a Retry-budget attempt in a follow-up issue).
+    // left for re-dispatch and spends a Retry-budget attempt (the else branch, #98).
     const outcome = parseOutcome(result.stdout);
     events.reviewerOutcome(
       pr.issue,
@@ -451,8 +507,22 @@ async function dispatchReviewer(pr: {
       outcome?.kind === "give-up" ? outcome.reason : null
     );
     if (outcome) {
+      // A parsed Outcome (pass or give-up) is a successful Session — clear the rev
+      // Retry budget for this issue before performing the terminal transition.
+      budget.clear(pr.issue, "rev");
       const transition = await handleReviewerOutcome(outcome, pr, ghRunner);
       events.reviewTransition(pr.issue, transition);
+    } else {
+      // No parseable Outcome (agent rambled / forgot the tag / hit max iterations):
+      // a failed attempt against the Retry budget (ADR-0011, #98). No GitHub state
+      // changes below the threshold — the draft PR stays in the ready-for-review
+      // bucket for re-dispatch. PR-shaped, gated:false (the PR is a plain draft).
+      await recordFailedAttempt(
+        { kind: "pr", prNumber: pr.prNumber, gated: false },
+        "rev",
+        pr.issue,
+        "the Session produced no parseable Outcome"
+      );
     }
   } catch (err) {
     events.sessionResolved({
@@ -463,6 +533,14 @@ async function dispatchReviewer(pr: {
       commits: 0,
       error: errorMessage(err),
     });
+    // A CRASHED Reviewer is a failed attempt against the Retry budget (#98). Same
+    // PR-shaped, gated:false escalation on exhaustion as the no-Outcome case.
+    await recordFailedAttempt(
+      { kind: "pr", prNumber: pr.prNumber, gated: false },
+      "rev",
+      pr.issue,
+      errorMessage(err)
+    );
   } finally {
     lc.done();
     inflight.delete(pr.issue);
@@ -485,13 +563,15 @@ async function dispatchReviewer(pr: {
  * entry under the issue's runId.
  *
  * On failure — conflict, red suite, or the merge command failing — the ready +
- * `reviewed` PR is escalated to `ready-for-human` via {@link handleLandingFailure}
- * (the crash-safe PR-shaped transition runner: terminal label first, then strip
- * `reviewed`/ready, then comment the failure output). A follow-up replaces this
- * escalation with the Conflict resolver dispatch, and the Retry budget makes
- * failed Landings spend attempts (ADR-0012). Whatever happens, the finally
- * disposes the sandbox, removes the issue from the In-flight set, and frees the
- * Pool slot. The runId is issue-derived, shared with impl/rev.
+ * `reviewed` PR spends one Retry-budget attempt via {@link recordFailedAttempt}
+ * (ADR-0011, #98): below the threshold NO GitHub state changes and the PR stays in
+ * the ready-for-merge bucket for a re-land next tick; on the N=3rd attempt the
+ * PR-shaped gated escalation strips the `reviewed` gate + reverts to draft and
+ * hands the PR to a human (crash-safe: terminal label first). A follow-up replaces
+ * the re-land with a Conflict resolver dispatch on the first failure (ADR-0012).
+ * Whatever happens, the finally disposes the sandbox, removes the issue from the
+ * In-flight set, and frees the Pool slot. The runId is issue-derived, shared with
+ * impl/rev.
  */
 async function dispatchLanding(pr: {
   prNumber: number;
@@ -544,6 +624,8 @@ async function dispatchLanding(pr: {
       })
     );
     events.landingLanded(pr.prNumber, pr.issue, pr.branch);
+    // A successful Landing clears the land Retry budget for this issue (ADR-0011).
+    budget.clear(pr.issue, "land");
   } catch (err) {
     const failure = errorMessage(err);
     // Record the failed Landing as an agent-free Manifest entry (no Transcript).
@@ -559,14 +641,18 @@ async function dispatchLanding(pr: {
         endedAt: new Date(),
       })
     );
-    // Escalate the ready + reviewed PR to a human (crash-safe transition runner).
-    // Best-effort: a gh failure here must not crash the orchestrator loop.
-    try {
-      await handleLandingFailure({ prNumber: pr.prNumber }, failure, ghRunner);
-    } catch (escErr) {
-      events.ghError(["landing-escalate", String(pr.prNumber)], errorMessage(escErr));
-    }
     events.landingFailed(pr.prNumber, pr.issue, pr.branch, failure);
+    // A failed Landing — textual conflict or red suite — is a failed attempt against
+    // the Retry budget (ADR-0011/0012, #98), NOT an immediate escalation: below the
+    // threshold no GitHub state changes and the ready + `reviewed` PR stays in the
+    // ready-for-merge bucket for a re-land next tick. On exhaustion, escalate the
+    // PR-shaped gated target (strip the `reviewed` gate + revert to draft) to a human.
+    await recordFailedAttempt(
+      { kind: "pr", prNumber: pr.prNumber, gated: true },
+      "land",
+      pr.issue,
+      failure
+    );
   } finally {
     lc.done();
     inflight.delete(pr.issue);

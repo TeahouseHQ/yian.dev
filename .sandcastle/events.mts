@@ -192,6 +192,28 @@ interface LandingFailedEvent extends BaseEvent {
   readonly reason: string;
 }
 
+/** A Retry-budget attempt failed below the threshold (ADR-0011, #98): a crashed
+ *  Session, a Session with no parseable Outcome, or a failed Landing. `attempt`
+ *  of `limit` (N=3) — no GitHub state changed, the item stays in its bucket for
+ *  re-dispatch. Makes a struggling item visible before it escalates. */
+interface AttemptFailedEvent extends BaseEvent {
+  readonly type: "attempt-failed";
+  readonly issue: number;
+  readonly phase: string;
+  readonly attempt: number;
+  readonly limit: number;
+}
+
+/** A Retry budget was exhausted (ADR-0011, #98): the Nth failed attempt for an
+ *  issue+phase, so the orchestrator escalated the item to `ready-for-human` and
+ *  cleared the counter. `attempts` is the count cited in the escalation comment. */
+interface BudgetExhaustedEvent extends BaseEvent {
+  readonly type: "budget-exhausted";
+  readonly issue: number;
+  readonly phase: string;
+  readonly attempts: number;
+}
+
 /**
  * The discriminated union of every orchestrator event. `type` is the single
  * discriminator the renderers switch on; the contract the Cockpit consumes.
@@ -214,7 +236,9 @@ export type OrchestratorEvent =
   | ReviewTransitionEvent
   | LandingStartedEvent
   | LandingLandedEvent
-  | LandingFailedEvent;
+  | LandingFailedEvent
+  | AttemptFailedEvent
+  | BudgetExhaustedEvent;
 
 /** Which stdout stream a prose-rendered event belongs on (preserves the
  *  existing stdout/stderr split so headless output is unchanged). */
@@ -275,6 +299,10 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return `  ✓ landed PR #${event.pr} (issue #${event.issue}).`;
     case "landing-failed":
       return `  ✗ Landing PR #${event.pr} (issue #${event.issue}) failed: ${event.reason}`;
+    case "attempt-failed":
+      return `  ⚠ #${event.issue} ${event.phase} attempt ${event.attempt}/${event.limit} failed — retrying.`;
+    case "budget-exhausted":
+      return `  ⚠ #${event.issue} ${event.phase} Retry budget exhausted after ${event.attempts} attempts — escalated to ready-for-human.`;
   }
 }
 
@@ -390,6 +418,10 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return `✓ landed PR #${event.pr} (#${event.issue})`;
     case "landing-failed":
       return `✗ landing PR #${event.pr} (#${event.issue}) failed · ${event.reason}`;
+    case "attempt-failed":
+      return `⚠ #${event.issue} ${event.phase} attempt ${event.attempt}/${event.limit} failed`;
+    case "budget-exhausted":
+      return `⚠ #${event.issue} ${event.phase} budget exhausted · ${event.attempts} attempts · escalated to ready-for-human`;
     default: {
       // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
       // line here is a compile error, so the Live log can never silently omit one.
@@ -420,6 +452,8 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
       return event.status === "failed" ? "failure" : "normal";
     case "noop-escalated":
     case "planner-no-plan":
+    case "attempt-failed":
+    case "budget-exhausted":
       return "warn";
     case "reviewer-outcome":
       // A give-up or no-parseable-Outcome is a soft escalation (warn); a pass is
@@ -469,6 +503,8 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "landing-started": true,
   "landing-landed": true,
   "landing-failed": true,
+  "attempt-failed": true,
+  "budget-exhausted": true,
 };
 
 /** Every `type` discriminator the orchestrator can emit, derived from the union
@@ -561,6 +597,12 @@ export interface OrchestratorEvents {
   /** The applied Reviewer terminal transition: `gate` (reviewed + ready) or
    *  `give-up` (ready-for-human). */
   reviewTransition(issue: number, transition: "gate" | "give-up"): void;
+  /** A Retry-budget attempt failed below the threshold (#98): `attempt` of
+   *  `limit` for `issue`+`phase` — no state changed, the item stays in its bucket. */
+  attemptFailed(issue: number, phase: string, attempt: number, limit: number): void;
+  /** The Retry budget for `issue`+`phase` was exhausted after `attempts` failed
+   *  attempts — the item was escalated to `ready-for-human` (#98). */
+  budgetExhausted(issue: number, phase: string, attempts: number): void;
 }
 
 /** Options for {@link createEvents}; every dependency is injectable for tests. */
@@ -638,5 +680,9 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       emit({ type: "reviewer-outcome", issue, outcome, reason, ts: stamp() }),
     reviewTransition: (issue, transition) =>
       emit({ type: "review-transition", issue, transition, ts: stamp() }),
+    attemptFailed: (issue, phase, attempt, limit) =>
+      emit({ type: "attempt-failed", issue, phase, attempt, limit, ts: stamp() }),
+    budgetExhausted: (issue, phase, attempts) =>
+      emit({ type: "budget-exhausted", issue, phase, attempts, ts: stamp() }),
   };
 }

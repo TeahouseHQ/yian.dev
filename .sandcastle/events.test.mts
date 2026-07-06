@@ -179,6 +179,17 @@ describe("formatEventProse", () => {
     ).toBe("  → #7 escalated to ready-for-human (Reviewer gave up).");
   });
 
+  it("renders the Retry-budget attempt-failed and budget-exhausted lines (#98)", () => {
+    expect(
+      formatEventProse(
+        evt({ type: "attempt-failed", issue: 7, phase: "rev", attempt: 2, limit: 3 })
+      )
+    ).toBe("  ⚠ #7 rev attempt 2/3 failed — retrying.");
+    expect(
+      formatEventProse(evt({ type: "budget-exhausted", issue: 7, phase: "rev", attempts: 3 }))
+    ).toBe("  ⚠ #7 rev Retry budget exhausted after 3 attempts — escalated to ready-for-human.");
+  });
+
   it("renders nothing for a successful session-resolved (headless prose unchanged)", () => {
     expect(
       formatEventProse(
@@ -260,6 +271,8 @@ describe("formatEventProse", () => {
       { type: "landing-started", issue: 1, pr: 2, branch: "b" },
       { type: "landing-landed", issue: 1, pr: 2, branch: "b" },
       { type: "landing-failed", issue: 1, pr: 2, branch: "b", reason: "x" },
+      { type: "attempt-failed", issue: 1, phase: "impl", attempt: 1, limit: 3 },
+      { type: "budget-exhausted", issue: 1, phase: "impl", attempts: 3 },
     ];
     for (const s of samples) {
       expect(formatEventProse(evt(s))).toBeTypeOf("string");
@@ -284,6 +297,12 @@ describe("eventStream", () => {
     expect(eventStream(evt({ type: "planner-emitted", count: 1 }))).toBe("stdout");
     expect(eventStream(evt({ type: "planner-skipped" }))).toBe("stdout");
     expect(eventStream(evt({ type: "noop-escalated", issue: 1 }))).toBe("stdout");
+    expect(
+      eventStream(evt({ type: "attempt-failed", issue: 1, phase: "rev", attempt: 1, limit: 3 }))
+    ).toBe("stdout");
+    expect(
+      eventStream(evt({ type: "budget-exhausted", issue: 1, phase: "rev", attempts: 3 }))
+    ).toBe("stdout");
     expect(eventStream(evt({ type: "landing-started", issue: 1, pr: 2, branch: "b" }))).toBe(
       "stdout"
     );
@@ -483,6 +502,19 @@ describe("createEvents", () => {
     );
   });
 
+  it("emits the Retry-budget attempt-failed + budget-exhausted through the prose renderer", () => {
+    const out = vi.fn();
+    const err = vi.fn();
+    const events = createEvents({ format: "prose", out, err });
+    events.attemptFailed(7, "rev", 2, 3);
+    events.budgetExhausted(7, "rev", 3);
+    expect(out).toHaveBeenNthCalledWith(1, "  ⚠ #7 rev attempt 2/3 failed — retrying.");
+    expect(out).toHaveBeenNthCalledWith(
+      2,
+      "  ⚠ #7 rev Retry budget exhausted after 3 attempts — escalated to ready-for-human."
+    );
+  });
+
   it("emits the Landing lifecycle: started/landed to `out`, failed to `err`", () => {
     const out = vi.fn();
     const err = vi.fn();
@@ -607,6 +639,8 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "landing-started",
     "landing-landed",
     "landing-failed",
+    "attempt-failed",
+    "budget-exhausted",
   ];
 
   it("contains exactly every orchestrator event type, no more, no fewer", () => {
@@ -650,6 +684,12 @@ describe("eventSeverity", () => {
     ).toBe("warn");
     expect(
       eventSeverity(evt({ type: "reviewer-outcome", issue: 1, outcome: "none", reason: null }))
+    ).toBe("warn");
+    expect(
+      eventSeverity(evt({ type: "attempt-failed", issue: 1, phase: "rev", attempt: 2, limit: 3 }))
+    ).toBe("warn");
+    expect(
+      eventSeverity(evt({ type: "budget-exhausted", issue: 1, phase: "rev", attempts: 3 }))
     ).toBe("warn");
   });
 

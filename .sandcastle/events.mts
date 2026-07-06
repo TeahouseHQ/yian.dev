@@ -134,6 +134,25 @@ interface SessionResolvedEvent extends BaseEvent {
   readonly error: string | null;
 }
 
+/** The orchestrator parsed a Reviewer Session's Outcome (ADR-0011): `pass`,
+ *  `give-up` (with its one-line `reason`), or `none` when the Session produced
+ *  no parseable Outcome tag (no GitHub mutation — a Retry-budget attempt). */
+interface ReviewerOutcomeEvent extends BaseEvent {
+  readonly type: "reviewer-outcome";
+  readonly issue: number;
+  readonly outcome: "pass" | "give-up" | "none";
+  readonly reason: string | null;
+}
+
+/** The orchestrator applied a Reviewer terminal transition from the parsed
+ *  Outcome (ADR-0011): `gate` (pass → `reviewed` + PR ready) or `give-up`
+ *  (→ `ready-for-human`, PR left draft). */
+interface ReviewTransitionEvent extends BaseEvent {
+  readonly type: "review-transition";
+  readonly issue: number;
+  readonly transition: "gate" | "give-up";
+}
+
 /**
  * The discriminated union of every orchestrator event. `type` is the single
  * discriminator the renderers switch on; the contract the Cockpit consumes.
@@ -150,7 +169,9 @@ export type OrchestratorEvent =
   | PlannerFailedEvent
   | NoopEscalatedEvent
   | GhErrorEvent
-  | SessionResolvedEvent;
+  | SessionResolvedEvent
+  | ReviewerOutcomeEvent
+  | ReviewTransitionEvent;
 
 /** Which stdout stream a prose-rendered event belongs on (preserves the
  *  existing stdout/stderr split so headless output is unchanged). */
@@ -194,6 +215,15 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
     case "session-resolved":
       if (event.status === "ok") return null;
       return `  ✗ ${roleFailedPrefix(event.role)}#${event.issue} (${event.branch}) failed: ${event.error}`;
+    case "reviewer-outcome":
+      if (event.outcome === "pass") return `  ✓ Reviewer #${event.issue} reported pass.`;
+      if (event.outcome === "give-up")
+        return `  ⚠ Reviewer #${event.issue} gave up: ${event.reason}`;
+      return `  ⚠ Reviewer #${event.issue} reported no parseable Outcome — no state change.`;
+    case "review-transition":
+      return event.transition === "gate"
+        ? `  → review gate opened for #${event.issue} (reviewed + ready).`
+        : `  → #${event.issue} escalated to ready-for-human (Reviewer gave up).`;
   }
 }
 
@@ -291,6 +321,15 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return `⚠ #${event.issue} no commits · escalated to ready-for-human`;
     case "gh-error":
       return `⚠ gh ${event.args.join(" ")} failed · ${event.error}`;
+    case "reviewer-outcome":
+      if (event.outcome === "give-up")
+        return `⚠ rev #${event.issue} outcome · give-up · ${event.reason}`;
+      if (event.outcome === "none") return `⚠ rev #${event.issue} outcome · none`;
+      return `✓ rev #${event.issue} outcome · pass`;
+    case "review-transition":
+      return event.transition === "gate"
+        ? `→ #${event.issue} gate opened · reviewed + ready`
+        : `→ #${event.issue} escalated to ready-for-human`;
     default: {
       // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
       // line here is a compile error, so the Live log can never silently omit one.
@@ -320,6 +359,10 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "noop-escalated":
     case "planner-no-plan":
       return "warn";
+    case "reviewer-outcome":
+      // A give-up or no-parseable-Outcome is a soft escalation (warn); a pass is
+      // routine progress (normal).
+      return event.outcome === "pass" ? "normal" : "warn";
     case "tick":
     case "pool-full":
     case "buckets":
@@ -327,6 +370,7 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "planner-emitted":
     case "plan-reused":
     case "planner-skipped":
+    case "review-transition":
       return "normal";
     default: {
       const unreachable: never = event;
@@ -355,6 +399,8 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "noop-escalated": true,
   "gh-error": true,
   "session-resolved": true,
+  "reviewer-outcome": true,
+  "review-transition": true,
 };
 
 /** Every `type` discriminator the orchestrator can emit, derived from the union
@@ -434,6 +480,12 @@ export interface OrchestratorEvents {
   noopEscalated(issue: number): void;
   /** A per-tick `gh` query failed (tolerated; next tick re-queries). */
   ghError(args: ReadonlyArray<string>, error: string): void;
+  /** The Reviewer's parsed Outcome (ADR-0011): `pass` / `give-up` (with
+   *  `reason`) / `none` when no parseable Outcome tag was produced. */
+  reviewerOutcome(issue: number, outcome: "pass" | "give-up" | "none", reason: string | null): void;
+  /** The applied Reviewer terminal transition: `gate` (reviewed + ready) or
+   *  `give-up` (ready-for-human). */
+  reviewTransition(issue: number, transition: "gate" | "give-up"): void;
 }
 
 /** Options for {@link createEvents}; every dependency is injectable for tests. */
@@ -502,5 +554,9 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       }),
     noopEscalated: (issue) => emit({ type: "noop-escalated", issue, ts: stamp() }),
     ghError: (args, error) => emit({ type: "gh-error", args, error, ts: stamp() }),
+    reviewerOutcome: (issue, outcome, reason) =>
+      emit({ type: "reviewer-outcome", issue, outcome, reason, ts: stamp() }),
+    reviewTransition: (issue, transition) =>
+      emit({ type: "review-transition", issue, transition, ts: stamp() }),
   };
 }

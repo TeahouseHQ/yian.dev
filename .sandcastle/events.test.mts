@@ -141,6 +141,29 @@ describe("formatEventProse", () => {
     ).toBe("  ⚠ gh pr list --state open failed: nope");
   });
 
+  it("renders the parsed Reviewer Outcome (pass / give-up / none)", () => {
+    expect(
+      formatEventProse(evt({ type: "reviewer-outcome", issue: 7, outcome: "pass", reason: null }))
+    ).toBe("  ✓ Reviewer #7 reported pass.");
+    expect(
+      formatEventProse(
+        evt({ type: "reviewer-outcome", issue: 7, outcome: "give-up", reason: "the suite is red" })
+      )
+    ).toBe("  ⚠ Reviewer #7 gave up: the suite is red");
+    expect(
+      formatEventProse(evt({ type: "reviewer-outcome", issue: 7, outcome: "none", reason: null }))
+    ).toBe("  ⚠ Reviewer #7 reported no parseable Outcome — no state change.");
+  });
+
+  it("renders the applied Reviewer transition (gate / give-up)", () => {
+    expect(formatEventProse(evt({ type: "review-transition", issue: 7, transition: "gate" }))).toBe(
+      "  → review gate opened for #7 (reviewed + ready)."
+    );
+    expect(
+      formatEventProse(evt({ type: "review-transition", issue: 7, transition: "give-up" }))
+    ).toBe("  → #7 escalated to ready-for-human (Reviewer gave up).");
+  });
+
   it("renders nothing for a successful session-resolved (headless prose unchanged)", () => {
     expect(
       formatEventProse(
@@ -262,6 +285,15 @@ describe("eventStream", () => {
     expect(eventStream(evt({ type: "gh-error", args: ["a"], error: "x" }))).toBe("stderr");
     expect(eventStream(evt({ type: "planner-no-plan" }))).toBe("stderr");
     expect(eventStream(evt({ type: "planner-failed", error: "x" }))).toBe("stderr");
+  });
+
+  it("routes the reviewer Outcome + transition events to stdout (orchestrator progress)", () => {
+    expect(
+      eventStream(evt({ type: "reviewer-outcome", issue: 7, outcome: "give-up", reason: "red" }))
+    ).toBe("stdout");
+    expect(eventStream(evt({ type: "review-transition", issue: 7, transition: "give-up" }))).toBe(
+      "stdout"
+    );
   });
 
   it("routes a failed session-resolved to stderr but a successful one to stdout", () => {
@@ -414,6 +446,19 @@ describe("createEvents", () => {
     expect(err).toHaveBeenCalledWith("  ✗ rev #9 (sandcastle/issue-9) failed: kaboom");
   });
 
+  it("emits the reviewer Outcome + transition through the prose renderer", () => {
+    const out = vi.fn();
+    const err = vi.fn();
+    const events = createEvents({ format: "prose", out, err });
+    events.reviewerOutcome(7, "give-up", "the suite is red");
+    events.reviewTransition(7, "give-up");
+    expect(out).toHaveBeenNthCalledWith(1, "  ⚠ Reviewer #7 gave up: the suite is red");
+    expect(out).toHaveBeenNthCalledWith(
+      2,
+      "  → #7 escalated to ready-for-human (Reviewer gave up)."
+    );
+  });
+
   it("in ndjson mode writes every event as one JSON object to `out` (incl. silent-in-prose ones)", () => {
     const out = vi.fn();
     const err = vi.fn();
@@ -520,6 +565,8 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "noop-escalated",
     "gh-error",
     "session-resolved",
+    "reviewer-outcome",
+    "review-transition",
   ];
 
   it("contains exactly every orchestrator event type, no more, no fewer", () => {
@@ -557,11 +604,23 @@ describe("eventSeverity", () => {
   it("classifies soft escalations as warn", () => {
     expect(eventSeverity(evt({ type: "noop-escalated", issue: 1 }))).toBe("warn");
     expect(eventSeverity(evt({ type: "planner-no-plan" }))).toBe("warn");
+    expect(
+      eventSeverity(evt({ type: "reviewer-outcome", issue: 1, outcome: "give-up", reason: "x" }))
+    ).toBe("warn");
+    expect(
+      eventSeverity(evt({ type: "reviewer-outcome", issue: 1, outcome: "none", reason: null }))
+    ).toBe("warn");
   });
 
   it("classifies progress events (incl. a successful resolution) as normal", () => {
     expect(eventSeverity(evt({ type: "tick", free: 1, poolSize: 10, inflight: 0 }))).toBe("normal");
     expect(eventSeverity(evt({ type: "planner-emitted", count: 1 }))).toBe("normal");
+    expect(
+      eventSeverity(evt({ type: "reviewer-outcome", issue: 1, outcome: "pass", reason: null }))
+    ).toBe("normal");
+    expect(eventSeverity(evt({ type: "review-transition", issue: 1, transition: "gate" }))).toBe(
+      "normal"
+    );
     expect(
       eventSeverity(
         evt({

@@ -9,7 +9,9 @@ import {
   filterReadyForMerge,
   filterReadyForReview,
   handleImplementerOutcome,
+  handleReviewerOutcome,
   issueFromBranch,
+  parseOutcome,
   pickImplementers,
   pickPrs,
   POLL_INTERVAL_MS,
@@ -19,6 +21,7 @@ import {
   shouldRunPlanner,
   type BucketPr,
   type EmittedIssue,
+  type ParsedOutcome,
   type PlanCache,
   type ReadyForAgentIssue,
 } from "./dispatch.mts";
@@ -80,6 +83,10 @@ async function recordedRun<R extends RunLike>(args: {
   issue?: number | null;
   branch?: string | null;
   run: () => Promise<R>;
+  /** Extract the Session's structured Outcome from its result for the Manifest
+   *  (ADR-0011). Given for the Reviewer (parses its `<outcome>` tag); omitted for
+   *  phases that report none (impl/planner/merger) — the entry records null. */
+  outcome?: (result: R) => ParsedOutcome | null;
 }): Promise<R> {
   const startedAt = new Date();
   try {
@@ -93,6 +100,7 @@ async function recordedRun<R extends RunLike>(args: {
         result,
         startedAt,
         endedAt: new Date(),
+        outcome: args.outcome?.(result) ?? null,
       })
     );
     return result;
@@ -217,8 +225,10 @@ async function queryReviewMergePrs(): Promise<BucketPr[]> {
   return prs;
 }
 
-/** The escalation `gh` runner handed to `handleImplementerOutcome`. */
-const escalateGh = { run: async (args: string[]) => void (await gh(args)) };
+/** The `gh` runner handed to the pure terminal-transition handlers
+ *  (`handleImplementerOutcome`, `handleReviewerOutcome`): runs one `gh` command
+ *  and resolves on success / rejects on non-zero exit. */
+const ghRunner = { run: async (args: string[]) => void (await gh(args)) };
 
 /** The typed orchestrator event stream (ADR-0008): every progress moment
  *  flows through this one emitter as a discriminated union, with a prose
@@ -239,7 +249,9 @@ const events = createEvents();
 // a slot remains free after merge+review draining. Reviewers/Mergers each build
 // their own fresh sandbox (impl and review are decoupled across ticks) and run
 // the issue-derived `runId`. A no-op Implementer is escalated to ready-for-human
-// so it is not re-dispatched; Reviewer/Merger give-up paths live in the prompts (#65).
+// so it is not re-dispatched. The Reviewer reports an Outcome the orchestrator
+// acts on — the review gate + give-up transitions are performed here in code
+// (ADR-0011, #96); the Merger's give-up path still lives in its prompt (ADR-0012).
 const pool = createPool(POOL_SIZE);
 const inflight = createInflight();
 
@@ -318,11 +330,7 @@ async function dispatchImplementer(issue: {
 
     // No-op terminal handling (ADR-0006): zero commits → no draft PR → strip
     // ready-for-agent, add ready-for-human, comment, so it is not re-dispatched.
-    const escalated = await handleImplementerOutcome(
-      issue.number,
-      result.commits.length,
-      escalateGh
-    );
+    const escalated = await handleImplementerOutcome(issue.number, result.commits.length, ghRunner);
     if (escalated) {
       events.noopEscalated(issue.number);
     }
@@ -347,12 +355,16 @@ async function dispatchImplementer(issue: {
  * (acquire), marks the issue in-flight, opens a **fresh sandbox from the PR
  * branch** (impl and review are decoupled across ticks per ADR-0006, so the
  * Reviewer cannot reuse the Implementer's live sandbox), re-runs install+build,
- * and runs review-prompt.md. The Reviewer commits fixes itself (Model A) and,
- * when the change passes, opens the REVIEW GATE (adds `reviewed`, flips the PR
- * draft → ready) so the Merger can land it; its give-up path escalates to
- * `ready-for-human` inside the prompt (#65). Whatever happens, the finally
- * disposes the sandbox, removes the issue from the In-flight set, and frees the
- * Pool slot. The runId is issue-derived, shared with the issue's impl/merger.
+ * and runs review-prompt.md. The Reviewer commits fixes itself (Model A), posts
+ * a prose review-summary comment, and ends its Session with a structured
+ * **Outcome** (`<outcome>pass</outcome>` / `<outcome>give-up: …</outcome>`). The
+ * orchestrator parses it and performs every dispatch-controlling transition
+ * itself (ADR-0011): on `pass` it opens the review gate (adds `reviewed`, flips
+ * the PR draft → ready); on `give-up` it escalates to `ready-for-human` (PR left
+ * draft). A missing/garbled Outcome triggers no GitHub mutation (a Retry-budget
+ * attempt) — it is recorded in the Manifest and surfaced as an event. Whatever
+ * happens, the finally disposes the sandbox, removes the issue from the In-flight
+ * set, and frees the Pool slot. The runId is issue-derived, shared with impl.
  */
 async function dispatchReviewer(pr: {
   prNumber: number;
@@ -382,6 +394,8 @@ async function dispatchReviewer(pr: {
       phase: "rev",
       issue: pr.issue,
       branch: pr.branch,
+      // ADR-0011: record the Reviewer's parsed Outcome in the Manifest entry.
+      outcome: (r) => parseOutcome(r.stdout),
       run: () =>
         sandbox.run({
           name: "Reviewer #" + pr.issue,
@@ -405,6 +419,21 @@ async function dispatchReviewer(pr: {
       status: "ok",
       commits: result.commits.length,
     });
+
+    // ADR-0011: the agent judged; the orchestrator mutates. Parse the reported
+    // Outcome and perform the terminal transition ourselves. A missing/garbled
+    // Outcome (parseOutcome → null) triggers NO GitHub mutation — the review is
+    // left for re-dispatch (a Retry-budget attempt in a follow-up issue).
+    const outcome = parseOutcome(result.stdout);
+    events.reviewerOutcome(
+      pr.issue,
+      outcome?.kind ?? "none",
+      outcome?.kind === "give-up" ? outcome.reason : null
+    );
+    if (outcome) {
+      const transition = await handleReviewerOutcome(outcome, pr, ghRunner);
+      events.reviewTransition(pr.issue, transition);
+    }
   } catch (err) {
     events.sessionResolved({
       role: "reviewer",

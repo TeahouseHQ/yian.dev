@@ -61,66 +61,41 @@ If you find improvements to make:
 
 If the code is already clean and well-structured, make no commits.
 
-# GIVE-UP PATH — ESCALATE TO ready-for-human
+# REPORT YOUR OUTCOME
 
-If you **cannot make the change pass** — `pnpm typecheck` or `pnpm test` is red and,
-after your fix attempts, you cannot get it green (a defect, a missing dependency,
-or an architectural problem beyond a review-level fix) — do **not** open the
-REVIEW GATE below. A persistent poller would otherwise re-dispatch this draft PR
-to the Reviewer every tick. Instead, hand the PR to a human via the universal
-terminal label — `ready-for-human`, meaning "out of all Dispatch buckets; a human
-owns it":
+Your job is **review + comment + verdict**. You do **not** change any
+dispatch-controlling GitHub state — the orchestrator adds/removes labels, flips
+the PR draft/ready, and merges, acting on the Outcome you report here. Do not run
+any `gh` command that adds or removes a label, marks the PR ready, or merges it.
 
-1. Post a `COMMENT`-type review explaining what you found and why the change will
-   not pass:
-
-   ```
-   gh pr review {{BRANCH}} --comment --body "<what is blocking the change>"
-   ```
-
-2. Add the `ready-for-human` label to the PR:
-
-   ```
-   gh label create ready-for-human --description "Out of all Dispatch buckets; a human owns it" --color 0052CC || true
-   gh pr edit {{BRANCH}} --add-label ready-for-human
-   ```
-
-3. **Leave the PR as a draft** — do not mark it ready for review, and do not add
-   the `reviewed` label. An escalated PR is never marked ready or merged.
-
-Once escalated, output <promise>COMPLETE</promise> and stop.
-
-# REVIEW GATE
-
-Follow this gate **only** if the change passes (green) or was already clean. If
-you could not make it pass, you followed the GIVE-UP PATH above instead — stop
-here.
-
-The Implementer opened this branch's PR as a **draft**. Once you are done reviewing
-(whether or not you committed fixes) and the change is green, open the gate so the
-Merger can land it:
-
-1. Post a `COMMENT`-type review summarizing your assessment (GitHub forbids approving
-   your own PR, so this is a comment, not an approval):
+1. Post a `COMMENT`-type review summarizing your assessment (prose — a comment is
+   not dispatch-controlling; GitHub also forbids approving your own PR, so this is
+   a comment, not an approval):
 
    ```
    gh pr review {{BRANCH}} --comment --body "<your review summary>"
    ```
 
-2. Ensure the `reviewed` label exists, creating it if it does not, then add it to the PR:
+2. End your Session with **exactly one** structured Outcome tag on its own line:
+   - The change is green — `pnpm typecheck` and `pnpm test` pass, whether you
+     committed fixes or it was already clean:
 
-   ```
-   gh label create reviewed --description "Reviewed by the Sandcastle Reviewer" --color 0E8A16 || true
-   gh pr edit {{BRANCH}} --add-label reviewed
-   ```
+     ```
+     <outcome>pass</outcome>
+     ```
 
-3. Flip the PR from draft to ready for review:
+   - You **cannot make the change pass** — `pnpm typecheck` or `pnpm test` is red
+     and, after your fix attempts, you cannot get it green (a defect, a missing
+     dependency, or an architectural problem beyond a review-level fix):
 
-   ```
-   gh pr ready {{BRANCH}}
-   ```
+     ```
+     <outcome>give-up: <one-line reason></outcome>
+     ```
 
-Only a PR that is **ready (not draft) and labeled `reviewed`** will be merged; leaving
-any of these steps undone keeps the PR open for a human.
+The orchestrator parses this tag and performs the transition: `pass` opens the
+review gate (marks the PR reviewed and ready for the Merger); `give-up` hands the
+PR to a human and leaves it a draft. If you emit no parseable tag, no state
+changes and the review is retried.
 
-Once complete, output <promise>COMPLETE</promise>.
+Once you have posted the comment and emitted the Outcome tag, output
+<promise>COMPLETE</promise>.

@@ -33,10 +33,13 @@
  * usage (see docs/adr/0001-relocate-and-source-transcripts-from-session-jsonl.md).
  * Entries are appended at run resolution (never batched) so a crashed or
  * Ctrl-C'd Run still leaves a complete record; a rejected `run()` still gets a
- * best-effort `status: "failed"` entry with the error and timing, without
- * guessing a transcript link.
+ * best-effort `status: "failed"` entry with the error and timing, and — when a
+ * session JSONL was captured before the crash — a best-effort Transcript link
+ * resolved from the sessions dir (issue #94), so the failures you most need to
+ * audit are viewable in the Session browser and render CLI instead of showing
+ * "not available locally".
  */
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   AgentStreamEvent,
@@ -324,22 +327,36 @@ export function buildManifestEntry(args: ManifestEntryArgs & { result: RunLike }
 }
 
 /**
+ * A resolved Transcript link for a failed run: the captured session JSONL and
+ * (best-effort) the session id parsed from its filename. `usage` and `commits`
+ * remain unknown on the failure path, so they are not part of this slice.
+ */
+export interface ResolvedSession {
+  readonly sessionId: string | null;
+  readonly sessionFile: string;
+}
+
+/**
  * Build a best-effort manifest entry for a rejected agent run. The generic
- * `run()` failure carries no `RunResult`, so `sessionId` / `sessionFile` /
- * `commits` / `usage` are deliberately left null/0 — no transcript link is
- * guessed (sessionId is unavailable, and mtime-matching is unreliable under
- * parallelism). The error is stringified for the record.
+ * `run()` failure carries no `RunResult`, so `commits` / `usage` are left 0/null.
+ *
+ * When `session` is supplied (resolved via {@link resolveFailedSessionFile}) its
+ * `sessionFile` / `sessionId` are recorded so the failure's Transcript — the
+ * session JSONL captured before the crash — is viewable in the Session browser
+ * and render CLI. When it is absent (nothing captured), both stay null and the
+ * browser renders the existing "not available locally" note. The error is
+ * stringified for the record. Pure and env-free so the field set is unit-testable.
  */
 export function buildFailedManifestEntry(
-  args: ManifestEntryArgs & { error: unknown }
+  args: ManifestEntryArgs & { error: unknown; session?: ResolvedSession | null }
 ): ManifestEntry {
   return {
     runId: args.runId,
     phase: args.phase,
     issue: args.issue ?? null,
     branch: args.branch ?? null,
-    sessionId: null,
-    sessionFile: null,
+    sessionId: args.session?.sessionId ?? null,
+    sessionFile: args.session?.sessionFile ?? null,
     commits: 0,
     usage: null,
     startedAt: args.startedAt.toISOString(),
@@ -347,6 +364,105 @@ export function buildFailedManifestEntry(
     status: "failed",
     error: errorMessage(args.error),
   };
+}
+
+// ---- Failed-run Transcript resolution (issue #94) -------------------------
+
+/** A captured session JSONL candidate: its absolute path and mtime in ms. */
+export interface SessionCandidate {
+  readonly file: string;
+  readonly mtimeMs: number;
+}
+
+/** The half-open run window a failed session's JSONL must have been written in. */
+export interface RunWindow {
+  readonly startedAt: Date;
+  readonly endedAt: Date;
+}
+
+/**
+ * Pick the session JSONL captured by a now-failed `run()`, best-effort: the
+ * newest candidate whose mtime falls within the run's `[startedAt, endedAt]`
+ * window. The window is load-bearing — it excludes JSONL left by *earlier*
+ * completed runs (mtime < startedAt), so a run that captured nothing resolves to
+ * `null` (keeping the "not available" behavior) instead of mislinking a prior
+ * run's Transcript. Under parallelism several sessions may share the window;
+ * newest-wins is the documented heuristic and ties resolve to input order.
+ *
+ * Pure and fs-free so the selection rule is unit-testable in isolation.
+ */
+export function pickFailedSessionFile(
+  candidates: readonly SessionCandidate[],
+  window: RunWindow
+): string | null {
+  const startMs = window.startedAt.getTime();
+  const endMs = window.endedAt.getTime();
+  let best: SessionCandidate | null = null;
+  for (const c of candidates) {
+    if (c.mtimeMs < startMs || c.mtimeMs > endMs) continue;
+    if (best === null || c.mtimeMs > best.mtimeMs) best = c;
+  }
+  return best ? best.file : null;
+}
+
+/**
+ * Parse the pi session id from a `<stamp>_<sessionId>.jsonl` filename, or `null`
+ * when the name has no `_<id>.jsonl` suffix. Pure. The id is a convenience for
+ * the record — resolution/render locate the Transcript by the `sessionFile` path
+ * directly, so a null here never breaks viewing.
+ */
+export function sessionIdFromFile(file: string): string | null {
+  const base = file.split(/[/\\]/).pop() ?? file;
+  const m = base.match(/_([^_]+)\.jsonl$/);
+  return m ? m[1] : null;
+}
+
+/** Recursively collect every `*.jsonl` under `dir` with its mtime. Never throws. */
+async function collectSessionCandidates(dir: string): Promise<SessionCandidate[]> {
+  const out: SessionCandidate[] = [];
+  const stack = [dir];
+  while (stack.length) {
+    const current = stack.pop()!;
+    let names: string[];
+    try {
+      names = await readdir(current);
+    } catch {
+      continue; // unreadable / missing dir — skip
+    }
+    for (const name of names) {
+      const full = join(current, name);
+      let s;
+      try {
+        s = await stat(full);
+      } catch {
+        continue;
+      }
+      if (s.isDirectory()) stack.push(full);
+      else if (s.isFile() && name.endsWith(".jsonl")) out.push({ file: full, mtimeMs: s.mtimeMs });
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve the Transcript link for a failed run best-effort: scan `baseDir` (the
+ * sessions dir, laid out `<baseDir>/--<encoded-cwd>--/<stamp>_<id>.jsonl` per
+ * ADR 0001) for session JSONL and {@link pickFailedSessionFile} the newest one
+ * written during the run window. Returns `null` when nothing was captured in the
+ * window. Never throws — observability must not break the run — so any fs error
+ * degrades to `null` (the caller records a null link, unchanged from before).
+ */
+export async function resolveFailedSessionFile(
+  window: RunWindow,
+  baseDir: string = sessionsDir
+): Promise<ResolvedSession | null> {
+  try {
+    const file = pickFailedSessionFile(await collectSessionCandidates(baseDir), window);
+    return file ? { sessionFile: file, sessionId: sessionIdFromFile(file) } : null;
+  } catch (err) {
+    console.error(`[manifest] failed to resolve transcript for failed run: ${errorMessage(err)}`);
+    return null;
+  }
 }
 
 /**

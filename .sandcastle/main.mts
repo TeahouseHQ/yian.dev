@@ -29,6 +29,7 @@ import {
   generateRunId,
   lifecycle,
   observe,
+  resolveFailedSessionFile,
   sessionsDir,
   type RunLike,
 } from "./observability.mts";
@@ -96,6 +97,10 @@ async function recordedRun<R extends RunLike>(args: {
     );
     return result;
   } catch (error) {
+    // Best-effort: link the session JSONL captured before the crash so the
+    // failure is viewable in the Session browser / render CLI (issue #94).
+    const endedAt = new Date();
+    const session = await resolveFailedSessionFile({ startedAt, endedAt });
     await appendManifestLine(
       buildFailedManifestEntry({
         runId: args.runId,
@@ -103,8 +108,9 @@ async function recordedRun<R extends RunLike>(args: {
         issue: args.issue,
         branch: args.branch,
         error,
+        session,
         startedAt,
-        endedAt: new Date(),
+        endedAt,
       })
     );
     throw error;

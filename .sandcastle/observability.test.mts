@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,8 +18,12 @@ import {
   logPath,
   manifestPath,
   observe,
+  pickFailedSessionFile,
+  resolveFailedSessionFile,
+  sessionIdFromFile,
   sessionsDir,
   type RunLike,
+  type SessionCandidate,
 } from "./observability.mts";
 
 const toolCall = (
@@ -410,6 +414,141 @@ describe("buildFailedManifestEntry", () => {
     });
     expect(entry.error).toBe("oops");
     expect(entry.status).toBe("failed");
+  });
+
+  it("records a best-effort Transcript link when a captured session is resolved", () => {
+    const entry = buildFailedManifestEntry({
+      runId: "run-issue-94",
+      phase: "impl",
+      error: new Error("boom"),
+      session: {
+        sessionId: "sess-x",
+        sessionFile: "/repo/.sandcastle/sessions/--r--/9_sess-x.jsonl",
+      },
+      startedAt: new Date("2026-06-28T12:00:00.000Z"),
+      endedAt: new Date("2026-06-28T12:01:00.000Z"),
+    });
+    expect(entry.sessionId).toBe("sess-x");
+    expect(entry.sessionFile).toBe("/repo/.sandcastle/sessions/--r--/9_sess-x.jsonl");
+    // The rest of the failure fields are unchanged.
+    expect(entry.commits).toBe(0);
+    expect(entry.usage).toBeNull();
+    expect(entry.status).toBe("failed");
+  });
+
+  it("leaves the link null when no session was resolved (null / undefined session)", () => {
+    const base = {
+      runId: "r",
+      phase: "impl",
+      error: "x",
+      startedAt: new Date(0),
+      endedAt: new Date(0),
+    };
+    for (const session of [null, undefined]) {
+      const entry = buildFailedManifestEntry({ ...base, session });
+      expect(entry.sessionId).toBeNull();
+      expect(entry.sessionFile).toBeNull();
+    }
+  });
+});
+
+describe("pickFailedSessionFile", () => {
+  const window = {
+    startedAt: new Date("2026-06-28T12:00:00.000Z"),
+    endedAt: new Date("2026-06-28T12:05:00.000Z"),
+  };
+  const at = (iso: string): number => new Date(iso).getTime();
+  const cand = (file: string, iso: string): SessionCandidate => ({ file, mtimeMs: at(iso) });
+
+  it("picks the newest candidate written within the run window", () => {
+    const candidates = [
+      cand("/s/mid.jsonl", "2026-06-28T12:01:00.000Z"),
+      cand("/s/new.jsonl", "2026-06-28T12:04:00.000Z"),
+      cand("/s/early.jsonl", "2026-06-28T12:00:30.000Z"),
+    ];
+    expect(pickFailedSessionFile(candidates, window)).toBe("/s/new.jsonl");
+  });
+
+  it("excludes leftovers from earlier runs (mtime before startedAt)", () => {
+    // A run that captured nothing must resolve to null, not mislink an old Transcript.
+    const candidates = [cand("/s/old.jsonl", "2026-06-28T11:00:00.000Z")];
+    expect(pickFailedSessionFile(candidates, window)).toBeNull();
+  });
+
+  it("excludes sessions written after the run ended", () => {
+    const candidates = [cand("/s/future.jsonl", "2026-06-28T12:06:00.000Z")];
+    expect(pickFailedSessionFile(candidates, window)).toBeNull();
+  });
+
+  it("includes candidates on the window boundaries", () => {
+    const candidates = [
+      cand("/s/start.jsonl", "2026-06-28T12:00:00.000Z"),
+      cand("/s/end.jsonl", "2026-06-28T12:05:00.000Z"),
+    ];
+    expect(pickFailedSessionFile(candidates, window)).toBe("/s/end.jsonl");
+  });
+
+  it("returns null for no candidates", () => {
+    expect(pickFailedSessionFile([], window)).toBeNull();
+  });
+});
+
+describe("sessionIdFromFile", () => {
+  it("parses the id from a <stamp>_<sessionId>.jsonl filename", () => {
+    expect(sessionIdFromFile("2026-06-28T01-00-00-000Z_sess-abc.jsonl")).toBe("sess-abc");
+  });
+
+  it("parses from a full path with directory separators", () => {
+    expect(sessionIdFromFile("/repo/.sandcastle/sessions/--r--/9_sess-x.jsonl")).toBe("sess-x");
+  });
+
+  it("returns null when there is no _<id>.jsonl suffix", () => {
+    expect(sessionIdFromFile("/s/noid.jsonl")).toBeNull();
+    expect(sessionIdFromFile("/s/notjsonl_sess-x.txt")).toBeNull();
+  });
+});
+
+describe("resolveFailedSessionFile", () => {
+  let dir: string;
+  const window = {
+    startedAt: new Date("2026-06-28T12:00:00.000Z"),
+    endedAt: new Date("2026-06-28T12:05:00.000Z"),
+  };
+  afterEach(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true });
+    dir = "";
+  });
+
+  it("resolves the newest in-window JSONL under the encoded-cwd subdir, with its parsed id", async () => {
+    dir = await mkdtemp(join(tmpdir(), "failed-session-"));
+    const nested = join(dir, "--repo--");
+    await mkdir(nested, { recursive: true });
+    const older = join(nested, "2026-06-28T12-01-00-000Z_sess-old.jsonl");
+    const newer = join(nested, "2026-06-28T12-04-00-000Z_sess-new.jsonl");
+    await writeFile(older, "{}\n", "utf8");
+    await writeFile(newer, "{}\n", "utf8");
+    await utimes(older, new Date("2026-06-28T12:01:00.000Z"), new Date("2026-06-28T12:01:00.000Z"));
+    await utimes(newer, new Date("2026-06-28T12:04:00.000Z"), new Date("2026-06-28T12:04:00.000Z"));
+
+    expect(await resolveFailedSessionFile(window, dir)).toEqual({
+      sessionFile: newer,
+      sessionId: "sess-new",
+    });
+  });
+
+  it("returns null when the only JSONL predates the window (nothing captured this run)", async () => {
+    dir = await mkdtemp(join(tmpdir(), "failed-session-"));
+    const file = join(dir, "--repo--", "2026-06-28T11-00-00-000Z_sess-old.jsonl");
+    await mkdir(join(dir, "--repo--"), { recursive: true });
+    await writeFile(file, "{}\n", "utf8");
+    await utimes(file, new Date("2026-06-28T11:00:00.000Z"), new Date("2026-06-28T11:00:00.000Z"));
+
+    expect(await resolveFailedSessionFile(window, dir)).toBeNull();
+  });
+
+  it("returns null (never throws) when the sessions dir does not exist", async () => {
+    const missing = join(tmpdir(), "does-not-exist-sandcastle-sessions-xyz");
+    await expect(resolveFailedSessionFile(window, missing)).resolves.toBeNull();
   });
 });
 

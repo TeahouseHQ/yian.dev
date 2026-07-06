@@ -2,10 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  BASE_BRANCH,
   NOOP_IMPLEMENTER_COMMENT,
   POOL_SIZE,
   POLL_INTERVAL_MS,
   createInflight,
+  implementerSandboxSpec,
+  landingSandboxSpec,
   createPool,
   filterReadyForAgent,
   filterReadyForMerge,
@@ -841,7 +844,74 @@ describe("resolvePlanEmit", () => {
 
 // ---- main.mts structural guards (read source, never import — it runs the loop) --
 
+describe("implementerSandboxSpec — fork the issue branch from origin/main (ADR-0013, #100)", () => {
+  it("bases the new sandcastle/issue-N branch on origin/main, never HEAD", () => {
+    // The whole point of ADR-0013: the Implementer forks from origin/main
+    // regardless of what the human has checked out in the host worktree.
+    const spec = implementerSandboxSpec("sandcastle/issue-42");
+    expect(spec.branch).toBe("sandcastle/issue-42");
+    expect(spec.baseBranch).toBe("origin/main");
+    expect(spec.baseBranch).toBe(BASE_BRANCH);
+  });
+
+  it("installs + builds the worktree before the agent runs", () => {
+    const spec = implementerSandboxSpec("sandcastle/issue-7");
+    const commands = spec.hooks.sandbox.onSandboxReady.map((h) => h.command);
+    expect(commands).toContain("pnpm install --frozen-lockfile && pnpm build");
+  });
+});
+
+describe("landingSandboxSpec — validate the merge against origin/main (ADR-0013, #100)", () => {
+  it("forks the throwaway merge worktree from origin/main", () => {
+    // Validation base = landing base: the Landing tests the merge against the
+    // same ref it will actually land on server-side (origin/main), not stale
+    // local main.
+    const spec = landingSandboxSpec(88, "sandcastle/issue-88");
+    expect(spec.branch).toBe("sandcastle/merge-88");
+    expect(spec.baseBranch).toBe("origin/main");
+    expect(spec.baseBranch).toBe(BASE_BRANCH);
+  });
+
+  it("test-merges the PR branch then runs typecheck + test", () => {
+    const spec = landingSandboxSpec(88, "sandcastle/issue-88");
+    const commands = spec.hooks.sandbox.onSandboxReady.map((h) => h.command);
+    expect(commands).toContain("pnpm install --frozen-lockfile && pnpm build");
+    expect(commands).toContain(
+      "git merge sandcastle/issue-88 --no-edit && pnpm typecheck && pnpm test"
+    );
+  });
+});
+
 const mainSource = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+
+describe("main.mts — origin-tracking (ADR-0013, #100)", () => {
+  it("fetches origin before querying buckets on a dispatching tick", () => {
+    // Each Poll tick that will dispatch fetches origin first so everything bases
+    // on a fresh origin/main; the fetch call precedes the bucket queries.
+    const fetchIdx = mainSource.indexOf("fetchOrigin(");
+    const queryIdx = mainSource.indexOf("queryReadyForAgent()");
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(queryIdx).toBeGreaterThan(-1);
+    expect(fetchIdx).toBeLessThan(queryIdx);
+  });
+
+  it("git fetch origin never touches local main or the working tree", () => {
+    // A bare `git fetch origin` updates remote-tracking refs only — no pull, no
+    // checkout, no merge into local main (ADR-0013).
+    expect(mainSource).toMatch(/"fetch",\s*"origin"/);
+    expect(mainSource).not.toMatch(/"pull"/);
+  });
+
+  it("skips the tick's dispatch and emits fetchFailed when the fetch fails", () => {
+    // A fetch failure must NOT proceed on stale refs — it events and skips.
+    expect(mainSource).toMatch(/events\.fetchFailed\(/);
+  });
+
+  it("forks the Implementer branch from origin/main via implementerSandboxSpec", () => {
+    const impl = mainSource.slice(mainSource.indexOf("async function dispatchImplementer"));
+    expect(impl).toMatch(/implementerSandboxSpec\(issue\.branch\)/);
+  });
+});
 
 describe("main.mts — persistent shared-pool orchestrator (ADR-0006)", () => {
   it("drops the discrete MAX_ITERATIONS for-loop", () => {
@@ -978,19 +1048,15 @@ describe("main.mts — deterministic Landing (ADR-0012, #97)", () => {
     expect(landing).toMatch(/pool\.release\(\)/);
   });
 
-  it("validates in an ISOLATED worktree forked from main, never head mode", () => {
-    // createSandbox with an explicit throwaway branch + baseBranch main forks an
-    // isolated worktree, so the Landing never touches the host's live main/worktree.
+  it("validates in an ISOLATED worktree forked from origin/main via landingSandboxSpec", () => {
+    // The fork base (origin/main, ADR-0013) + the deterministic test-then-merge
+    // validation now live in the pure `landingSandboxSpec` (unit-tested above);
+    // the driver just spreads it into createSandbox. Basing on origin/main (never
+    // stale local `main`) keeps the Landing off the host's live main/worktree.
     const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
     expect(landing).toMatch(/createSandbox/);
-    expect(landing).toMatch(/branch:\s*`sandcastle\/merge-\$\{pr\.issue\}`/);
-    expect(landing).toMatch(/baseBranch:\s*"main"/);
-  });
-
-  it("runs the deterministic test-then-merge validation (git merge → typecheck → test)", () => {
-    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
-    expect(landing).toMatch(/git merge \$\{pr\.branch\}/);
-    expect(landing).toMatch(/pnpm typecheck && pnpm test/);
+    expect(landing).toMatch(/landingSandboxSpec\(pr\.issue, pr\.branch\)/);
+    expect(landing).not.toMatch(/baseBranch:\s*"main"/);
   });
 
   it("lands a clean+green PR server-side with gh pr merge --merge", () => {

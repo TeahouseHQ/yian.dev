@@ -122,6 +122,13 @@ interface GhErrorEvent extends BaseEvent {
   readonly error: string;
 }
 
+/** The per-tick `git fetch origin` failed (ADR-0013): the tick's dispatch is
+ *  skipped rather than proceeding on stale refs; the next tick re-fetches. */
+interface FetchFailedEvent extends BaseEvent {
+  readonly type: "fetch-failed";
+  readonly error: string;
+}
+
 /** A dispatched Session (Implementer/Reviewer) resolved. `ok` carries the
  *  commit count; `failed` carries the error string. This is the structured
  *  resolution signal for the Cockpit — headless prose only renders the failure
@@ -201,6 +208,7 @@ export type OrchestratorEvent =
   | PlannerFailedEvent
   | NoopEscalatedEvent
   | GhErrorEvent
+  | FetchFailedEvent
   | SessionResolvedEvent
   | ReviewerOutcomeEvent
   | ReviewTransitionEvent
@@ -247,6 +255,8 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return `  ⚠ #${event.issue} produced no commits — escalated to ready-for-human.`;
     case "gh-error":
       return `  ⚠ gh ${event.args.join(" ")} failed: ${event.error}`;
+    case "fetch-failed":
+      return `  ✗ git fetch origin failed: ${event.error} — skipping dispatch this tick.`;
     case "session-resolved":
       if (event.status === "ok") return null;
       return `  ✗ ${roleFailedPrefix(event.role)}#${event.issue} (${event.branch}) failed: ${event.error}`;
@@ -308,6 +318,7 @@ function roleFailedPrefix(role: OrchestratorRole): string {
 export function eventStream(event: OrchestratorEvent): EventStream {
   switch (event.type) {
     case "gh-error":
+    case "fetch-failed":
     case "planner-no-plan":
     case "planner-failed":
     case "landing-failed":
@@ -362,6 +373,8 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return `⚠ #${event.issue} no commits · escalated to ready-for-human`;
     case "gh-error":
       return `⚠ gh ${event.args.join(" ")} failed · ${event.error}`;
+    case "fetch-failed":
+      return `✗ git fetch origin failed · ${event.error} · dispatch skipped`;
     case "reviewer-outcome":
       if (event.outcome === "give-up")
         return `⚠ rev #${event.issue} outcome · give-up · ${event.reason}`;
@@ -399,6 +412,7 @@ export type EventSeverity = "failure" | "warn" | "normal";
 export function eventSeverity(event: OrchestratorEvent): EventSeverity {
   switch (event.type) {
     case "gh-error":
+    case "fetch-failed":
     case "planner-failed":
     case "landing-failed":
       return "failure";
@@ -448,6 +462,7 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "planner-failed": true,
   "noop-escalated": true,
   "gh-error": true,
+  "fetch-failed": true,
   "session-resolved": true,
   "reviewer-outcome": true,
   "review-transition": true,
@@ -537,6 +552,9 @@ export interface OrchestratorEvents {
   noopEscalated(issue: number): void;
   /** A per-tick `gh` query failed (tolerated; next tick re-queries). */
   ghError(args: ReadonlyArray<string>, error: string): void;
+  /** The per-tick `git fetch origin` failed — the tick's dispatch is skipped
+   *  rather than proceeding on stale refs (ADR-0013). */
+  fetchFailed(error: string): void;
   /** The Reviewer's parsed Outcome (ADR-0011): `pass` / `give-up` (with
    *  `reason`) / `none` when no parseable Outcome tag was produced. */
   reviewerOutcome(issue: number, outcome: "pass" | "give-up" | "none", reason: string | null): void;
@@ -615,6 +633,7 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       }),
     noopEscalated: (issue) => emit({ type: "noop-escalated", issue, ts: stamp() }),
     ghError: (args, error) => emit({ type: "gh-error", args, error, ts: stamp() }),
+    fetchFailed: (error) => emit({ type: "fetch-failed", error, ts: stamp() }),
     reviewerOutcome: (issue, outcome, reason) =>
       emit({ type: "reviewer-outcome", issue, outcome, reason, ts: stamp() }),
     reviewTransition: (issue, transition) =>

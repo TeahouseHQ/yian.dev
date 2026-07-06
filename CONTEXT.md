@@ -19,7 +19,7 @@ Sandcastle's existing human-readable Display output under `.sandcastle/logs/*.lo
 _Avoid_: transcript.
 
 **Prune**:
-The `pnpm sandcastle:prune` maintenance command (`.sandcastle/prune.mts`) that reclaims throwaway state after Runs: deletes Run logs, removes merged worktrees, and deletes local `sandcastle/*` branches merged into `main`. Dry-run by default; `--force` to apply. Never touches Transcripts or the Manifest — the audit trail is out of scope by design (ADR-0004).
+The `pnpm sandcastle:prune` maintenance command (`.sandcastle/prune.mts`) that reclaims throwaway state after Runs: deletes Run logs, removes merged worktrees, and deletes local `sandcastle/*` branches merged into `origin/main` (the reachability gate is origin, not stale local `main` — ADR-0013). Dry-run by default; `--force` to apply. Never touches Transcripts or the Manifest — the audit trail is out of scope by design (ADR-0004).
 _Avoid_: clean, gc.
 
 **Session**:

@@ -7,13 +7,13 @@
  *                   Display output (glossary: "Run log"). Safe to delete.
  *   2. Worktrees  — `.sandcastle/worktrees/<wt>` whose branch is merged into main.
  *                   Throwaway sandboxes; removed only once their work has landed.
- *   3. Branches   — local `sandcastle/*` branches merged into `main`.
+ *   3. Branches   — local `sandcastle/*` branches merged into `origin/main`.
  *   4. Merger scratch — leftover `sandcastle/merge-*` branches (and any lingering
  *                   worktree) left by the Merger's ISOLATED test-merge
  *                   (branchStrategy "branch" in main.mts). Their merge commit's
  *                   content already lands on main via `gh pr merge`, but the
  *                   branch tip is never reachable from main — so unlike (3) they
- *                   are force-deleted (`-D`), not gated on `--merged main`. Still
+ *                   are force-deleted (`-D`), not gated on `--merged origin/main`. Still
  *                   `sandcastle/*`-scoped and worktree-safe (dirty ones skipped).
  *
  *   NOT pruned: Transcripts (`.sandcastle/sessions/**.jsonl`) and the Manifest.
@@ -30,9 +30,11 @@
  * it (ADR-0009); only the printing below is CLI-specific.
  *
  * Design decisions (see ADR-0004):
- *   - "merged" means reachable from `main` (`git branch --merged main`). This
- *     preserves branches whose PRs were intentionally left open for a human
- *     (ADR-0003), since their tips are NOT yet on main.
+ *   - "merged" means reachable from `origin/main` (`git branch --merged
+ *     origin/main`), not stale local `main` — after a server-side `gh pr merge`
+ *     local `main` falls behind, so gating on it would miss landed branches
+ *     (ADR-0013). This still preserves branches whose PRs were intentionally left
+ *     open for a human (ADR-0003), since their tips are NOT yet on origin/main.
  *   - Scope is `sandcastle/*` only — never `main` or hand-made branches.
  *   - Local only — remote branches are left to GitHub's delete-on-merge.
  *   - Dry-run by default. Pass `--force` (or `--yes`) to actually delete.

@@ -37,9 +37,10 @@ export interface PruneState {
   runLogs: string[];
   /** All worktrees from `git worktree list`, each tagged with its dirty flag. */
   worktrees: WorktreeState[];
-  /** `git branch --merged main` filtered to `sandcastle/*` (reachability-gated,
-   *  ADR-0004). May include Merger scratch; `planPrune` moves those into the
-   *  Merger bucket so they are never double-counted. */
+  /** `git branch --merged origin/main` filtered to `sandcastle/*` (reachability-
+   *  gated on origin, not stale local `main` — ADR-0013/0004). May include Merger
+   *  scratch; `planPrune` moves those into the Merger bucket so they are never
+   *  double-counted. */
   mergedBranches: Set<string>;
   /** `sandcastle/merge-*` scratch branches left by the Merger's ISOLATED
    *  test-merge — force-deleted, NOT gated on `--merged main` (their merge

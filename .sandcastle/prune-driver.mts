@@ -81,10 +81,12 @@ export function discoverPruneState(cwd?: string): PruneState {
       .filter((b) => b.length > 0)
   );
 
-  // Reachability-gated `sandcastle/*` branches. Scope (`sandcastle/*`) is applied
-  // here; the Merger-scratch exclusion is applied inside `planPrune`.
+  // Reachability-gated `sandcastle/*` branches. The gate is `origin/main`, NOT
+  // local `main` (ADR-0013): after a server-side `gh pr merge` local `main` falls
+  // behind, so gating on it would miss branches that already landed. Scope
+  // (`sandcastle/*`) is applied here; the Merger-scratch exclusion is in `planPrune`.
   const mergedBranches = new Set(
-    git(["branch", "--merged", "main", "--format=%(refname:short)"], cwd)
+    git(["branch", "--merged", "origin/main", "--format=%(refname:short)"], cwd)
       .split("\n")
       .map((b) => b.trim())
       .filter((b) => b.startsWith("sandcastle/"))

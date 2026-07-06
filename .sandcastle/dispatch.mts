@@ -20,6 +20,76 @@ export const POOL_SIZE = 10;
 export const POLL_INTERVAL_MS = 60_000;
 
 /**
+ * The single ref the orchestrator bases everything on (CONTEXT.md; ADR-0013).
+ * New issue branches fork from it, the Landing validates against it, and Prune's
+ * merged-reachability gate uses it — never local `main` or `HEAD`. Local `main`
+ * and the working tree stay purely the human's business; a `git fetch origin`
+ * each Poll tick keeps this remote-tracking ref fresh without touching them.
+ */
+export const BASE_BRANCH = "origin/main";
+
+/** The install+build hook every sandbox runs before its work. Frozen-lockfile
+ *  because this repo is pnpm-only — a plain install would resolve a competing
+ *  lockfile (see main.mts). */
+const INSTALL_BUILD = "pnpm install --frozen-lockfile && pnpm build";
+
+/**
+ * The subset of `sandcastle.createSandbox` options the orchestrator computes per
+ * dispatch: which `branch` to work on, the `baseBranch` it forks from, the
+ * `node_modules` carry-over, and the `onSandboxReady` hook commands. The live
+ * `sandbox` factory (docker) is supplied by `main.mts` and spread alongside —
+ * kept out of here so the fork-base decision (ADR-0013) is pure and testable.
+ */
+export interface SandboxSpec {
+  readonly branch: string;
+  readonly baseBranch: string;
+  readonly copyToWorktree: string[];
+  readonly hooks: { sandbox: { onSandboxReady: { command: string }[] } };
+}
+
+/**
+ * Build the sandbox spec for an Implementer: fork the new `sandcastle/issue-N`
+ * branch from {@link BASE_BRANCH} (`origin/main`), NEVER `HEAD`. Sandcastle's
+ * docker provider defaults `baseBranch` to `HEAD`, so an explicit base is what
+ * makes the fork independent of whatever the human has checked out (ADR-0013,
+ * #100). Then install + build the worktree before the agent runs.
+ */
+export function implementerSandboxSpec(branch: string): SandboxSpec {
+  return {
+    branch,
+    baseBranch: BASE_BRANCH,
+    copyToWorktree: ["node_modules"],
+    hooks: { sandbox: { onSandboxReady: [{ command: INSTALL_BUILD }] } },
+  };
+}
+
+/**
+ * Build the sandbox spec for a Landing (CONTEXT.md: Landing; ADR-0012/0013): a
+ * throwaway `sandcastle/merge-N` worktree forked from {@link BASE_BRANCH}
+ * (`origin/main`) — the same base the PR will land on server-side, so a green
+ * validation is meaningful — never local `main`, which falls behind after every
+ * server-side merge. `onSandboxReady` install+builds, then deterministically
+ * test-merges the PR branch: `git merge <prBranch>` (a textual conflict) or
+ * `pnpm typecheck && pnpm test` (a red suite) exiting non-zero rejects
+ * `createSandbox` and routes `main.mts` to the failure escalation.
+ */
+export function landingSandboxSpec(issue: number, prBranch: string): SandboxSpec {
+  return {
+    branch: `sandcastle/merge-${issue}`,
+    baseBranch: BASE_BRANCH,
+    copyToWorktree: ["node_modules"],
+    hooks: {
+      sandbox: {
+        onSandboxReady: [
+          { command: INSTALL_BUILD },
+          { command: `git merge ${prBranch} --no-edit && pnpm typecheck && pnpm test` },
+        ],
+      },
+    },
+  };
+}
+
+/**
  * The shared concurrency **Pool** (CONTEXT.md: Pool). A single limiter of size
  * `POOL_SIZE`; `acquire()` reserves a slot (resolving immediately if one is
  * free, otherwise queueing until a slot is released) and `release()` frees one.

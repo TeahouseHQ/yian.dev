@@ -11,7 +11,9 @@ import {
   handleImplementerOutcome,
   handleLandingFailure,
   handleReviewerOutcome,
+  implementerSandboxSpec,
   issueFromBranch,
+  landingSandboxSpec,
   parseOutcome,
   pickImplementers,
   pickPrs,
@@ -132,6 +134,23 @@ async function recordedRun<R extends RunLike>(args: {
 async function gh(args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("gh", args, { maxBuffer: 10 * 1024 * 1024 });
   return stdout;
+}
+
+/**
+ * Fetch `origin` on the host once per dispatching Poll tick (ADR-0013). A bare
+ * `git fetch origin` updates the remote-tracking refs (`origin/main`, …) ONLY —
+ * it never pulls, checks out, or merges into the human's local `main` or working
+ * tree, so origin-tracking stays entirely off the human's refs. Returns
+ * ok/error so the loop can skip this tick's dispatch on failure rather than
+ * fork, validate, and prune against stale refs; the next tick re-fetches.
+ */
+async function fetchOrigin(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await execFileAsync("git", ["fetch", "origin"], { maxBuffer: 10 * 1024 * 1024 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
 }
 
 /**
@@ -290,19 +309,15 @@ async function dispatchImplementer(issue: {
   const implLC = lifecycle(implLabel);
   implLC.start();
   try {
+    // Fork the new sandcastle/issue-N branch from origin/main (never HEAD), then
+    // install+build. The fork base + hooks are the pure `implementerSandboxSpec`
+    // (ADR-0013): basing on origin/main makes the Implementer independent of what
+    // the human has checked out in the host worktree. --frozen-lockfile because
+    // this repo is pnpm-only, so a plain `npm install` would resolve a competing
+    // lockfile (see implementerSandboxSpec / INSTALL_BUILD in dispatch.mts).
     await using sandbox = await sandcastle.createSandbox({
       sandbox: dockerSandbox(),
-      branch: issue.branch,
-      copyToWorktree: ["node_modules"],
-      hooks: {
-        sandbox: {
-          // pnpm with a frozen lockfile: this repo is pnpm-only (pnpm-lock.yaml,
-          // no package-lock.json), so `npm install` would generate a competing
-          // lockfile and resolve deps differently. --frozen-lockfile keeps sandbox
-          // installs reproducible and fast against the committed pnpm-lock.yaml.
-          onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
-        },
-      },
+      ...implementerSandboxSpec(issue.branch),
     });
     implLC.sandbox();
 
@@ -491,33 +506,23 @@ async function dispatchLanding(pr: {
   const startedAt = new Date();
   events.landingStarted(pr.prNumber, pr.issue, pr.branch);
   try {
-    // Validate in an ISOLATED worktree forked from `main`, NOT head mode. A
+    // Validate in an ISOLATED worktree forked from `origin/main`, NOT head mode. A
     // bind-mount provider (docker) defaults to the "head" strategy, which
     // bind-mounts the host repo directly — so the validation `git merge <PR
     // branch>` would mutate your real local `main` and dirty the host working
-    // tree. Passing an explicit `branch` (with `baseBranch: main`) forks a
-    // throwaway `sandcastle/merge-<issue>` worktree from `main`: the local
-    // test-merge happens there and is discarded when the worktree is disposed,
-    // while the actual landing stays server-side via `gh pr merge`. So the
-    // Landing never reads or mutates the host's live `main` or working tree.
+    // tree. `landingSandboxSpec` passes an explicit throwaway
+    // `sandcastle/merge-<issue>` branch forked from `origin/main` (ADR-0013): the
+    // local test-merge happens there against the SAME base the PR lands on
+    // server-side (not stale local `main`), and is discarded when the worktree is
+    // disposed, while the actual landing stays server-side via `gh pr merge`. So
+    // the Landing never reads or mutates the host's live `main` or working tree.
     // (Leftover local `sandcastle/merge-*` refs are cleaned by `pnpm
-    // sandcastle:prune`.)
+    // sandcastle:prune`.) The deterministic test-then-merge hooks live in the
+    // spec: a textual conflict or a red suite rejects createSandbox and routes us
+    // to the failure escalation below.
     await using sandbox = await sandcastle.createSandbox({
       sandbox: dockerSandbox(),
-      branch: `sandcastle/merge-${pr.issue}`,
-      baseBranch: "main",
-      copyToWorktree: ["node_modules"],
-      hooks: {
-        sandbox: {
-          onSandboxReady: [
-            { command: "pnpm install --frozen-lockfile && pnpm build" },
-            // Deterministic test-then-merge validation. Either step exiting
-            // non-zero (a textual conflict, or a red suite) rejects createSandbox
-            // and routes us to the failure escalation below.
-            { command: `git merge ${pr.branch} --no-edit && pnpm typecheck && pnpm test` },
-          ],
-        },
-      },
+      ...landingSandboxSpec(pr.issue, pr.branch),
     });
     lc.sandbox();
 
@@ -611,81 +616,91 @@ for (;;) {
   if (!shouldQueryBuckets(free)) {
     events.poolFull();
   } else {
-    // One ready-for-agent issue query + one PR query feeds all three buckets:
-    // the PR list is split into ready-for-merge / ready-for-review, and its
-    // issue set excludes ready-for-agent issues that already have an open PR.
-    const [readyForAgent, prs] = await Promise.all([queryReadyForAgent(), queryReviewMergePrs()]);
-    const openPrIssues = new Set(prs.map((p) => p.issue));
-    const readyForMerge = filterReadyForMerge(prs, inflight);
-    const readyForReview = filterReadyForReview(prs, inflight);
-    const actionable = filterReadyForAgent(readyForAgent, inflight, openPrIssues);
-
-    events.buckets(
-      readyForMerge.length,
-      readyForReview.length,
-      readyForAgent.length,
-      actionable.length
-    );
-
-    // Priority drain (ADR-0006): fill `free` slots merge → review → implement,
-    // so started work lands before new work starts (prevents PR starvation).
-    // `remaining` counts slots still free after each bucket drains its share.
-    let remaining = free;
-
-    // 1) ready-for-merge — ready + reviewed PRs → one agent-free Landing per PR.
-    const landings = pickPrs(readyForMerge, remaining, inflight);
-    for (const pr of landings) {
-      inflight.add(pr.issue);
-      // The Landing emits its own started/landed/failed events (agent-free, not a
-      // dispatch/session-resolved Session) — see dispatchLanding.
-      void dispatchLanding(pr); // fire-and-forget; resolves across ticks.
-    }
-    remaining -= landings.length;
-
-    // 2) ready-for-review — draft sandcastle/issue-N PRs without reviewed.
-    const reviewers = pickPrs(readyForReview, remaining, inflight);
-    for (const pr of reviewers) {
-      inflight.add(pr.issue);
-      events.dispatchReviewer(pr.prNumber, pr.issue, pr.branch);
-      void dispatchReviewer(pr);
-    }
-    remaining -= reviewers.length;
-
-    // 3) ready-for-agent — the implement stage runs ONLY when actionable issues
-    // exist AND a slot remains after merge+review draining (don't spend a slot
-    // on work we can't start). The Plan cache (ADR-0010) skips the Opus Planner
-    // while the RAW ready-for-agent set is unchanged: `resolvePlanEmit` keys on
-    // `readyForAgent` (the pre-filter query result, NOT `actionable` — else the
-    // cache goes stale when a blocker merges out), reuses the cached emit on a
-    // hit, and re-invokes the Planner only on a miss. Either way the pure
-    // dispatch below runs over the emit, so a capped emit still drains on later
-    // ticks (no starvation). `pickImplementers` caps at `remaining`.
-    if (shouldRunPlanner(actionable, remaining)) {
-      try {
-        const resolved = await resolvePlanEmit(readyForAgent, planCache, runPlanner);
-        planCache = resolved.cache;
-        if (resolved.plannerRan) {
-          events.plannerEmitted(resolved.emit.length);
-        } else {
-          events.planReused(resolved.emit.length);
-        }
-
-        // The Planner re-queries gh, so it can emit an issue that just got a PR
-        // this tick — drop those before dispatching. (In-flight dedupe + the
-        // remaining-slot cap happen in pickImplementers.)
-        const dispatchable = resolved.emit.filter((i) => !openPrIssues.has(i.number));
-        const toDispatch = pickImplementers(dispatchable, remaining, inflight);
-
-        for (const issue of toDispatch) {
-          inflight.add(issue.number);
-          events.dispatchImplementer(issue.number, issue.title, issue.branch);
-          void dispatchImplementer(issue);
-        }
-      } catch (err) {
-        events.plannerFailed(errorMessage(err));
-      }
+    // ADR-0013: fetch origin once per dispatching tick so new branches fork,
+    // Landings validate, and Prune gates against a fresh origin/main. A fetch
+    // failure skips THIS tick's dispatch rather than proceeding on stale refs —
+    // the next tick re-fetches. (Bare fetch: remote-tracking refs only, never the
+    // human's local main or working tree.)
+    const fetched = await fetchOrigin();
+    if (!fetched.ok) {
+      events.fetchFailed(fetched.error);
     } else {
-      events.plannerSkipped();
+      // One ready-for-agent issue query + one PR query feeds all three buckets:
+      // the PR list is split into ready-for-merge / ready-for-review, and its
+      // issue set excludes ready-for-agent issues that already have an open PR.
+      const [readyForAgent, prs] = await Promise.all([queryReadyForAgent(), queryReviewMergePrs()]);
+      const openPrIssues = new Set(prs.map((p) => p.issue));
+      const readyForMerge = filterReadyForMerge(prs, inflight);
+      const readyForReview = filterReadyForReview(prs, inflight);
+      const actionable = filterReadyForAgent(readyForAgent, inflight, openPrIssues);
+
+      events.buckets(
+        readyForMerge.length,
+        readyForReview.length,
+        readyForAgent.length,
+        actionable.length
+      );
+
+      // Priority drain (ADR-0006): fill `free` slots merge → review → implement,
+      // so started work lands before new work starts (prevents PR starvation).
+      // `remaining` counts slots still free after each bucket drains its share.
+      let remaining = free;
+
+      // 1) ready-for-merge — ready + reviewed PRs → one agent-free Landing per PR.
+      const landings = pickPrs(readyForMerge, remaining, inflight);
+      for (const pr of landings) {
+        inflight.add(pr.issue);
+        // The Landing emits its own started/landed/failed events (agent-free, not a
+        // dispatch/session-resolved Session) — see dispatchLanding.
+        void dispatchLanding(pr); // fire-and-forget; resolves across ticks.
+      }
+      remaining -= landings.length;
+
+      // 2) ready-for-review — draft sandcastle/issue-N PRs without reviewed.
+      const reviewers = pickPrs(readyForReview, remaining, inflight);
+      for (const pr of reviewers) {
+        inflight.add(pr.issue);
+        events.dispatchReviewer(pr.prNumber, pr.issue, pr.branch);
+        void dispatchReviewer(pr);
+      }
+      remaining -= reviewers.length;
+
+      // 3) ready-for-agent — the implement stage runs ONLY when actionable issues
+      // exist AND a slot remains after merge+review draining (don't spend a slot
+      // on work we can't start). The Plan cache (ADR-0010) skips the Opus Planner
+      // while the RAW ready-for-agent set is unchanged: `resolvePlanEmit` keys on
+      // `readyForAgent` (the pre-filter query result, NOT `actionable` — else the
+      // cache goes stale when a blocker merges out), reuses the cached emit on a
+      // hit, and re-invokes the Planner only on a miss. Either way the pure
+      // dispatch below runs over the emit, so a capped emit still drains on later
+      // ticks (no starvation). `pickImplementers` caps at `remaining`.
+      if (shouldRunPlanner(actionable, remaining)) {
+        try {
+          const resolved = await resolvePlanEmit(readyForAgent, planCache, runPlanner);
+          planCache = resolved.cache;
+          if (resolved.plannerRan) {
+            events.plannerEmitted(resolved.emit.length);
+          } else {
+            events.planReused(resolved.emit.length);
+          }
+
+          // The Planner re-queries gh, so it can emit an issue that just got a PR
+          // this tick — drop those before dispatching. (In-flight dedupe + the
+          // remaining-slot cap happen in pickImplementers.)
+          const dispatchable = resolved.emit.filter((i) => !openPrIssues.has(i.number));
+          const toDispatch = pickImplementers(dispatchable, remaining, inflight);
+
+          for (const issue of toDispatch) {
+            inflight.add(issue.number);
+            events.dispatchImplementer(issue.number, issue.title, issue.branch);
+            void dispatchImplementer(issue);
+          }
+        } catch (err) {
+          events.plannerFailed(errorMessage(err));
+        }
+      } else {
+        events.plannerSkipped();
+      }
     }
   }
 

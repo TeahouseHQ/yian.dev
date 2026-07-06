@@ -150,6 +150,12 @@ describe("formatEventProse", () => {
     ).toBe("  ⚠ gh pr list --state open failed: nope");
   });
 
+  it("reproduces the fetch-failed line (dispatch skipped this tick)", () => {
+    expect(formatEventProse(evt({ type: "fetch-failed", error: "network down" }))).toBe(
+      "  ✗ git fetch origin failed: network down — skipping dispatch this tick."
+    );
+  });
+
   it("renders the parsed Reviewer Outcome (pass / give-up / none)", () => {
     expect(
       formatEventProse(evt({ type: "reviewer-outcome", issue: 7, outcome: "pass", reason: null }))
@@ -288,6 +294,7 @@ describe("eventStream", () => {
 
   it("routes the error-shaped events to stderr", () => {
     expect(eventStream(evt({ type: "gh-error", args: ["a"], error: "x" }))).toBe("stderr");
+    expect(eventStream(evt({ type: "fetch-failed", error: "x" }))).toBe("stderr");
     expect(eventStream(evt({ type: "planner-no-plan" }))).toBe("stderr");
     expect(eventStream(evt({ type: "planner-failed", error: "x" }))).toBe("stderr");
     expect(
@@ -418,6 +425,17 @@ describe("createEvents", () => {
     expect(err).toHaveBeenCalledTimes(2);
     expect(err).toHaveBeenNthCalledWith(1, "Planner failed: boom");
     expect(err).toHaveBeenNthCalledWith(2, "  ⚠ gh pr list failed: nope");
+  });
+
+  it("in prose mode routes a fetch failure to stderr", () => {
+    const out = vi.fn();
+    const err = vi.fn();
+    const events = createEvents({ format: "prose", out, err });
+    events.fetchFailed("network down");
+    expect(out).not.toHaveBeenCalled();
+    expect(err).toHaveBeenCalledWith(
+      "  ✗ git fetch origin failed: network down — skipping dispatch this tick."
+    );
   });
 
   it("in prose mode does not write anything for a successful session-resolved", () => {
@@ -582,6 +600,7 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "planner-failed",
     "noop-escalated",
     "gh-error",
+    "fetch-failed",
     "session-resolved",
     "reviewer-outcome",
     "review-transition",
@@ -607,6 +626,7 @@ describe("eventSeverity", () => {
   it("classifies failures as failure", () => {
     expect(eventSeverity(evt({ type: "gh-error", args: ["a"], error: "x" }))).toBe("failure");
     expect(eventSeverity(evt({ type: "planner-failed", error: "x" }))).toBe("failure");
+    expect(eventSeverity(evt({ type: "fetch-failed", error: "x" }))).toBe("failure");
     expect(
       eventSeverity(
         evt({

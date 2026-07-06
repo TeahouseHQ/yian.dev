@@ -302,6 +302,15 @@ describe("formatEventLog", () => {
       formatEventLog(evt({ type: "review-transition", issue: 7, transition: "give-up" }))
     ).toBe("→ #7 escalated to ready-for-human");
   });
+
+  it("renders the Retry-budget attempt-failed and budget-exhausted log lines (#98)", () => {
+    expect(
+      formatEventLog(evt({ type: "attempt-failed", issue: 7, phase: "land", attempt: 2, limit: 3 }))
+    ).toBe("⚠ #7 land attempt 2/3 failed");
+    expect(
+      formatEventLog(evt({ type: "budget-exhausted", issue: 7, phase: "land", attempts: 3 }))
+    ).toBe("⚠ #7 land budget exhausted · 3 attempts · escalated to ready-for-human");
+  });
 });
 
 // ── appendLogLine: bounded ring buffer for the scrolling log ─────────────────

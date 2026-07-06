@@ -157,6 +157,56 @@ export function createInflight(): Inflight {
   };
 }
 
+// ---- The Retry budget (ADR-0011, #98) -------------------------------------
+
+/**
+ * The per-issue-per-phase allowance of failed attempts before escalation
+ * (CONTEXT.md: Retry budget). `N=3` is one attempt plus two retries: on the 3rd
+ * failed attempt for the same issue+phase the orchestrator escalates the item to
+ * `ready-for-human`.
+ */
+export const RETRY_BUDGET_N = 3;
+
+/** Has an issue+phase reached the {@link RETRY_BUDGET_N} threshold? Pure so the
+ *  threshold decision is unit-testable apart from the mutable counter. */
+export function isBudgetExhausted(count: number): boolean {
+  return count >= RETRY_BUDGET_N;
+}
+
+/**
+ * The **Retry budget** (CONTEXT.md): the orchestrator's in-memory counter of
+ * failed attempts keyed by issue+phase, living beside the In-flight set and Plan
+ * cache (same non-durability philosophy, ADR-0006/0010). A failed attempt — a
+ * crashed Session, one that resolved without a parseable Outcome, or a failed
+ * Landing — is `fail(issue, phase)`; a successful Session (or an escalation)
+ * `clear(issue, phase)`s it. Not durable: a restart forgets counts, which at
+ * worst grants extra attempts — benign under at-least-once dispatch.
+ */
+export interface RetryBudget {
+  /** Record one failed attempt for `issue`+`phase`; returns the new count. */
+  fail(issue: number, phase: string): number;
+  /** Reset the counter for `issue`+`phase` (a successful Session or escalation). */
+  clear(issue: number, phase: string): void;
+  /** The current failed-attempt count for `issue`+`phase` (0 if none). */
+  count(issue: number, phase: string): number;
+}
+
+/** Create an empty Retry budget. Keyed by a `issue:phase` string so the same
+ *  issue is counted independently across its impl / rev / land / resolve phases. */
+export function createRetryBudget(): RetryBudget {
+  const counts = new Map<string, number>();
+  const key = (issue: number, phase: string) => `${issue}:${phase}`;
+  return {
+    fail: (issue, phase) => {
+      const next = (counts.get(key(issue, phase)) ?? 0) + 1;
+      counts.set(key(issue, phase), next);
+      return next;
+    },
+    clear: (issue, phase) => void counts.delete(key(issue, phase)),
+    count: (issue, phase) => counts.get(key(issue, phase)) ?? 0,
+  };
+}
+
 /**
  * A `ready-for-agent` issue as the Dispatch bucket sees it: its number, title,
  * current labels (so an issue that ALSO carries `ready-for-human` can be
@@ -492,7 +542,7 @@ export type ParsedOutcome =
  * tolerated. Returns `null` for a missing OR garbled verdict (anything that is
  * not exactly `pass` or `give-up: <non-empty reason>`) — a null is NOT a
  * give-up: it triggers no GitHub mutation and is recorded as a failed attempt
- * against the (future) Retry budget, so one formatting lapse never escalates
+ * against the Retry budget, so one formatting lapse never escalates
  * automatable work to a human (ADR-0011).
  *
  * Pure and side-effect-free so the contract is unit-testable in isolation.
@@ -580,52 +630,87 @@ export async function handleReviewerOutcome(
   return "give-up";
 }
 
+// ---- Retry-budget escalation (ADR-0011, #98) ------------------------------
+
 /**
- * Comment body the orchestrator posts when a Landing fails (ADR-0012, #97).
- * Carries the failure output (a textual `git merge` conflict, or the red
- * `pnpm typecheck && pnpm test` output) plus the CONTEXT.md `ready-for-human`
- * semantics — pins the wording that used to live in the merge prompt's GIVE-UP
- * PATH, now owned by orchestrator code. Exported so it is documented and
- * unit-testable.
+ * The GitHub-shape of the item whose Retry budget is being escalated. The
+ * budget bounds every pooled phase, but the escalation differs by shape (issue
+ * §198's blocked-by "both shapes"):
+ *
+ * - **issue** (implement phase) — the issue is still labeled `ready-for-agent`;
+ *   escalation adds `ready-for-human` and strips `ready-for-agent`, like the
+ *   no-op Implementer path.
+ * - **pr** (review / resolve / land) — a `sandcastle/issue-N` PR; escalation adds
+ *   `ready-for-human` via the ADR-0011 crash-safe transition runner. `gated`
+ *   distinguishes the two PR states: a review/resolve PR is a plain draft
+ *   (`gated: false`, leave it), while a land-phase PR is ready + `reviewed`
+ *   (`gated: true`, strip the gate — remove `reviewed`, revert to draft).
  */
-export function landingFailureComment(failure: string): string {
+export type BudgetTarget =
+  | { readonly kind: "issue"; readonly issue: number }
+  | { readonly kind: "pr"; readonly prNumber: number; readonly gated: boolean };
+
+/**
+ * Comment body the orchestrator posts when an item exhausts its Retry budget
+ * (CONTEXT.md: Retry budget; ADR-0011). Cites the phase and attempt count — the
+ * signal a human needs to see why automatable work was handed over — plus the
+ * CONTEXT.md `ready-for-human` semantics and the note that re-labeling grants a
+ * fresh budget. An optional `detail` (the last failure's one-line output) is
+ * appended so the PR/issue still shows what went wrong. Exported so the wording
+ * is documented and unit-testable.
+ */
+export function budgetExhaustedComment(phase: string, attempts: number, detail?: string): string {
+  const tail = detail ? `\n\nLast failure:\n\n${detail}` : "";
   return (
-    `Sandcastle Landing could not land this PR:\n\n${failure}\n\n` +
-    "Escalating to `ready-for-human` (out of all Dispatch buckets; a human owns it). " +
-    "The `reviewed` label is removed and the PR reverted to draft — it is never merged from here."
+    `Sandcastle exhausted its Retry budget for the \`${phase}\` phase after ${attempts} ` +
+    "failed attempts (a crashed Session, a Session with no parseable Outcome, or a failed " +
+    "Landing). Escalating to `ready-for-human` (out of all Dispatch buckets; a human owns " +
+    "it). Re-labeling the item for the agent grants a fresh budget." +
+    tail
   );
 }
 
 /**
- * Failed-Landing terminal handling (CONTEXT.md: Landing, ready-for-human;
- * ADR-0012, #97). A Landing — the agent-free merge phase — that hits a textual
- * conflict or a red suite escalates the ready + `reviewed` PR to a human. Pure
- * logic over an injectable {@link GhRunner}, the same PR-shaped transition
- * runner shape as {@link handleReviewerOutcome}, so every step is unit-testable.
+ * Escalate a Retry-budget-exhausted item to `ready-for-human` (CONTEXT.md: Retry
+ * budget, ready-for-human; ADR-0011, #98). Shape-aware over {@link BudgetTarget}
+ * and crash-safe like the other terminal handlers — the terminal label lands
+ * FIRST, so no crash point strands the item outside every Dispatch bucket:
  *
- * Crash-safe ordering (ADR-0011): defensively ensure `ready-for-human` exists,
- * **add the terminal label FIRST**, then strip the bucket state (remove
- * `reviewed`, revert the PR ready → draft), then post the failure output as a
- * comment. Applying the terminal label before removing `reviewed`/ready means
- * no crash point leaves the PR ready-without-`reviewed` in no Dispatch bucket.
+ * - **issue** — ensure `ready-for-human`, add it, then strip `ready-for-agent`,
+ *   then comment (the issue-shaped implement escalation).
+ * - **pr** — ensure `ready-for-human`, add it, then (only when `gated`, a land
+ *   PR) remove `reviewed` and revert ready → draft, then comment. A review/resolve
+ *   PR (`gated: false`) is already a plain draft, so its bucket state is untouched.
  *
- * (This slice escalates every failed Landing straight to a human; a follow-up
- * replaces this with the Conflict resolver dispatch, and the Retry budget makes
- * failed Landings spend attempts — ADR-0012.)
+ * Pure logic over an injectable {@link GhRunner}, so every step is unit-testable.
  */
-export async function handleLandingFailure(
-  pr: { readonly prNumber: number },
-  failure: string,
-  gh: GhRunner
+export async function escalateBudgetExhausted(
+  target: BudgetTarget,
+  phase: string,
+  attempts: number,
+  gh: GhRunner,
+  detail?: string
 ): Promise<void> {
-  const n = String(pr.prNumber);
+  const body = budgetExhaustedComment(phase, attempts, detail);
   await ensureLabel(gh, READY_FOR_HUMAN);
-  // Terminal label FIRST (crash-safe), then remove the ready-for-merge bucket
-  // state so a persistent poller stops re-dispatching this ready + reviewed PR.
+  if (target.kind === "issue") {
+    const n = String(target.issue);
+    // Terminal label FIRST (crash-safe), then strip the ready-for-agent bucket.
+    await gh.run(["issue", "edit", n, "--add-label", "ready-for-human"]);
+    await gh.run(["issue", "edit", n, "--remove-label", "ready-for-agent"]);
+    await gh.run(["issue", "comment", n, "--body", body]);
+    return;
+  }
+
+  const n = String(target.prNumber);
   await gh.run(["pr", "edit", n, "--add-label", "ready-for-human"]);
-  await gh.run(["pr", "edit", n, "--remove-label", "reviewed"]);
-  await gh.run(["pr", "ready", n, "--undo"]);
-  await gh.run(["pr", "comment", n, "--body", landingFailureComment(failure)]);
+  if (target.gated) {
+    // A land-phase PR is ready + reviewed — strip the review gate so a persistent
+    // poller stops re-dispatching it from the ready-for-merge bucket.
+    await gh.run(["pr", "edit", n, "--remove-label", "reviewed"]);
+    await gh.run(["pr", "ready", n, "--undo"]);
+  }
+  await gh.run(["pr", "comment", n, "--body", body]);
 }
 
 /**

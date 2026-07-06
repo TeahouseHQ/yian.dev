@@ -34,9 +34,11 @@
 /** Renderer mode for the event stream. */
 export type EventFormat = "prose" | "ndjson";
 
-/** The three pooled agent roles a Session can run as. The single role vocabulary
- *  every renderer speaks (see {@link ROLE_LABELS}). */
-export type OrchestratorRole = "implementer" | "reviewer" | "merger";
+/** The pooled agent roles a Session can run as. The single role vocabulary
+ *  every renderer speaks (see {@link ROLE_LABELS}). The merge phase is NOT here:
+ *  the Landing is agent-free (ADR-0012) and flows through its own `landing-*`
+ *  events, not the Session-shaped `dispatch` / `session-resolved` ones. */
+export type OrchestratorRole = "implementer" | "reviewer";
 
 /** Shared fields carried by every event. The NDJSON renderer keeps `ts`. */
 interface BaseEvent {
@@ -67,7 +69,7 @@ interface BucketsEvent extends BaseEvent {
 }
 
 /** Dispatching one role's Session into the Pool. `pr`/`title` are null when
- *  not meaningful for the role (Implementer has no PR yet; Reviewer/Merger have
+ *  not meaningful for the role (Implementer has no PR yet; the Reviewer has
  *  no fetched title). */
 interface DispatchEvent extends BaseEvent {
   readonly type: "dispatch";
@@ -120,7 +122,7 @@ interface GhErrorEvent extends BaseEvent {
   readonly error: string;
 }
 
-/** A dispatched Session (Implementer/Reviewer/Merger) resolved. `ok` carries the
+/** A dispatched Session (Implementer/Reviewer) resolved. `ok` carries the
  *  commit count; `failed` carries the error string. This is the structured
  *  resolution signal for the Cockpit — headless prose only renders the failure
  *  case (a successful resolution has no orchestrator prose line). */
@@ -153,6 +155,36 @@ interface ReviewTransitionEvent extends BaseEvent {
   readonly transition: "gate" | "give-up";
 }
 
+/** A Landing (the agent-free merge phase, ADR-0012) began: it took a Pool slot
+ *  and started its sandbox lifecycle for a ready + `reviewed` PR. Not a Session
+ *  (`dispatch`) — a Landing runs no agent. */
+interface LandingStartedEvent extends BaseEvent {
+  readonly type: "landing-started";
+  readonly issue: number;
+  readonly pr: number;
+  readonly branch: string;
+}
+
+/** A Landing succeeded: the PR branch merged clean, the suite was green, and the
+ *  orchestrator ran `gh pr merge --merge`. The terminal success of the merge phase. */
+interface LandingLandedEvent extends BaseEvent {
+  readonly type: "landing-landed";
+  readonly issue: number;
+  readonly pr: number;
+  readonly branch: string;
+}
+
+/** A Landing failed — a textual `git merge` conflict or a red suite after a clean
+ *  merge — so the PR was escalated to `ready-for-human` (ADR-0012, this slice).
+ *  `reason` is the one-line failure summary. */
+interface LandingFailedEvent extends BaseEvent {
+  readonly type: "landing-failed";
+  readonly issue: number;
+  readonly pr: number;
+  readonly branch: string;
+  readonly reason: string;
+}
+
 /**
  * The discriminated union of every orchestrator event. `type` is the single
  * discriminator the renderers switch on; the contract the Cockpit consumes.
@@ -171,7 +203,10 @@ export type OrchestratorEvent =
   | GhErrorEvent
   | SessionResolvedEvent
   | ReviewerOutcomeEvent
-  | ReviewTransitionEvent;
+  | ReviewTransitionEvent
+  | LandingStartedEvent
+  | LandingLandedEvent
+  | LandingFailedEvent;
 
 /** Which stdout stream a prose-rendered event belongs on (preserves the
  *  existing stdout/stderr split so headless output is unchanged). */
@@ -224,6 +259,12 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return event.transition === "gate"
         ? `  → review gate opened for #${event.issue} (reviewed + ready).`
         : `  → #${event.issue} escalated to ready-for-human (Reviewer gave up).`;
+    case "landing-started":
+      return `  → landing PR #${event.pr} (issue #${event.issue}) → ${event.branch}`;
+    case "landing-landed":
+      return `  ✓ landed PR #${event.pr} (issue #${event.issue}).`;
+    case "landing-failed":
+      return `  ✗ Landing PR #${event.pr} (issue #${event.issue}) failed: ${event.reason}`;
   }
 }
 
@@ -236,24 +277,23 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
 const ROLE_LABELS: Record<OrchestratorRole, { readonly word: string; readonly abbr: string }> = {
   implementer: { word: "Implementer", abbr: "impl" },
   reviewer: { word: "Reviewer", abbr: "rev" },
-  merger: { word: "Merger", abbr: "merger" },
 };
 
-/** The capitalized role word for a dispatch line (`Implementer`/`Reviewer`/`Merger`). */
+/** The capitalized role word for a dispatch line (`Implementer`/`Reviewer`). */
 export function roleWord(role: OrchestratorRole): string {
   return ROLE_LABELS[role].word;
 }
 
-/** The compact role tag used in log / in-flight lines: `impl` / `rev` / `merger`.
+/** The compact role tag used in log / in-flight lines: `impl` / `rev`.
  *  Mirrors the labels the orchestrator's `lifecycle`/prose output already uses. */
 export function roleAbbr(role: OrchestratorRole): string {
   return ROLE_LABELS[role].abbr;
 }
 
 /** The role prefix on a failed-resolution line. The Implementer has none (just
- *  `#N`), while Reviewer/Merger read `rev #N`/`merger #N` — preserving today's
- *  asymmetry exactly. Returns the role tag + trailing space (or empty), so the
- *  caller always appends `#<issue>`. */
+ *  `#N`), while the Reviewer reads `rev #N` — preserving today's asymmetry
+ *  exactly. Returns the role tag + trailing space (or empty), so the caller
+ *  always appends `#<issue>`. */
 function roleFailedPrefix(role: OrchestratorRole): string {
   return role === "implementer" ? "" : `${roleAbbr(role)} `;
 }
@@ -270,6 +310,7 @@ export function eventStream(event: OrchestratorEvent): EventStream {
     case "gh-error":
     case "planner-no-plan":
     case "planner-failed":
+    case "landing-failed":
       return "stderr";
     case "session-resolved":
       return event.status === "failed" ? "stderr" : "stdout";
@@ -330,6 +371,12 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return event.transition === "gate"
         ? `→ #${event.issue} gate opened · reviewed + ready`
         : `→ #${event.issue} escalated to ready-for-human`;
+    case "landing-started":
+      return `▶ landing PR #${event.pr} (#${event.issue})`;
+    case "landing-landed":
+      return `✓ landed PR #${event.pr} (#${event.issue})`;
+    case "landing-failed":
+      return `✗ landing PR #${event.pr} (#${event.issue}) failed · ${event.reason}`;
     default: {
       // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
       // line here is a compile error, so the Live log can never silently omit one.
@@ -353,6 +400,7 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
   switch (event.type) {
     case "gh-error":
     case "planner-failed":
+    case "landing-failed":
       return "failure";
     case "session-resolved":
       return event.status === "failed" ? "failure" : "normal";
@@ -371,6 +419,8 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "plan-reused":
     case "planner-skipped":
     case "review-transition":
+    case "landing-started":
+    case "landing-landed":
       return "normal";
     default: {
       const unreachable: never = event;
@@ -401,6 +451,9 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "session-resolved": true,
   "reviewer-outcome": true,
   "review-transition": true,
+  "landing-started": true,
+  "landing-landed": true,
+  "landing-failed": true,
 };
 
 /** Every `type` discriminator the orchestrator can emit, derived from the union
@@ -455,8 +508,12 @@ export interface OrchestratorEvents {
   dispatchImplementer(issue: number, title: string, branch: string): void;
   /** Dispatching a Reviewer for `pr` (issue `issue`, branch `branch`). */
   dispatchReviewer(pr: number, issue: number, branch: string): void;
-  /** Dispatching a Merger for `pr` (issue `issue`, branch `branch`). */
-  dispatchMerger(pr: number, issue: number, branch: string): void;
+  /** A Landing began for `pr` (issue `issue`, branch `branch`) — took a Pool slot. */
+  landingStarted(pr: number, issue: number, branch: string): void;
+  /** A Landing succeeded: the PR merged clean + green (`gh pr merge` ran). */
+  landingLanded(pr: number, issue: number, branch: string): void;
+  /** A Landing failed (conflict / red suite), escalated to `ready-for-human`. */
+  landingFailed(pr: number, issue: number, branch: string, reason: string): void;
   /** The Planner emitted `count` unblocked issues. */
   plannerEmitted(count: number): void;
   /** Plan cache hit — the cached emit (`count` issues) was reused, no Opus call. */
@@ -534,8 +591,12 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       emit({ type: "dispatch", role: "implementer", issue, branch, pr: null, title, ts: stamp() }),
     dispatchReviewer: (pr, issue, branch) =>
       emit({ type: "dispatch", role: "reviewer", issue, branch, pr, title: null, ts: stamp() }),
-    dispatchMerger: (pr, issue, branch) =>
-      emit({ type: "dispatch", role: "merger", issue, branch, pr, title: null, ts: stamp() }),
+    landingStarted: (pr, issue, branch) =>
+      emit({ type: "landing-started", pr, issue, branch, ts: stamp() }),
+    landingLanded: (pr, issue, branch) =>
+      emit({ type: "landing-landed", pr, issue, branch, ts: stamp() }),
+    landingFailed: (pr, issue, branch, reason) =>
+      emit({ type: "landing-failed", pr, issue, branch, reason, ts: stamp() }),
     plannerEmitted: (count) => emit({ type: "planner-emitted", count, ts: stamp() }),
     planReused: (count) => emit({ type: "plan-reused", count, ts: stamp() }),
     plannerSkipped: () => emit({ type: "planner-skipped", ts: stamp() }),

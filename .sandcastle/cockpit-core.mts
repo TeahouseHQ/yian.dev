@@ -371,17 +371,23 @@ export function spawnOrchestrator(config: SpawnConfig, handlers: OrchestratorHan
   };
 }
 
-/** One currently-running Session in the Live tab's in-flight list: an issue and
- *  the **phase** (role) whose Session is running for it. Derived purely from the
- *  structured event stream — an entry is added on `dispatch` and removed on
- *  `session-resolved` (never from the Manifest, which only gains a row *after* a
- *  Session resolves, ADR-0008). */
+/** What a Pool slot in the in-flight list is doing: an agent Session's
+ *  {@link OrchestratorRole}, or the agent-free `"landing"` phase (ADR-0012).
+ *  A Landing is not a Session but still occupies a slot, so it appears here. */
+export type InFlightRole = OrchestratorRole | "landing";
+
+/** One currently-occupied Pool slot in the Live tab's in-flight list: an issue
+ *  and the **phase** running for it — an Implementer/Reviewer Session or the
+ *  agent-free Landing. Derived purely from the structured event stream — an
+ *  entry is added on `dispatch` / `landing-started` and removed on
+ *  `session-resolved` / `landing-landed` / `landing-failed` (never from the
+ *  Manifest, which only gains a row *after* a slot resolves, ADR-0008). */
 export interface InFlightEntry {
   readonly issue: number;
-  readonly role: OrchestratorRole;
-  /** The PR under review/merge; null for an Implementer (no PR yet). */
+  readonly role: InFlightRole;
+  /** The PR under review/landing; null for an Implementer (no PR yet). */
   readonly pr: number | null;
-  /** The issue title (Implementer dispatch only; null for Reviewer/Merger). */
+  /** The issue title (Implementer dispatch only; null for Reviewer/Landing). */
   readonly title: string | null;
 }
 
@@ -403,11 +409,12 @@ export const EMPTY_LIVE_VIEW: LiveView = { inflight: [], poolSize: null };
  * behind the pool gauge and in-flight list (issue #81; ADR-0008). Only three
  * event types move the view:
  *
- * - `dispatch` **adds** an in-flight entry, keyed by issue number so an issue
- *   moving implement→review→merge replaces its phase in place (mirrors the
- *   orchestrator's issue/PR-keyed In-flight set, CONTEXT.md) rather than stacking
- *   duplicates.
- * - `session-resolved` **removes** the entry for that issue.
+ * - `dispatch` / `landing-started` **add** an in-flight entry, keyed by issue
+ *   number so an issue moving implement→review→land replaces its phase in place
+ *   (mirrors the orchestrator's issue/PR-keyed In-flight set, CONTEXT.md) rather
+ *   than stacking duplicates.
+ * - `session-resolved` / `landing-landed` / `landing-failed` **remove** the
+ *   entry for that issue.
  * - `tick` captures `poolSize` for the gauge's denominator.
  *
  * Every other event leaves the view untouched (returned unchanged, same
@@ -426,7 +433,19 @@ export function reduceLiveEvent(view: LiveView, event: OrchestratorEvent): LiveV
       };
       return { ...view, inflight: [...rest, entry] };
     }
+    case "landing-started": {
+      const rest = view.inflight.filter((e) => e.issue !== event.issue);
+      const entry: InFlightEntry = {
+        issue: event.issue,
+        role: "landing",
+        pr: event.pr,
+        title: null,
+      };
+      return { ...view, inflight: [...rest, entry] };
+    }
     case "session-resolved":
+    case "landing-landed":
+    case "landing-failed":
       return { ...view, inflight: view.inflight.filter((e) => e.issue !== event.issue) };
     case "tick":
       return { ...view, poolSize: event.poolSize };
@@ -449,14 +468,15 @@ export function formatPoolGauge(view: LiveView): string {
 /**
  * Render one in-flight entry as a compact `phase · what` line for the in-flight
  * list: an Implementer shows its issue + title (`impl #12 · Add the widget`), a
- * Reviewer/Merger shows the PR it is acting on (`rev PR #90 (#44)`). Pure so the
- * exact strings are unit-testable.
+ * Reviewer or Landing shows the PR it is acting on (`rev PR #90 (#44)`,
+ * `land PR #90 (#44)`). Pure so the exact strings are unit-testable.
  */
 export function formatInFlight(entry: InFlightEntry): string {
   if (entry.role === "implementer") {
     return `impl #${entry.issue}${entry.title ? ` · ${entry.title}` : ""}`;
   }
-  return `${roleAbbr(entry.role)} PR #${entry.pr} (#${entry.issue})`;
+  const tag = entry.role === "landing" ? "land" : roleAbbr(entry.role);
+  return `${tag} PR #${entry.pr} (#${entry.issue})`;
 }
 
 /** Why the Maintenance tab may not apply the prune plan right now, or `null`

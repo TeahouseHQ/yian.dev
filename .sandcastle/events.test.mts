@@ -13,14 +13,22 @@ import {
 } from "./events.mts";
 
 /**
+ * `Omit` over a discriminated union collapses to only the members' common keys
+ * (here just `type`), which rejects every per-variant field. Distribute the
+ * `Omit` across each member so an event minus `ts` keeps its full shape.
+ */
+type EventWithoutTs = OrchestratorEvent extends infer E
+  ? E extends OrchestratorEvent
+    ? Omit<E, "ts">
+    : never
+  : never;
+
+/**
  * Build a single event of a given type with a fixed timestamp, so the pure
  * formatters are exercised against stable inputs (the prose formatters ignore
  * `ts`; the NDJSON formatter includes it).
  */
-function evt(
-  event: Omit<OrchestratorEvent, "ts">,
-  ts = "2026-07-04T10:00:00.000Z"
-): OrchestratorEvent {
+function evt(event: EventWithoutTs, ts = "2026-07-04T10:00:00.000Z"): OrchestratorEvent {
   return { ...(event as object), ts } as OrchestratorEvent;
 }
 
@@ -205,7 +213,7 @@ describe("formatEventProse", () => {
   });
 
   it("renders a line for every non-silent event type (no event maps to undefined)", () => {
-    const samples: Omit<OrchestratorEvent, "ts">[] = [
+    const samples: EventWithoutTs[] = [
       { type: "tick", free: 0, poolSize: 10, inflight: 0 },
       { type: "pool-full" },
       { type: "buckets", merge: 0, review: 0, agent: 0, actionable: 0 },

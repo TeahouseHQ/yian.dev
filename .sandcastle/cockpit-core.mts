@@ -262,7 +262,9 @@ export function createStopEscalation(deps: StopEscalationDeps): StopEscalation {
  *  mirroring this codebase's env/dep injection style (`createEvents`, `logPath`). */
 export interface SpawnConfig {
   readonly command: string;
-  readonly args: string[];
+  // readonly so callers can pass an `as const` literal (e.g. ORCHESTRATOR_SPAWN);
+  // the supervisor only ever reads args, and node's spawn() accepts readonly too.
+  readonly args: readonly string[];
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
   /** Grace period (ms) after SIGTERM before the supervisor escalates to SIGKILL;

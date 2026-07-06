@@ -36,8 +36,16 @@ function plan(over: Partial<PrunePlan> = {}): PrunePlan {
   };
 }
 
+// `Omit` over a discriminated union keeps only the members' common keys; distribute
+// it so an event minus `ts` retains its full per-variant shape.
+type EventWithoutTs = OrchestratorEvent extends infer E
+  ? E extends OrchestratorEvent
+    ? Omit<E, "ts">
+    : never
+  : never;
+
 /** Build one event of a given type with a fixed timestamp for the log formatter. */
-function evt(event: Omit<OrchestratorEvent, "ts">): OrchestratorEvent {
+function evt(event: EventWithoutTs): OrchestratorEvent {
   return { ...(event as object), ts: "2026-07-04T10:00:00.000Z" } as OrchestratorEvent;
 }
 

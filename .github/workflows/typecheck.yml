@@ -1,0 +1,33 @@
+name: Typecheck
+
+# Enforces TypeScript across the whole repo. `pnpm typecheck` runs the root
+# `tsc` (web app) plus `sandcastle:typecheck` (.sandcastle/ — a dot-dir the root
+# tsconfig globs skip). Guards the exhaustiveness guarantees in .sandcastle/
+# (e.g. events.mts `never` guards and EVENT_TYPE_TAGS). See issue #103.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (web + sandcastle)
+        run: pnpm typecheck

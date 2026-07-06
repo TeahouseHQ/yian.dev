@@ -1,2 +1,4 @@
 #!/usr/bin/env sh
-pnpm build
+# `next build` typechecks the web app (root tsconfig); .sandcastle/ is a
+# dot-dir the root globs skip, so typecheck it explicitly (see issue #103).
+pnpm build && pnpm sandcastle:typecheck

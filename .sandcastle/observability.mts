@@ -177,7 +177,10 @@ export function logPath(label: string, now: Date = new Date()): string {
  * Verbosity is read once at construction time and threaded into both the
  * handler's suppression and sandcastle's own `logging.verbose`.
  */
-export function observe(label: string): LoggingOption {
+// Always the file-mode variant (sandcastle only fires onAgentStreamEvent when
+// logging to a file). Narrowing from the LoggingOption union lets callers reach
+// `path`/`onAgentStreamEvent` without re-narrowing.
+export function observe(label: string): Extract<LoggingOption, { type: "file" }> {
   const verbose = isVerbose();
   const useStderr = liveProseStream() === "stderr";
   return {

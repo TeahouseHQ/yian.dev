@@ -156,7 +156,7 @@ describe("observe", () => {
 
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     // verbose => text now prints
-    cfg.onAgentStreamEvent(text("hi"));
+    cfg.onAgentStreamEvent!(text("hi"));
     expect(log).toHaveBeenCalledWith("[planner] » hi");
     log.mockRestore();
   });
@@ -166,8 +166,8 @@ describe("observe", () => {
     expect(cfg.verbose).toBe(false);
 
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    cfg.onAgentStreamEvent(toolCall());
-    cfg.onAgentStreamEvent(text("ignored"));
+    cfg.onAgentStreamEvent!(toolCall());
+    cfg.onAgentStreamEvent!(text("ignored"));
     expect(log).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith("[impl #44] ▶ Bash(pnpm test)");
     log.mockRestore();
@@ -178,7 +178,7 @@ describe("observe", () => {
     const cfg = observe("impl #44");
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    cfg.onAgentStreamEvent(toolCall());
+    cfg.onAgentStreamEvent!(toolCall());
     expect(log).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith("[impl #44] ▶ Bash(pnpm test)");
     log.mockRestore();

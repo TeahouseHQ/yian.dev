@@ -52,19 +52,28 @@ describe("formatEventProse", () => {
     ).toBe("buckets: ready-for-merge 1, ready-for-review 2, ready-for-agent 5 (3 actionable).");
   });
 
-  it("reproduces the Merger dispatch line (pr + issue + branch)", () => {
+  it("renders the Landing lifecycle lines (started / landed / failed)", () => {
+    expect(
+      formatEventProse(
+        evt({ type: "landing-started", issue: 44, pr: 90, branch: "sandcastle/issue-44" })
+      )
+    ).toBe("  → landing PR #90 (issue #44) → sandcastle/issue-44");
+    expect(
+      formatEventProse(
+        evt({ type: "landing-landed", issue: 44, pr: 90, branch: "sandcastle/issue-44" })
+      )
+    ).toBe("  ✓ landed PR #90 (issue #44).");
     expect(
       formatEventProse(
         evt({
-          type: "dispatch",
-          role: "merger",
+          type: "landing-failed",
           issue: 44,
-          branch: "sandcastle/issue-44",
           pr: 90,
-          title: null,
+          branch: "sandcastle/issue-44",
+          reason: "merge conflict",
         })
       )
-    ).toBe("  → dispatching Merger for PR #90 (issue #44) → sandcastle/issue-44");
+    ).toBe("  ✗ Landing PR #90 (issue #44) failed: merge conflict");
   });
 
   it("reproduces the Reviewer dispatch line", () => {
@@ -220,19 +229,6 @@ describe("formatEventProse", () => {
         })
       )
     ).toBe("  ✗ rev #44 (sandcastle/issue-44) failed: kaboom");
-    expect(
-      formatEventProse(
-        evt({
-          type: "session-resolved",
-          role: "merger",
-          issue: 44,
-          branch: "sandcastle/issue-44",
-          status: "failed",
-          commits: 0,
-          error: "kaboom",
-        })
-      )
-    ).toBe("  ✗ merger #44 (sandcastle/issue-44) failed: kaboom");
   });
 
   it("renders a line for every non-silent event type (no event maps to undefined)", () => {
@@ -255,6 +251,9 @@ describe("formatEventProse", () => {
       { type: "planner-failed", error: "x" },
       { type: "noop-escalated", issue: 1 },
       { type: "gh-error", args: ["a"], error: "x" },
+      { type: "landing-started", issue: 1, pr: 2, branch: "b" },
+      { type: "landing-landed", issue: 1, pr: 2, branch: "b" },
+      { type: "landing-failed", issue: 1, pr: 2, branch: "b", reason: "x" },
     ];
     for (const s of samples) {
       expect(formatEventProse(evt(s))).toBeTypeOf("string");
@@ -273,18 +272,27 @@ describe("eventStream", () => {
     ).toBe("stdout");
     expect(
       eventStream(
-        evt({ type: "dispatch", role: "merger", issue: 1, branch: "b", pr: 2, title: null })
+        evt({ type: "dispatch", role: "reviewer", issue: 1, branch: "b", pr: 2, title: null })
       )
     ).toBe("stdout");
     expect(eventStream(evt({ type: "planner-emitted", count: 1 }))).toBe("stdout");
     expect(eventStream(evt({ type: "planner-skipped" }))).toBe("stdout");
     expect(eventStream(evt({ type: "noop-escalated", issue: 1 }))).toBe("stdout");
+    expect(eventStream(evt({ type: "landing-started", issue: 1, pr: 2, branch: "b" }))).toBe(
+      "stdout"
+    );
+    expect(eventStream(evt({ type: "landing-landed", issue: 1, pr: 2, branch: "b" }))).toBe(
+      "stdout"
+    );
   });
 
   it("routes the error-shaped events to stderr", () => {
     expect(eventStream(evt({ type: "gh-error", args: ["a"], error: "x" }))).toBe("stderr");
     expect(eventStream(evt({ type: "planner-no-plan" }))).toBe("stderr");
     expect(eventStream(evt({ type: "planner-failed", error: "x" }))).toBe("stderr");
+    expect(
+      eventStream(evt({ type: "landing-failed", issue: 1, pr: 2, branch: "b", reason: "x" }))
+    ).toBe("stderr");
   });
 
   it("routes the reviewer Outcome + transition events to stdout (orchestrator progress)", () => {
@@ -344,13 +352,14 @@ describe("formatEventNdjson", () => {
       }),
       evt({
         type: "session-resolved",
-        role: "merger",
+        role: "reviewer",
         issue: 7,
         branch: "b",
         status: "ok",
         commits: 5,
         error: null,
       }),
+      evt({ type: "landing-failed", issue: 7, pr: 90, branch: "b", reason: "conflict" }),
       evt({ type: "gh-error", args: ["pr", "list"], error: "nope" }),
     ];
     for (const c of cases) {
@@ -392,7 +401,7 @@ describe("createEvents", () => {
 
     events.tick(3, 10, 7);
     events.buckets(1, 2, 5, 3);
-    events.dispatchMerger(90, 44, "sandcastle/issue-44");
+    events.landingStarted(90, 44, "sandcastle/issue-44");
     events.plannerFailed("boom");
     events.ghError(["pr", "list"], "nope");
 
@@ -405,10 +414,7 @@ describe("createEvents", () => {
       2,
       "buckets: ready-for-merge 1, ready-for-review 2, ready-for-agent 5 (3 actionable)."
     );
-    expect(out).toHaveBeenNthCalledWith(
-      3,
-      "  → dispatching Merger for PR #90 (issue #44) → sandcastle/issue-44"
-    );
+    expect(out).toHaveBeenNthCalledWith(3, "  → landing PR #90 (issue #44) → sandcastle/issue-44");
     expect(err).toHaveBeenCalledTimes(2);
     expect(err).toHaveBeenNthCalledWith(1, "Planner failed: boom");
     expect(err).toHaveBeenNthCalledWith(2, "  ⚠ gh pr list failed: nope");
@@ -457,6 +463,18 @@ describe("createEvents", () => {
       2,
       "  → #7 escalated to ready-for-human (Reviewer gave up)."
     );
+  });
+
+  it("emits the Landing lifecycle: started/landed to `out`, failed to `err`", () => {
+    const out = vi.fn();
+    const err = vi.fn();
+    const events = createEvents({ format: "prose", out, err });
+    events.landingStarted(90, 44, "sandcastle/issue-44");
+    events.landingLanded(90, 44, "sandcastle/issue-44");
+    events.landingFailed(90, 44, "sandcastle/issue-44", "merge conflict");
+    expect(out).toHaveBeenNthCalledWith(1, "  → landing PR #90 (issue #44) → sandcastle/issue-44");
+    expect(out).toHaveBeenNthCalledWith(2, "  ✓ landed PR #90 (issue #44).");
+    expect(err).toHaveBeenCalledWith("  ✗ Landing PR #90 (issue #44) failed: merge conflict");
   });
 
   it("in ndjson mode writes every event as one JSON object to `out` (incl. silent-in-prose ones)", () => {
@@ -567,6 +585,9 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "session-resolved",
     "reviewer-outcome",
     "review-transition",
+    "landing-started",
+    "landing-landed",
+    "landing-failed",
   ];
 
   it("contains exactly every orchestrator event type, no more, no fewer", () => {

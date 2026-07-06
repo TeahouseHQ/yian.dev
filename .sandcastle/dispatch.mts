@@ -511,6 +511,54 @@ export async function handleReviewerOutcome(
 }
 
 /**
+ * Comment body the orchestrator posts when a Landing fails (ADR-0012, #97).
+ * Carries the failure output (a textual `git merge` conflict, or the red
+ * `pnpm typecheck && pnpm test` output) plus the CONTEXT.md `ready-for-human`
+ * semantics — pins the wording that used to live in the merge prompt's GIVE-UP
+ * PATH, now owned by orchestrator code. Exported so it is documented and
+ * unit-testable.
+ */
+export function landingFailureComment(failure: string): string {
+  return (
+    `Sandcastle Landing could not land this PR:\n\n${failure}\n\n` +
+    "Escalating to `ready-for-human` (out of all Dispatch buckets; a human owns it). " +
+    "The `reviewed` label is removed and the PR reverted to draft — it is never merged from here."
+  );
+}
+
+/**
+ * Failed-Landing terminal handling (CONTEXT.md: Landing, ready-for-human;
+ * ADR-0012, #97). A Landing — the agent-free merge phase — that hits a textual
+ * conflict or a red suite escalates the ready + `reviewed` PR to a human. Pure
+ * logic over an injectable {@link GhRunner}, the same PR-shaped transition
+ * runner shape as {@link handleReviewerOutcome}, so every step is unit-testable.
+ *
+ * Crash-safe ordering (ADR-0011): defensively ensure `ready-for-human` exists,
+ * **add the terminal label FIRST**, then strip the bucket state (remove
+ * `reviewed`, revert the PR ready → draft), then post the failure output as a
+ * comment. Applying the terminal label before removing `reviewed`/ready means
+ * no crash point leaves the PR ready-without-`reviewed` in no Dispatch bucket.
+ *
+ * (This slice escalates every failed Landing straight to a human; a follow-up
+ * replaces this with the Conflict resolver dispatch, and the Retry budget makes
+ * failed Landings spend attempts — ADR-0012.)
+ */
+export async function handleLandingFailure(
+  pr: { readonly prNumber: number },
+  failure: string,
+  gh: GhRunner
+): Promise<void> {
+  const n = String(pr.prNumber);
+  await ensureLabel(gh, READY_FOR_HUMAN);
+  // Terminal label FIRST (crash-safe), then remove the ready-for-merge bucket
+  // state so a persistent poller stops re-dispatching this ready + reviewed PR.
+  await gh.run(["pr", "edit", n, "--add-label", "ready-for-human"]);
+  await gh.run(["pr", "edit", n, "--remove-label", "reviewed"]);
+  await gh.run(["pr", "ready", n, "--undo"]);
+  await gh.run(["pr", "comment", n, "--body", landingFailureComment(failure)]);
+}
+
+/**
  * No-op Implementer terminal handling (CONTEXT.md: ready-for-human; ADR-0006).
  * When an Implementer resolved with zero commits (no PR was opened), durably
  * move the issue out of the `ready-for-agent` bucket so the persistent poller

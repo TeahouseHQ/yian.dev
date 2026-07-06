@@ -233,19 +233,33 @@ describe("formatEventLog", () => {
     ).toBe("▶ dispatch impl #12: Add the widget");
   });
 
-  it("renders a Reviewer/Merger dispatch with the PR and issue", () => {
+  it("renders a Reviewer dispatch with the PR and issue", () => {
     expect(
       formatEventLog(
         evt({
           type: "dispatch",
-          role: "merger",
+          role: "reviewer",
           issue: 44,
           branch: "sandcastle/issue-44",
           pr: 90,
           title: null,
         })
       )
-    ).toBe("▶ dispatch merger PR #90 (#44)");
+    ).toBe("▶ dispatch rev PR #90 (#44)");
+  });
+
+  it("renders the Landing lifecycle log lines (started / landed / failed)", () => {
+    expect(formatEventLog(evt({ type: "landing-started", issue: 44, pr: 90, branch: "b" }))).toBe(
+      "▶ landing PR #90 (#44)"
+    );
+    expect(formatEventLog(evt({ type: "landing-landed", issue: 44, pr: 90, branch: "b" }))).toBe(
+      "✓ landed PR #90 (#44)"
+    );
+    expect(
+      formatEventLog(
+        evt({ type: "landing-failed", issue: 44, pr: 90, branch: "b", reason: "conflict" })
+      )
+    ).toBe("✗ landing PR #90 (#44) failed · conflict");
   });
 
   it("renders the remaining informational and warning events", () => {
@@ -394,9 +408,44 @@ describe("reduceLiveEvent", () => {
     );
     view = reduceLiveEvent(
       view,
-      evt({ type: "dispatch", role: "merger", issue: 44, branch: "b", pr: 90, title: null })
+      evt({ type: "dispatch", role: "reviewer", issue: 44, branch: "b", pr: 90, title: null })
     );
     expect(view.inflight.map((e) => e.issue)).toEqual([12, 44]);
+  });
+
+  it("adds an agent-free Landing on landing-started and removes it on landed/failed", () => {
+    // A Landing is not a Session but occupies a Pool slot (ADR-0012), so it must
+    // show in the in-flight list — added on landing-started, cleared on either
+    // terminal (landed = merged, failed = escalated).
+    const started = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "landing-started", issue: 44, pr: 90, branch: "b" })
+    );
+    expect(started.inflight).toEqual([{ issue: 44, role: "landing", pr: 90, title: null }]);
+
+    const landed = reduceLiveEvent(
+      started,
+      evt({ type: "landing-landed", issue: 44, pr: 90, branch: "b" })
+    );
+    expect(landed.inflight).toEqual([]);
+
+    const failed = reduceLiveEvent(
+      started,
+      evt({ type: "landing-failed", issue: 44, pr: 90, branch: "b", reason: "conflict" })
+    );
+    expect(failed.inflight).toEqual([]);
+  });
+
+  it("a Landing replaces the issue's earlier review phase in place (one entry per issue)", () => {
+    const reviewing = reduceLiveEvent(
+      EMPTY_LIVE_VIEW,
+      evt({ type: "dispatch", role: "reviewer", issue: 44, branch: "b", pr: 90, title: null })
+    );
+    const landing = reduceLiveEvent(
+      reviewing,
+      evt({ type: "landing-started", issue: 44, pr: 90, branch: "b" })
+    );
+    expect(landing.inflight).toEqual([{ issue: 44, role: "landing", pr: 90, title: null }]);
   });
 
   it("captures the Pool size from a tick for the gauge denominator", () => {
@@ -476,12 +525,15 @@ describe("formatInFlight", () => {
     ).toBe("impl #12 · Add the widget");
   });
 
-  it("renders a Reviewer/Merger with the PR it is acting on", () => {
+  it("renders a Reviewer with the PR it is acting on", () => {
     expect(formatInFlight({ issue: 44, role: "reviewer", pr: 90, title: null })).toBe(
       "rev PR #90 (#44)"
     );
-    expect(formatInFlight({ issue: 44, role: "merger", pr: 90, title: null })).toBe(
-      "merger PR #90 (#44)"
+  });
+
+  it("renders an agent-free Landing with the PR it is landing", () => {
+    expect(formatInFlight({ issue: 44, role: "landing", pr: 90, title: null })).toBe(
+      "land PR #90 (#44)"
     );
   });
 });

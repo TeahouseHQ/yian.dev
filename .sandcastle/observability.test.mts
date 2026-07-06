@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentStreamEvent, IterationResult } from "@ai-hero/sandcastle";
 
 import {
+  agentFreeResult,
   appendManifestLine,
   buildFailedManifestEntry,
   buildManifestEntry,
@@ -370,7 +371,29 @@ describe("buildManifestEntry", () => {
     expect(entry.outcome).toEqual({ kind: "give-up", reason: "the suite is red" });
   });
 
-  it("defaults the Outcome to null for phases that report none (impl/planner/merger)", () => {
+  it("builds an agent-free Landing entry from agentFreeResult: null session, 0 commits (ADR-0012)", () => {
+    // The Landing runs no agent, so its Manifest entry has no Transcript link and
+    // no commits of its own — that is what "agent-free entry" means (AC of #97).
+    const entry = buildManifestEntry({
+      runId: "run-issue-97",
+      phase: "land",
+      issue: 97,
+      branch: "sandcastle/issue-97",
+      result: agentFreeResult,
+      startedAt: new Date(0),
+      endedAt: new Date(0),
+    });
+    expect(entry.runId).toBe("run-issue-97");
+    expect(entry.phase).toBe("land");
+    expect(entry.sessionId).toBeNull();
+    expect(entry.sessionFile).toBeNull();
+    expect(entry.usage).toBeNull();
+    expect(entry.commits).toBe(0);
+    expect(entry.outcome).toBeNull();
+    expect(entry.status).toBe("ok");
+  });
+
+  it("defaults the Outcome to null for phases that report none (impl/planner/land)", () => {
     const entry = buildManifestEntry({
       runId: "run-x",
       phase: "impl",

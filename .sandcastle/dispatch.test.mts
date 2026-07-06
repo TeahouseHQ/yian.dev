@@ -11,8 +11,10 @@ import {
   filterReadyForMerge,
   filterReadyForReview,
   handleImplementerOutcome,
+  handleLandingFailure,
   handleReviewerOutcome,
   issueFromBranch,
+  landingFailureComment,
   parseOutcome,
   pickImplementers,
   pickPrs,
@@ -431,6 +433,69 @@ describe("reviewerGiveUpComment", () => {
   });
 });
 
+// ---- #97 — failed-Landing terminal handling (ADR-0012) --------------------
+//
+// A Landing (the agent-free merge phase) that hits a textual conflict or a red
+// suite escalates the ready + `reviewed` PR to `ready-for-human` via the same
+// crash-safe PR-shaped transition runner the Reviewer give-up uses (ADR-0011):
+// the terminal label is applied BEFORE the bucket state (`reviewed` / ready) is
+// removed, so no crash point strands the PR outside every Dispatch bucket.
+
+describe("handleLandingFailure", () => {
+  const failure = "CONFLICT (content): merge conflict in app/page.tsx";
+
+  it("escalates to ready-for-human: strips reviewed, reverts to draft, posts the failure", async () => {
+    const gh = mockGh();
+    await handleLandingFailure({ prNumber: 7 }, failure, gh);
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr edit 7 --remove-label reviewed/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr ready 7 --undo/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr comment 7 --body/.test(s))).toBe(true);
+    // the PR is NEVER merged from the failure path
+    expect(calls.some((s) => /pr merge/.test(s))).toBe(false);
+  });
+
+  it("applies ready-for-human BEFORE it removes reviewed / reverts to draft (crash-safe)", async () => {
+    const gh = mockGh();
+    await handleLandingFailure({ prNumber: 7 }, failure, gh);
+    const addIdx = gh.calls.findIndex((c) => c.includes("--add-label"));
+    const removeIdx = gh.calls.findIndex((c) => c.includes("--remove-label"));
+    const undoIdx = gh.calls.findIndex((c) => c[0] === "pr" && c[1] === "ready");
+    expect(addIdx).toBeGreaterThan(-1);
+    expect(addIdx).toBeLessThan(removeIdx);
+    expect(addIdx).toBeLessThan(undoIdx);
+  });
+
+  it("creates the ready-for-human label defensively and tolerates 'already exists'", async () => {
+    const gh = mockGh(true); // the label create throws
+    await handleLandingFailure({ prNumber: 7 }, failure, gh);
+    expect(
+      gh.calls.some((c) => c[0] === "label" && c[1] === "create" && c[2] === "ready-for-human")
+    ).toBe(true);
+    // best-effort create must not abort the escalation
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --add-label ready-for-human/.test(s))).toBe(true);
+  });
+
+  it("posts the failure output with the ready-for-human semantics", async () => {
+    const gh = mockGh();
+    await handleLandingFailure({ prNumber: 7 }, failure, gh);
+    const comment = gh.calls.find((c) => c[1] === "comment")!;
+    const body = comment[comment.length - 1];
+    expect(body).toContain(failure);
+    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+});
+
+describe("landingFailureComment", () => {
+  it("includes the failure output and the CONTEXT.md ready-for-human semantics", () => {
+    const body = landingFailureComment("pnpm test — 3 failing");
+    expect(body).toContain("pnpm test — 3 failing");
+    expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+});
+
 // ---- #67 — review + merge Dispatch buckets with priority drain (ADR-0006) -------
 
 /**
@@ -799,9 +864,9 @@ describe("main.mts — persistent shared-pool orchestrator (ADR-0006)", () => {
     expect(mainSource).toMatch(/POLL_INTERVAL_MS/);
   });
 
-  it("dispatches Reviewers and Mergers into the shared Pool", () => {
+  it("dispatches Reviewers and agent-free Landings into the shared Pool", () => {
     expect(mainSource).toMatch(/dispatchReviewer/);
-    expect(mainSource).toMatch(/dispatchMerger/);
+    expect(mainSource).toMatch(/dispatchLanding/);
     // both acquire a Pool slot and mark the issue in-flight
     expect(mainSource).toMatch(/pool\.acquire/);
   });
@@ -825,10 +890,6 @@ describe("main.mts — persistent shared-pool orchestrator (ADR-0006)", () => {
     // branch with install + build, then runs review-prompt.md.
     expect(mainSource).toMatch(/review-prompt\.md/);
     expect(mainSource).toMatch(/pnpm install --frozen-lockfile && pnpm build/);
-  });
-
-  it("Merger runs the merge-prompt (test-then-merge with gh pr merge)", () => {
-    expect(mainSource).toMatch(/merge-prompt\.md/);
   });
 
   it("gates the Planner on free slots remaining after merge+review draining", () => {
@@ -897,5 +958,62 @@ describe("main.mts — Reviewer Outcome handling (ADR-0011, #96)", () => {
     // The old comment claimed "Reviewer/Merger give-up paths live in the prompts";
     // the Reviewer's now lives in code (ADR-0011).
     expect(mainSource).not.toMatch(/give-up path.*live.*in the prompt/i);
+  });
+});
+
+describe("main.mts — deterministic Landing (ADR-0012, #97)", () => {
+  it("replaces the Merger agent with an agent-free dispatchLanding — no merge-prompt, no Merger", () => {
+    expect(mainSource).toMatch(/dispatchLanding/);
+    expect(mainSource).not.toMatch(/dispatchMerger/);
+    expect(mainSource).not.toMatch(/merge-prompt\.md/);
+    // No agent / prompt / model for the merge phase (zero tokens, ADR-0012).
+    expect(mainSource).not.toMatch(/MODELS\.MERGE/);
+  });
+
+  it("occupies a Pool slot for the Landing's full sandbox lifecycle", () => {
+    // The Landing acquires a slot and releases it in the finally, like the agent
+    // roles — the sandbox lifecycle is the cost being limited, not the agent.
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/pool\.acquire\(\)/);
+    expect(landing).toMatch(/pool\.release\(\)/);
+  });
+
+  it("validates in an ISOLATED worktree forked from main, never head mode", () => {
+    // createSandbox with an explicit throwaway branch + baseBranch main forks an
+    // isolated worktree, so the Landing never touches the host's live main/worktree.
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/createSandbox/);
+    expect(landing).toMatch(/branch:\s*`sandcastle\/merge-\$\{pr\.issue\}`/);
+    expect(landing).toMatch(/baseBranch:\s*"main"/);
+  });
+
+  it("runs the deterministic test-then-merge validation (git merge → typecheck → test)", () => {
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/git merge \$\{pr\.branch\}/);
+    expect(landing).toMatch(/pnpm typecheck && pnpm test/);
+  });
+
+  it("lands a clean+green PR server-side with gh pr merge --merge", () => {
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/gh\(\["pr", "merge", String\(pr\.prNumber\), "--merge"\]\)/);
+  });
+
+  it("escalates a failed Landing to ready-for-human via handleLandingFailure", () => {
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/handleLandingFailure\(/);
+  });
+
+  it("emits the Landing Live-feed events (started, landed, failed)", () => {
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/events\.landingStarted\(/);
+    expect(landing).toMatch(/events\.landingLanded\(/);
+    expect(landing).toMatch(/events\.landingFailed\(/);
+  });
+
+  it("records the Landing in the Manifest under the issue runId as an agent-free entry", () => {
+    const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
+    expect(landing).toMatch(/generateRunId\(pr\.issue\)/);
+    expect(landing).toMatch(/phase:\s*"land"/);
+    expect(landing).toMatch(/result:\s*agentFreeResult/);
   });
 });

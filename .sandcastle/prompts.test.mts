@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -11,25 +11,11 @@ import { describe, expect, it } from "vitest";
  *   Session with a structured `<outcome>` tag the orchestrator acts on. These
  *   tests pin that tag contract and assert the dispatch-controlling `gh`
  *   commands are gone.
- * - **merge-prompt.md** still owns its give-up path in the prompt (the Merger →
- *   Landing move is ADR-0012, a separate issue); its tests are unchanged.
+ * - **merge-prompt.md is gone** (ADR-0012, #97): the merge phase is the
+ *   agent-free **Landing**, fully scripted orchestrator code with no prompt.
+ *   The test below pins that the prompt file no longer exists.
  */
 const reviewPrompt = readFileSync(new URL("./review-prompt.md", import.meta.url), "utf8");
-const mergePrompt = readFileSync(new URL("./merge-prompt.md", import.meta.url), "utf8");
-
-/**
- * Slice a top-level (`# `) markdown section, from its heading up to (but not
- * including) the next top-level heading. Body cross-references like "follow
- * the GIVE-UP PATH" never start with `# `, and fenced code never begins a line
- * with `# `, so this cleanly bounds the section under test.
- */
-function topSection(md: string, heading: string): string {
-  const needle = `# ${heading}`;
-  const start = md.indexOf(needle);
-  expect(start, `heading "${needle}" should exist`).toBeGreaterThan(-1);
-  const next = md.indexOf("\n# ", start + needle.length);
-  return next === -1 ? md.slice(start) : md.slice(start, next);
-}
 
 describe("review-prompt.md — Outcome contract (ADR-0011)", () => {
   it("instructs a pass verdict via the <outcome>pass</outcome> tag", () => {
@@ -66,41 +52,8 @@ describe("review-prompt.md — Outcome contract (ADR-0011)", () => {
   });
 });
 
-describe("merge-prompt.md — ready-for-human give-up path", () => {
-  const giveUp = topSection(mergePrompt, "GIVE-UP PATH");
-
-  it("exists as its own section", () => {
-    expect(giveUp.length).toBeGreaterThan(0);
-  });
-
-  it("triggers on failed test-then-merge (red) or merge conflicts", () => {
-    expect(giveUp).toMatch(/conflict/i);
-    expect(giveUp).toMatch(/typecheck|test/i);
-  });
-
-  it("removes the reviewed label", () => {
-    expect(giveUp).toMatch(/--remove-label reviewed/);
-  });
-
-  it("reverts the PR to draft", () => {
-    expect(giveUp).toMatch(/gh pr ready --undo/);
-    expect(giveUp).toMatch(/draft/i);
-  });
-
-  it("adds the ready-for-human label", () => {
-    expect(giveUp).toMatch(/--add-label ready-for-human/);
-  });
-
-  it("posts a COMMENT explaining what failed", () => {
-    expect(giveUp).toMatch(/gh pr review .* --comment/);
-  });
-
-  it("does not merge an escalated PR", () => {
-    // Prose negation avoids the literal command string.
-    expect(giveUp).not.toMatch(/gh pr merge/);
-  });
-
-  it("uses the CONTEXT.md ready-for-human semantics", () => {
-    expect(giveUp).toMatch(/out of all Dispatch buckets; a human owns it/i);
+describe("merge-prompt.md — deleted for the agent-free Landing (ADR-0012)", () => {
+  it("no longer exists: the merge phase is scripted orchestrator code, not a prompt", () => {
+    expect(existsSync(new URL("./merge-prompt.md", import.meta.url))).toBe(false);
   });
 });

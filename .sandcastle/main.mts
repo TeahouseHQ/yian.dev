@@ -9,6 +9,7 @@ import {
   filterReadyForMerge,
   filterReadyForReview,
   handleImplementerOutcome,
+  handleLandingFailure,
   handleReviewerOutcome,
   issueFromBranch,
   parseOutcome,
@@ -26,6 +27,7 @@ import {
   type ReadyForAgentIssue,
 } from "./dispatch.mts";
 import {
+  agentFreeResult,
   appendManifestLine,
   buildFailedManifestEntry,
   buildManifestEntry,
@@ -40,11 +42,12 @@ import { createEvents } from "./events.mts";
 
 const execFileAsync = promisify(execFile);
 
+// The merge phase (Landing) is agent-free and spends zero tokens (ADR-0012), so
+// it has no model entry — only the three agent roles do.
 const MODELS = {
   PLANNING: "claude-opus-4-8",
   IMPLEMENTATION: "litellm/glm-5.1",
   REVIEW: "claude-opus-4-8",
-  MERGE: "claude-opus-4-8",
 };
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
@@ -67,7 +70,7 @@ const dockerSandbox = () => docker({ containerUid: 0, containerGid: 0 });
 // capture/resume desync (ADR 0001). One shared absolute path relocates all
 // captured session JSONL into the repo under .sandcastle/sessions/. Each Session
 // is tagged with its own runId: the Planner's is per-invocation, while an issue's
-// Implementer/Reviewer/Merger share an issue-derived run-issue-<n> (CONTEXT.md: Run).
+// Implementer/Reviewer (and its agent-free Landing) share an issue-derived run-issue-<n> (CONTEXT.md: Run).
 const piSessions = { sessionStorage: { hostSessionsDir: sessionsDir } };
 
 /**
@@ -85,7 +88,7 @@ async function recordedRun<R extends RunLike>(args: {
   run: () => Promise<R>;
   /** Extract the Session's structured Outcome from its result for the Manifest
    *  (ADR-0011). Given for the Reviewer (parses its `<outcome>` tag); omitted for
-   *  phases that report none (impl/planner/merger) — the entry records null. */
+   *  phases that report none (impl/planner) — the entry records null. */
   outcome?: (result: R) => ParsedOutcome | null;
 }): Promise<R> {
   const startedAt = new Date();
@@ -190,7 +193,7 @@ async function queryReadyForAgent(): Promise<ReadyForAgentIssue[]> {
  * source of the open-PR issue set that excludes `ready-for-agent` issues from
  * the implement bucket. One `gh pr list` query feeds all three concerns. Only
  * `sandcastle/issue-N` branches are kept; the branch is parsed back to the
- * issue number so a Reviewer/Merger shares the issue-derived `runId` and
+ * issue number so a Reviewer/Landing shares the issue-derived `runId` and
  * In-flight key with the issue's Implementer (one issue ↔ one PR).
  */
 async function queryReviewMergePrs(): Promise<BucketPr[]> {
@@ -239,19 +242,21 @@ const events = createEvents();
 
 // ── The persistent shared-pool orchestrator (ADR-0006) ──────────────────────
 //
-// One shared concurrency Pool of POOL_SIZE consumed by all three roles
-// (Implementer, Reviewer, Merger), one In-flight set keyed by issue number, and
-// a Poll tick that never self-exits. Each tick: if the Pool is full, skip the
-// gh query entirely; otherwise query all three Dispatch buckets and fill `free`
-// slots in strict priority **merge → review → implement** (started work lands
-// before new work starts, which prevents PR starvation). The Planner runs in its
-// own (Pool-exempt) slot only when actionable `ready-for-agent` issues exist AND
-// a slot remains free after merge+review draining. Reviewers/Mergers each build
-// their own fresh sandbox (impl and review are decoupled across ticks) and run
-// the issue-derived `runId`. A no-op Implementer is escalated to ready-for-human
-// so it is not re-dispatched. The Reviewer reports an Outcome the orchestrator
-// acts on — the review gate + give-up transitions are performed here in code
-// (ADR-0011, #96); the Merger's give-up path still lives in its prompt (ADR-0012).
+// One shared concurrency Pool of POOL_SIZE consumed by the two agent roles
+// (Implementer, Reviewer) and the agent-free Landing, one In-flight set keyed by
+// issue number, and a Poll tick that never self-exits. Each tick: if the Pool is
+// full, skip the gh query entirely; otherwise query all three Dispatch buckets
+// and fill `free` slots in strict priority **merge → review → implement** (started
+// work lands before new work starts, which prevents PR starvation). The Planner
+// runs in its own (Pool-exempt) slot only when actionable `ready-for-agent` issues
+// exist AND a slot remains free after merge+review draining. Reviewers/Landings
+// each build their own fresh sandbox (impl and review are decoupled across ticks)
+// and run the issue-derived `runId`. A no-op Implementer is escalated to
+// ready-for-human so it is not re-dispatched. The Reviewer reports an Outcome the
+// orchestrator acts on — the review gate + give-up transitions are performed here
+// in code (ADR-0011, #96). The merge phase is the deterministic, agent-free
+// Landing: the orchestrator merges + validates in a sandbox and runs
+// `gh pr merge` itself, escalating a failed Landing to ready-for-human (ADR-0012).
 const pool = createPool(POOL_SIZE);
 const inflight = createInflight();
 
@@ -451,86 +456,112 @@ async function dispatchReviewer(pr: {
 }
 
 /**
- * Dispatch one Merger for a ready + `reviewed` PR into the shared Pool
- * (ADR-0006: Per-PR Mergers, not a batch Merger). Occupies a slot (acquire),
- * marks the issue in-flight, and runs merge-prompt.md in a **fresh sandbox**
- * (top-level `sandcastle.run` with an explicit `branch` strategy, so it works in
- * an ISOLATED throwaway worktree forked from main instead of head mode — the
- * Merger must never mutate the host's live `main`, see below) that re-runs
- * install+build. The Merger does test-then-merge
- * (`git merge <branch>` → `pnpm typecheck && pnpm test` → `gh pr merge --merge`);
- * its give-up path reverts the PR to draft + `ready-for-human` inside the prompt
- * (#65). Whatever happens, the finally removes the issue from the In-flight set
- * and frees the Pool slot. The runId is issue-derived, shared with impl/rev.
+ * Run the agent-free **Landing** for a ready + `reviewed` PR (CONTEXT.md: Landing;
+ * ADR-0012). Occupies a Pool slot (acquire) and marks the issue in-flight — the
+ * sandbox lifecycle is the cost being limited, not an agent — but runs NO agent,
+ * NO prompt, and spends zero tokens. In a fresh ISOLATED worktree forked from
+ * `main` (never head mode — see below), it validates the merge deterministically
+ * via `onSandboxReady` hooks: `git merge <PR branch>` → `pnpm typecheck && pnpm
+ * test`. A textual conflict makes `git merge` exit non-zero and a red suite makes
+ * typecheck/test exit non-zero — either rejects `createSandbox`, taking us to the
+ * failure path. On the clean path the orchestrator lands the PR server-side with
+ * `gh pr merge --merge` (a real merge commit, preserving the impl vs review
+ * commits in history), emits `landing-landed`, and records an agent-free Manifest
+ * entry under the issue's runId.
+ *
+ * On failure — conflict, red suite, or the merge command failing — the ready +
+ * `reviewed` PR is escalated to `ready-for-human` via {@link handleLandingFailure}
+ * (the crash-safe PR-shaped transition runner: terminal label first, then strip
+ * `reviewed`/ready, then comment the failure output). A follow-up replaces this
+ * escalation with the Conflict resolver dispatch, and the Retry budget makes
+ * failed Landings spend attempts (ADR-0012). Whatever happens, the finally
+ * disposes the sandbox, removes the issue from the In-flight set, and frees the
+ * Pool slot. The runId is issue-derived, shared with impl/rev.
  */
-async function dispatchMerger(pr: {
+async function dispatchLanding(pr: {
   prNumber: number;
   issue: number;
   branch: string;
 }): Promise<void> {
   await pool.acquire();
   const issueRunId = generateRunId(pr.issue);
-  const label = "merger #" + pr.issue;
+  const label = "land #" + pr.issue;
   const lc = lifecycle(label);
   lc.start();
+  const startedAt = new Date();
+  events.landingStarted(pr.prNumber, pr.issue, pr.branch);
   try {
-    const result = await recordedRun({
-      runId: issueRunId,
-      phase: "merger",
-      issue: pr.issue,
-      branch: pr.branch,
-      run: () =>
-        sandcastle.run({
-          sandbox: dockerSandbox(),
-          // Run the Merger in an ISOLATED worktree, NOT head mode. A bind-mount
-          // provider (docker) defaults to the "head" strategy, which bind-mounts
-          // the host repo directly — so the Merger's validation `git merge
-          // <branch>` (merge-prompt.md step 1) would mutate your real local
-          // `main`, fast-forwarding it and leaving it diverged from the
-          // server-side `gh pr merge --merge` commit. The "branch" strategy checks
-          // out a throwaway branch forked from main in a separate worktree: the
-          // local test-merge happens there and is discarded when the worktree is
-          // torn down, while the actual landing stays server-side via
-          // `gh pr merge`. (Leftover local `sandcastle/merge-*` refs are cleaned
-          // by `pnpm sandcastle:prune`.)
-          branchStrategy: {
-            type: "branch",
-            branch: `sandcastle/merge-${pr.issue}`,
-            baseBranch: "main",
-          },
-          copyToWorktree: ["node_modules"],
-          hooks: {
-            sandbox: {
-              onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
-            },
-          },
-          name: "Merger #" + pr.issue,
-          maxIterations: 10,
-          agent: sandcastle.pi(MODELS.MERGE, piSessions),
-          promptFile: "./.sandcastle/merge-prompt.md",
-          promptArgs: {
-            BRANCHES: `- ${pr.branch}`,
-            ISSUES: `- #${pr.issue}: Issue #${pr.issue}`,
-          },
-          logging: observe(label),
-        }),
+    // Validate in an ISOLATED worktree forked from `main`, NOT head mode. A
+    // bind-mount provider (docker) defaults to the "head" strategy, which
+    // bind-mounts the host repo directly — so the validation `git merge <PR
+    // branch>` would mutate your real local `main` and dirty the host working
+    // tree. Passing an explicit `branch` (with `baseBranch: main`) forks a
+    // throwaway `sandcastle/merge-<issue>` worktree from `main`: the local
+    // test-merge happens there and is discarded when the worktree is disposed,
+    // while the actual landing stays server-side via `gh pr merge`. So the
+    // Landing never reads or mutates the host's live `main` or working tree.
+    // (Leftover local `sandcastle/merge-*` refs are cleaned by `pnpm
+    // sandcastle:prune`.)
+    await using sandbox = await sandcastle.createSandbox({
+      sandbox: dockerSandbox(),
+      branch: `sandcastle/merge-${pr.issue}`,
+      baseBranch: "main",
+      copyToWorktree: ["node_modules"],
+      hooks: {
+        sandbox: {
+          onSandboxReady: [
+            { command: "pnpm install --frozen-lockfile && pnpm build" },
+            // Deterministic test-then-merge validation. Either step exiting
+            // non-zero (a textual conflict, or a red suite) rejects createSandbox
+            // and routes us to the failure escalation below.
+            { command: `git merge ${pr.branch} --no-edit && pnpm typecheck && pnpm test` },
+          ],
+        },
+      },
     });
-    events.sessionResolved({
-      role: "merger",
-      issue: pr.issue,
-      branch: pr.branch,
-      status: "ok",
-      commits: result.commits.length,
-    });
+    lc.sandbox();
+
+    // Clean merge + green suite → land it server-side. `--merge` (a real merge
+    // commit, NOT --squash) preserves the individual RALPH: (Implementer) and
+    // RALPH: Review - (Reviewer) commits on main.
+    await gh(["pr", "merge", String(pr.prNumber), "--merge"]);
+
+    await appendManifestLine(
+      buildManifestEntry({
+        runId: issueRunId,
+        phase: "land",
+        issue: pr.issue,
+        branch: pr.branch,
+        result: agentFreeResult,
+        startedAt,
+        endedAt: new Date(),
+        outcome: null,
+      })
+    );
+    events.landingLanded(pr.prNumber, pr.issue, pr.branch);
   } catch (err) {
-    events.sessionResolved({
-      role: "merger",
-      issue: pr.issue,
-      branch: pr.branch,
-      status: "failed",
-      commits: 0,
-      error: errorMessage(err),
-    });
+    const failure = errorMessage(err);
+    // Record the failed Landing as an agent-free Manifest entry (no Transcript).
+    await appendManifestLine(
+      buildFailedManifestEntry({
+        runId: issueRunId,
+        phase: "land",
+        issue: pr.issue,
+        branch: pr.branch,
+        error: err,
+        session: null,
+        startedAt,
+        endedAt: new Date(),
+      })
+    );
+    // Escalate the ready + reviewed PR to a human (crash-safe transition runner).
+    // Best-effort: a gh failure here must not crash the orchestrator loop.
+    try {
+      await handleLandingFailure({ prNumber: pr.prNumber }, failure, ghRunner);
+    } catch (escErr) {
+      events.ghError(["landing-escalate", String(pr.prNumber)], errorMessage(escErr));
+    }
+    events.landingFailed(pr.prNumber, pr.issue, pr.branch, failure);
   } finally {
     lc.done();
     inflight.delete(pr.issue);
@@ -601,14 +632,15 @@ for (;;) {
     // `remaining` counts slots still free after each bucket drains its share.
     let remaining = free;
 
-    // 1) ready-for-merge — ready + reviewed PRs → one Merger per PR.
-    const mergers = pickPrs(readyForMerge, remaining, inflight);
-    for (const pr of mergers) {
+    // 1) ready-for-merge — ready + reviewed PRs → one agent-free Landing per PR.
+    const landings = pickPrs(readyForMerge, remaining, inflight);
+    for (const pr of landings) {
       inflight.add(pr.issue);
-      events.dispatchMerger(pr.prNumber, pr.issue, pr.branch);
-      void dispatchMerger(pr); // fire-and-forget; resolves across ticks.
+      // The Landing emits its own started/landed/failed events (agent-free, not a
+      // dispatch/session-resolved Session) — see dispatchLanding.
+      void dispatchLanding(pr); // fire-and-forget; resolves across ticks.
     }
-    remaining -= mergers.length;
+    remaining -= landings.length;
 
     // 2) ready-for-review — draft sandcastle/issue-N PRs without reviewed.
     const reviewers = pickPrs(readyForReview, remaining, inflight);

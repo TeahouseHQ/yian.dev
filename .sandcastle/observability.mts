@@ -236,6 +236,16 @@ export interface RunLike {
   readonly commits: ReadonlyArray<{ sha: string }>;
 }
 
+/**
+ * The {@link RunLike} for an agent-free phase — a Landing (ADR-0012). A Landing
+ * runs no agent, so it captures no Session (no iterations) and produces no
+ * commits of its own (the branch was already committed by the Implementer). Fed
+ * to {@link buildManifestEntry} it yields a null session / usage and 0 commits,
+ * so the Landing appears in the Manifest under the issue's runId as an entry
+ * with no Transcript link — exactly what "agent-free entry" means.
+ */
+export const agentFreeResult: RunLike = { iterations: [], commits: [] };
+
 /** Fields describing a captured session, extracted from the last iteration. */
 export interface SessionSlice {
   readonly sessionId?: string;
@@ -267,10 +277,12 @@ export function lastSession(result: RunLike): SessionSlice {
  * usage, startedAt, endedAt, status }`, plus `error` on failed entries only.
  */
 export interface ManifestEntry {
-  /** Groups the Sessions of one issue's lifecycle (impl/rev/merger) as a deterministic
-   *  run-issue-<n>, or a per-invocation stamp for the cross-issue Planner (CONTEXT.md: Run). */
+  /** Groups an issue's lifecycle (impl/rev, plus its agent-free `land` entry) as a
+   *  deterministic run-issue-<n>, or a per-invocation stamp for the cross-issue
+   *  Planner (CONTEXT.md: Run). */
   readonly runId: string;
-  /** Orchestrator phase that produced this session: planner | impl | rev | merger. */
+  /** Orchestrator phase that produced this entry: planner | impl | rev | land
+   *  (the agent-free Landing, ADR-0012). */
   readonly phase: string;
   /** GitHub issue number the session worked on, or null for orchestrator-wide phases. */
   readonly issue: number | null;
@@ -293,7 +305,7 @@ export interface ManifestEntry {
   /** "ok" for a resolved run, "failed" for a rejected one. */
   readonly status: "ok" | "failed";
   /** The structured Outcome the Session self-reported (ADR-0011), or null when
-   *  the phase reports none (impl/planner/merger) or the Session produced no
+   *  the phase reports none (impl/planner/land) or the Session produced no
    *  parseable Outcome (a failed attempt against the Retry budget). Lets the
    *  Session browser show pass/give-up/no-outcome at a glance. */
   readonly outcome: ParsedOutcome | null;
@@ -478,8 +490,8 @@ export async function resolveFailedSessionFile(
 /**
  * Generate a `runId`. When `issueNumber` is given, returns a deterministic
  * `run-issue-<n>` id that is stable for that issue's whole lifecycle — its
- * Implementer, Reviewer, and Merger Sessions all share it (mirrors the
- * `sandcastle/issue-N` branch), so auditing everything that happened to an issue
+ * Implementer and Reviewer Sessions and its agent-free Landing all share it
+ * (mirrors the `sandcastle/issue-N` branch), so auditing everything that happened to an issue
  * is a single lookup. When omitted, returns a unique per-invocation
  * millisecond-stamped id — the cross-issue **Planner** Session's id, which has no
  * issue to bind to (CONTEXT.md: Run). `now` is injectable for deterministic

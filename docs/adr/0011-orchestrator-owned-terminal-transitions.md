@@ -40,8 +40,9 @@ judges, the code mutates.
 
 ### The Outcome contract
 
-Each Reviewer / Merger Session ends with a structured verdict in its final
-output, parsed the same way the Planner's `<plan>` block already is:
+Each Reviewer / Conflict resolver (ADR-0012) Session ends with a structured
+verdict in its final output, parsed the same way the Planner's `<plan>` block
+already is:
 
 ```
 <outcome>pass</outcome>
@@ -55,15 +56,16 @@ The orchestrator acts on the parsed Outcome:
   review-summary comment itself (prose, not dispatch-controlling).
 - **Reviewer give-up** → orchestrator posts the reason as a PR comment and adds
   `ready-for-human`; the PR stays draft.
-- **Merger pass** → **the orchestrator runs `gh pr merge --merge`** — the
-  highest-stakes mutation in the system becomes deterministic code, logged as
-  an event, impossible for the LLM to skip, squash, or mis-target. The Merger
-  becomes a pure validator: fresh sandbox, `git merge` + typecheck + test,
-  report the Outcome.
-- **Merger give-up** → orchestrator posts the reason, removes `reviewed`,
-  reverts the PR to draft, adds `ready-for-human` — with the terminal label
-  applied **before** bucket state is removed (the `handleImplementerOutcome`
-  ordering), so no crash point strands the PR outside every bucket.
+- **Merge phase** → this decision went one step further in the same session:
+  once the Merger is reduced to validate-and-report, every remaining step
+  (`git merge`, typecheck, test, `gh pr merge --merge`) is a deterministic
+  command with an exit code — no semantic judgment, therefore **no agent and
+  no Outcome at all**. The merge phase becomes the fully scripted **Landing**,
+  and its failure path dispatches the **Conflict resolver**, whose Session
+  _is_ governed by this Outcome contract. See ADR-0012. The crash-safe
+  ordering rule (terminal label applied **before** bucket state is removed,
+  the `handleImplementerOutcome` ordering) applies to every PR-shaped
+  transition the orchestrator performs.
 
 Prompts shrink to work + verdict; their `gh`-mutation sections are deleted.
 
@@ -93,7 +95,8 @@ extra attempts, benign under at-least-once dispatch.
 - **Move only labels/drafts, leave `gh pr merge` to the agent.** _Rejected._
   The merge is the largest state transition in the system; once the Merger is
   reduced to validate-and-report there is no reason to leave the landing step
-  to prompt compliance.
+  to prompt compliance. (The same logic then eliminated the Merger agent
+  entirely — validate-and-report is itself deterministic — see ADR-0012.)
 - **Garbled Outcome = immediate give-up.** _Rejected._ One formatting lapse by
   the model would send perfectly automatable work to a human; folding it into
   the Retry budget keeps the strict contract without the hair trigger.

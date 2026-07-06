@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendLogLine,
   COCKPIT_TABS,
+  createStopEscalation,
   cycleTab,
   describeChildExit,
   EMPTY_LIVE_VIEW,
@@ -490,6 +491,18 @@ describe("describeChildExit", () => {
       message: "orchestrator exited",
     });
   });
+
+  it("distinguishes a forced kill (unresponsive to SIGTERM) from a clean stop", () => {
+    // The user asked to stop, the child ignored SIGTERM, so the supervisor
+    // escalated to SIGKILL. Still a stop (not a crash), but the description says
+    // so — the child never had a chance to shut down cleanly (#93).
+    expect(
+      describeChildExit({ code: null, signal: "SIGKILL", stoppedByUser: true, forced: true })
+    ).toEqual({
+      status: "stopped",
+      message: "orchestrator force-killed (ignored stop)",
+    });
+  });
 });
 
 // ── spawnOrchestrator: the supervised-child pipeline, end-to-end ─────────────
@@ -501,7 +514,8 @@ describe("describeChildExit", () => {
 /** Collect everything a supervised child produces, resolving once it exits. */
 function runFakeOrchestrator(
   script: string,
-  drive?: (sup: { stop(): void }) => void
+  drive?: (sup: { stop(): void }) => void,
+  opts: { graceMs?: number } = {}
 ): Promise<{
   events: OrchestratorEvent[];
   stdoutRaw: string[];
@@ -528,7 +542,10 @@ function runFakeOrchestrator(
         resolve({ events, stdoutRaw, stderr, exit, spawnError });
       },
     };
-    const sup = spawnOrchestrator({ command: process.execPath, args: ["-e", script] }, handlers);
+    const sup = spawnOrchestrator(
+      { command: process.execPath, args: ["-e", script], graceMs: opts.graceMs },
+      handlers
+    );
     if (drive) drive(sup);
   });
 }
@@ -570,6 +587,39 @@ describe("spawnOrchestrator", () => {
     expect(result.exit).toEqual({ status: "stopped", message: "orchestrator stopped" });
   });
 
+  it("force-kills a child that traps SIGTERM and reports it as a forced stop (#93)", async () => {
+    // The fake orchestrator traps SIGTERM (never exits on it) and stays alive on
+    // an interval — a wedged child. A clean-stop supervisor would hang forever;
+    // escalation SIGKILLs it after the (short) grace period, and the exit is
+    // described as a *forced* stop, distinct from a clean one.
+    const script = `
+      process.on("SIGTERM", () => {});
+      setInterval(() => {}, 1000);
+      process.stdout.write("ready\\n");
+    `;
+    const result = await runFakeOrchestrator(
+      script,
+      // Stop only once the child is alive and its SIGTERM trap is installed, so
+      // the signal is genuinely ignored (not lost to a not-yet-booted child).
+      (sup) => setTimeout(() => sup.stop(), 150),
+      { graceMs: 150 }
+    );
+    expect(result.exit).toEqual({
+      status: "stopped",
+      message: "orchestrator force-killed (ignored stop)",
+    });
+  });
+
+  it("never force-kills a child that exits promptly on SIGTERM (clean stop)", async () => {
+    // The default child (no SIGTERM trap) dies on SIGTERM well within the grace
+    // period, so it is a clean stop — never SIGKILLed, never described as forced.
+    const script = `setInterval(() => {}, 1000); process.stdout.write("ready\\n");`;
+    const result = await runFakeOrchestrator(script, (sup) => setTimeout(() => sup.stop(), 150), {
+      graceMs: 5000,
+    });
+    expect(result.exit).toEqual({ status: "stopped", message: "orchestrator stopped" });
+  });
+
   it("reports a spawn failure (command not found) without throwing", async () => {
     const events: OrchestratorEvent[] = [];
     const spawnError = await new Promise<string | null>((resolve) => {
@@ -585,6 +635,79 @@ describe("spawnOrchestrator", () => {
       );
     });
     expect(spawnError).toMatch(/ENOENT|not.*found|spawn/i);
+  });
+});
+
+// ── createStopEscalation: the pure SIGTERM → grace → SIGKILL state machine ───
+//
+// Exercised with a FAKE timer (no real clock) so the escalation decision — does
+// an unresponsive child get SIGKILLed after the grace period? — is unit-testable
+// in isolation from a live process (#93).
+
+/** Drive {@link createStopEscalation} with a fake one-shot timer and signal spies. */
+function fakeEscalation(graceMs = 10_000) {
+  const calls = { sigterm: 0, sigkill: 0 };
+  let armed: { ms: number; fn: () => void } | null = null;
+  let cancelled = false;
+  const esc = createStopEscalation({
+    sigterm: () => {
+      calls.sigterm += 1;
+    },
+    sigkill: () => {
+      calls.sigkill += 1;
+    },
+    setTimer: (ms, fn) => {
+      armed = { ms, fn };
+      cancelled = false;
+      return () => {
+        cancelled = true;
+      };
+    },
+    graceMs,
+  });
+  return {
+    esc,
+    calls,
+    armedMs: () => armed?.ms ?? null,
+    isCancelled: () => cancelled,
+    /** Fire the armed grace timer, as the real clock would after graceMs. */
+    fireTimer: () => {
+      if (armed && !cancelled) armed.fn();
+    },
+  };
+}
+
+describe("createStopEscalation", () => {
+  it("SIGTERMs immediately on stop and arms the grace timer (no SIGKILL yet)", () => {
+    const h = fakeEscalation(10_000);
+    h.esc.stop();
+    expect(h.calls.sigterm).toBe(1);
+    expect(h.calls.sigkill).toBe(0);
+    expect(h.armedMs()).toBe(10_000);
+  });
+
+  it("escalates to SIGKILL when the child ignores SIGTERM past the grace period", () => {
+    const h = fakeEscalation();
+    h.esc.stop();
+    h.fireTimer(); // grace elapsed, child still alive
+    expect(h.calls.sigterm).toBe(1);
+    expect(h.calls.sigkill).toBe(1);
+  });
+
+  it("never SIGKILLs a child that exits promptly after SIGTERM", () => {
+    const h = fakeEscalation();
+    h.esc.stop();
+    h.esc.onExit(); // child shut down cleanly within the grace period
+    expect(h.isCancelled()).toBe(true); // grace timer disarmed
+    h.fireTimer(); // even if the (cancelled) timer somehow fires, no SIGKILL
+    expect(h.calls.sigkill).toBe(0);
+  });
+
+  it("is idempotent: a second stop does not re-SIGTERM or re-arm", () => {
+    const h = fakeEscalation();
+    h.esc.stop();
+    h.esc.stop();
+    expect(h.calls.sigterm).toBe(1);
   });
 });
 

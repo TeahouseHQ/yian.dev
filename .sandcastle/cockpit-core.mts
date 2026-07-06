@@ -165,6 +165,9 @@ export interface ChildExitInput {
   readonly signal: NodeJS.Signals | string | null;
   /** True when this exit followed a user Stop (or quit) — the Cockpit killed it. */
   readonly stoppedByUser: boolean;
+  /** True when the stop had to escalate to SIGKILL because the child ignored
+   *  SIGTERM (#93) — a *forced* stop, distinguished from a clean one below. */
+  readonly forced?: boolean;
 }
 
 /**
@@ -177,7 +180,9 @@ export interface ChildExitInput {
  */
 export function describeChildExit(input: ChildExitInput): ChildExit {
   if (input.stoppedByUser) {
-    return { status: "stopped", message: "orchestrator stopped" };
+    return input.forced
+      ? { status: "stopped", message: "orchestrator force-killed (ignored stop)" }
+      : { status: "stopped", message: "orchestrator stopped" };
   }
   if (input.code !== null && input.code !== 0) {
     return { status: "crashed", message: `orchestrator crashed (exit code ${input.code})` };
@@ -188,6 +193,70 @@ export function describeChildExit(input: ChildExitInput): ChildExit {
   return { status: "stopped", message: "orchestrator exited" };
 }
 
+/** The default grace period the supervisor waits after SIGTERM before escalating
+ *  to SIGKILL — long enough for the orchestrator to drain a Poll tick and dispose
+ *  its sandboxes, short enough that a wedged child doesn't hang the Live tab (#93). */
+export const DEFAULT_STOP_GRACE_MS = 10_000;
+
+/** The side effects {@link createStopEscalation} drives, injected so the pure
+ *  escalation decision is unit-testable against a fake clock and signal spies. */
+export interface StopEscalationDeps {
+  /** Ask the child to stop gracefully (SIGTERM). */
+  sigterm(): void;
+  /** Force the child down (SIGKILL) after it ignored SIGTERM. */
+  sigkill(): void;
+  /** Arm a one-shot timer for `ms`; returns a function that cancels it. */
+  setTimer(ms: number, fn: () => void): () => void;
+  /** How long to wait after SIGTERM before escalating to SIGKILL. */
+  graceMs: number;
+}
+
+/** The escalation handle the supervisor drives: {@link StopEscalation.stop} begins
+ *  a graceful stop, {@link StopEscalation.onExit} tells it the child is gone. */
+export interface StopEscalation {
+  /** Begin a graceful stop: SIGTERM now, SIGKILL after the grace period if the
+   *  child has not exited. Idempotent — repeated calls do not re-signal. */
+  stop(): void;
+  /** The child has exited; cancel any pending SIGKILL. */
+  onExit(): void;
+}
+
+/**
+ * The pure stop-escalation state machine behind the supervisor's Stop (#93). A
+ * wedged orchestrator that ignores SIGTERM would otherwise stay alive forever, so
+ * `stop()` sends SIGTERM and arms a grace timer; if the child has not exited when
+ * the timer fires it is escalated to SIGKILL. A child that exits promptly calls
+ * `onExit()` first, which cancels the timer — so a well-behaved child is *never*
+ * SIGKILLed.
+ *
+ * All I/O (signals, the clock) is injected via {@link StopEscalationDeps}, so the
+ * escalation decision is unit-testable with a fake timer, with the thin imperative
+ * layer in {@link spawnOrchestrator} doing the actual `child.kill` / `setTimeout`.
+ */
+export function createStopEscalation(deps: StopEscalationDeps): StopEscalation {
+  let phase: "idle" | "terminating" | "done" = "idle";
+  let cancelTimer: (() => void) | null = null;
+
+  return {
+    stop() {
+      if (phase !== "idle") return; // already stopping (or gone) — don't re-signal
+      phase = "terminating";
+      deps.sigterm();
+      cancelTimer = deps.setTimer(deps.graceMs, () => {
+        cancelTimer = null;
+        if (phase === "terminating") deps.sigkill();
+      });
+    },
+    onExit() {
+      phase = "done";
+      if (cancelTimer) {
+        cancelTimer();
+        cancelTimer = null;
+      }
+    },
+  };
+}
+
 /** How to launch the orchestrator child. Injected (rather than hard-coded) so
  *  the supervisor's wiring can be integration-tested against a fake emitter,
  *  mirroring this codebase's env/dep injection style (`createEvents`, `logPath`). */
@@ -196,6 +265,10 @@ export interface SpawnConfig {
   readonly args: string[];
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
+  /** Grace period (ms) after SIGTERM before the supervisor escalates to SIGKILL;
+   *  defaults to {@link DEFAULT_STOP_GRACE_MS}. Injectable so the escalation is
+   *  integration-testable without a real 10s wait (#93). */
+  readonly graceMs?: number;
 }
 
 /** The sinks the {@link spawnOrchestrator} supervisor pushes decoded child output
@@ -215,7 +288,8 @@ export interface OrchestratorHandlers {
 
 /** Handle to a running orchestrator child — the Stop control the UI needs. */
 export interface Supervisor {
-  /** Flag this exit as user-requested and SIGTERM the child. */
+  /** Flag this exit as user-requested and stop the child: SIGTERM, then SIGKILL
+   *  after the grace period if it has not exited (#93). */
   stop(): void;
 }
 
@@ -233,6 +307,7 @@ export interface Supervisor {
  */
 export function spawnOrchestrator(config: SpawnConfig, handlers: OrchestratorHandlers): Supervisor {
   let stoppedByUser = false;
+  let forced = false;
   let outBuffer = "";
   let errBuffer = "";
 
@@ -240,6 +315,22 @@ export function spawnOrchestrator(config: SpawnConfig, handlers: OrchestratorHan
     cwd: config.cwd,
     env: config.env,
     stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  // Escalate a Stop from SIGTERM to SIGKILL if the child wedges (#93). The
+  // decision is the pure createStopEscalation; this layer just does the
+  // signalling and real-clock timer.
+  const escalation = createStopEscalation({
+    sigterm: () => child.kill("SIGTERM"),
+    sigkill: () => {
+      forced = true;
+      child.kill("SIGKILL");
+    },
+    setTimer: (ms, fn) => {
+      const timer = setTimeout(fn, ms);
+      return () => clearTimeout(timer);
+    },
+    graceMs: config.graceMs ?? DEFAULT_STOP_GRACE_MS,
   });
 
   child.stdout?.setEncoding("utf8");
@@ -265,14 +356,15 @@ export function spawnOrchestrator(config: SpawnConfig, handlers: OrchestratorHan
 
   child.on("error", (err) => handlers.onSpawnError(err.message));
   child.on("exit", (code, signal) => {
-    const exit = describeChildExit({ code, signal, stoppedByUser });
+    escalation.onExit(); // child is gone — cancel any pending SIGKILL
+    const exit = describeChildExit({ code, signal, stoppedByUser, forced });
     handlers.onExit(exit.status, exit.message);
   });
 
   return {
     stop() {
       stoppedByUser = true;
-      child.kill("SIGTERM");
+      escalation.stop();
     },
   };
 }

@@ -23,7 +23,7 @@ The `pnpm sandcastle:prune` maintenance command (`.sandcastle/prune.mts`) that r
 _Avoid_: clean, gc.
 
 **Session**:
-A single pi agent invocation, identified by a session id, whose Transcript is captured as one JSONL file. One per agent run (Planner, Implementer, Reviewer, Merger).
+A single pi agent invocation, identified by a session id, whose Transcript is captured as one JSONL file. One per agent run (Planner, Implementer, Reviewer, Conflict resolver). A Landing is not a Session — it runs no agent.
 
 **Cockpit**:
 The single Ink TUI that consolidates the Sandcastle surfaces into tabbed modes — **Live** (monitor the orchestrator: status/Start-Stop, pool gauge, in-flight list, event log), **Sessions** (the Session browser embedded as a tab), **Maintenance** (guarded Prune). It launches idle and **supervises the orchestrator as a child process** (not in-process), starting/stopping it on demand and rendering its structured Live feed. Headless `sandcastle` (no Cockpit) still runs the orchestrator loop directly.
@@ -34,11 +34,11 @@ The interactive terminal UI (Ink, run via `tsx`) for navigating recent Runs and 
 _Avoid_: viewer, dashboard, monitor.
 
 **Run**:
-One issue's **full lifecycle** through the pool — its Implementer, Reviewer, and Merger Sessions — identified by a `runId` derived deterministically from the issue number (mirrors the `sandcastle/issue-N` branch). Auditing everything that happened to an issue is a single `runId` lookup. The Planner is cross-issue and does **not** belong to any issue's Run; its Sessions are recorded per-invocation with no issue binding. Distinct from sandcastle's `run()` API call, which is one agent invocation. Supersedes the old "one outer loop iteration" meaning (ADR-0006).
+One issue's **full lifecycle** through the pool — its Implementer and Reviewer Sessions, its Landing, and any Conflict-resolver Sessions — identified by a `runId` derived deterministically from the issue number (mirrors the `sandcastle/issue-N` branch). Auditing everything that happened to an issue is a single `runId` lookup. The Planner is cross-issue and does **not** belong to any issue's Run; its Sessions are recorded per-invocation with no issue binding. Distinct from sandcastle's `run()` API call, which is one agent invocation. Supersedes the old "one outer loop iteration" meaning (ADR-0006).
 _Avoid_: iteration, cycle (a Poll tick is not a Run).
 
 **Pool**:
-The single shared concurrency limiter (size 10) across **all** Implementer, Reviewer, and Merger Sessions. One slot = one agent run **including** its whole sandbox lifecycle (create → install → build → run → dispose). The Planner runs in its own dedicated singleton slot and is **not** counted against the Pool. Introduced by the persistent shared-pool orchestrator (ADR-0006), replacing the old per-Run `MAX_PARALLEL` that bounded only Implement+Review.
+The single shared concurrency limiter (size 10) across **all** Implementer, Reviewer, and Conflict-resolver Sessions and Landings. One slot = one full sandbox lifecycle (create → install → build → run → dispose), whether an agent Session or an agent-free Landing — the sandbox is the cost being limited, not the agent. The Planner runs in its own dedicated singleton slot and is **not** counted against the Pool. Introduced by the persistent shared-pool orchestrator (ADR-0006), replacing the old per-Run `MAX_PARALLEL` that bounded only Implement+Review.
 _Avoid_: queue, thread pool.
 
 **Dispatch bucket**:
@@ -58,15 +58,23 @@ The orchestrator's **in-memory** record of the Planner's last emit list (the unb
 _Avoid_: plan graph, dependency graph, Planner memo, memoization.
 
 **Outcome**:
-The structured self-report an agent Session ends with — pass, or give-up with a reason — that the orchestrator parses and acts on. The agent judges; the orchestrator mutates. All dispatch-controlling GitHub state transitions (labels, draft flips, the merge itself) are performed by orchestrator code from the reported Outcome, never by the agent running `gh` from prompt instructions (ADR-0011). A Session that resolves without a parseable Outcome is treated as a failed attempt against its Retry budget.
+The structured self-report an agent Session ends with — pass, or give-up with a reason — that the orchestrator parses and acts on. The agent judges; the orchestrator mutates. All dispatch-controlling GitHub state transitions (labels, draft flips) are performed by orchestrator code from the reported Outcome, never by the agent running `gh` from prompt instructions (ADR-0011). Reported by the Reviewer and the Conflict resolver; a Landing needs no Outcome — it is deterministic code (ADR-0012). A Session that resolves without a parseable Outcome is treated as a failed attempt against its Retry budget.
 _Avoid_: verdict, result (a Manifest field), status.
 
+**Landing**:
+The deterministic, agent-free merge phase the orchestrator runs itself for a ready + `reviewed` PR: in a fresh sandbox based on `origin/main`, merge the PR branch, typecheck + test, then `gh pr merge --merge` on green. Occupies a Pool slot (full sandbox lifecycle) but spends zero tokens and reports no Outcome. A failed Landing — textual conflict or red suite — dispatches the Conflict resolver and spends one Retry-budget attempt. Replaces the Merger agent role (ADR-0012).
+_Avoid_: merger, merge Session.
+
+**Conflict resolver**:
+The agent role dispatched when a Landing fails, covering both failure shapes — a textual `git merge` conflict and a semantic one (clean merge, red suite). In a fresh sandbox it merges `origin/main` **into** the PR branch, resolves the breakage until green, pushes, and reports an Outcome; on pass the orchestrator strips `reviewed` and reverts the PR to draft, so the resolution re-enters the ready-for-review bucket and is re-reviewed before it can land. Dispatches are bounded by the Retry budget (ADR-0012).
+_Avoid_: merger, fixer, rebase agent.
+
 **Retry budget**:
-The per-issue-per-phase allowance of failed attempts — a crashed Session or one that resolved without a parseable Outcome — before the orchestrator escalates the item to `ready-for-human` with a comment citing the attempts (N=3: one attempt plus two retries). In-memory beside the In-flight set and Plan cache (same non-durability philosophy, ADR-0006/0010); cleared on escalation, so a human re-labeling an issue gets a fresh budget; reset by restart, which at worst grants extra attempts — benign under at-least-once dispatch.
+The per-issue-per-phase allowance of failed attempts — a crashed Session, one that resolved without a parseable Outcome, or a failed Landing — before the orchestrator escalates the item to `ready-for-human` with a comment citing the attempts (N=3: one attempt plus two retries). In-memory beside the In-flight set and Plan cache (same non-durability philosophy, ADR-0006/0010); cleared on escalation, so a human re-labeling an issue gets a fresh budget; reset by restart, which at worst grants extra attempts — benign under at-least-once dispatch.
 _Avoid_: strike count, attempt counter, backoff.
 
 **`ready-for-human`**:
-The universal terminal label — on an issue or a PR — meaning "out of all Dispatch buckets; a human owns it." Every give-up / failure path lands here: a no-op Implementer (strips `ready-for-agent`, adds `ready-for-human`), a Reviewer or Merger whose Outcome is give-up (the Reviewer's PR stays draft; the Merger's PR loses `reviewed` and reverts to draft), and an item whose Retry budget is exhausted. The transitions themselves are applied by orchestrator code acting on the reported Outcome (ADR-0011), in crash-safe order (terminal label added before bucket state is removed). This is what keeps the persistent loop from re-dispatching un-actionable work forever.
+The universal terminal label — on an issue or a PR — meaning "out of all Dispatch buckets; a human owns it." Every give-up / failure path lands here: a no-op Implementer (strips `ready-for-agent`, adds `ready-for-human`), a Reviewer or Conflict resolver whose Outcome is give-up, and an item whose Retry budget is exhausted (including a Landing→resolve→re-review cycle that keeps failing). The transitions themselves are applied by orchestrator code acting on the reported Outcome (ADR-0011), in crash-safe order (terminal label added before bucket state is removed). This is what keeps the persistent loop from re-dispatching un-actionable work forever.
 _Avoid_: blocked, stuck, wontfix (a distinct triage label).
 
 **Manifest**:

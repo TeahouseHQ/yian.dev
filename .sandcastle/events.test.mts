@@ -179,6 +179,26 @@ describe("formatEventProse", () => {
     ).toBe("  → #7 escalated to ready-for-human (Reviewer gave up).");
   });
 
+  it("renders the parsed Conflict-resolver Outcome (pass / give-up / none) (#101)", () => {
+    expect(
+      formatEventProse(evt({ type: "resolver-outcome", issue: 7, outcome: "pass", reason: null }))
+    ).toBe("  ✓ Conflict resolver #7 reported pass.");
+    expect(
+      formatEventProse(
+        evt({ type: "resolver-outcome", issue: 7, outcome: "give-up", reason: "still red" })
+      )
+    ).toBe("  ⚠ Conflict resolver #7 gave up: still red");
+    expect(
+      formatEventProse(evt({ type: "resolver-outcome", issue: 7, outcome: "none", reason: null }))
+    ).toBe("  ⚠ Conflict resolver #7 reported no parseable Outcome — no state change.");
+  });
+
+  it("renders the resolver PASS re-queue transition (#101)", () => {
+    expect(formatEventProse(evt({ type: "resolver-requeued", issue: 7 }))).toBe(
+      "  → #7 resolved — reverted to draft for re-review (reviewed stripped)."
+    );
+  });
+
   it("renders the Retry-budget attempt-failed and budget-exhausted lines (#98)", () => {
     expect(
       formatEventProse(
@@ -636,6 +656,8 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "session-resolved",
     "reviewer-outcome",
     "review-transition",
+    "resolver-outcome",
+    "resolver-requeued",
     "landing-started",
     "landing-landed",
     "landing-failed",

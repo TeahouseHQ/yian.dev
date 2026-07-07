@@ -630,6 +630,35 @@ export async function handleReviewerOutcome(
   return "give-up";
 }
 
+// ---- Conflict resolver PASS re-queue (ADR-0012, #101) ---------------------
+
+/**
+ * Re-queue a resolved PR for review (CONTEXT.md: Conflict resolver; ADR-0012).
+ * When a Conflict resolver reports `pass` — it merged `origin/main` into the PR
+ * branch, got the suite green, and pushed — the orchestrator strips the
+ * `reviewed` gate and reverts the PR draft → so it re-enters the ready-for-review
+ * bucket and is **re-reviewed before it can land again**. This is a **re-queue,
+ * not an escalation**: no terminal `ready-for-human` label is added, so the
+ * crash-safe terminal-label-first ordering does NOT apply here. The strip order
+ * mirrors the gated budget escalation ({@link escalateBudgetExhausted}): remove
+ * `reviewed`, then `pr ready --undo`.
+ *
+ * A resolver give-up or missing Outcome is NOT handled here — it spends a
+ * merge-phase Retry-budget attempt (the shared `land` counter) in the
+ * orchestrator, escalating to `ready-for-human` only on exhaustion.
+ *
+ * Pure logic over an injectable {@link GhRunner}, so the transition is
+ * unit-testable in isolation.
+ */
+export async function requeueResolvedPr(
+  pr: { readonly prNumber: number },
+  gh: GhRunner
+): Promise<void> {
+  const n = String(pr.prNumber);
+  await gh.run(["pr", "edit", n, "--remove-label", "reviewed"]);
+  await gh.run(["pr", "ready", n, "--undo"]);
+}
+
 // ---- Retry-budget escalation (ADR-0011, #98) ------------------------------
 
 /**

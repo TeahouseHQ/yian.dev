@@ -21,6 +21,7 @@ import {
   pickPrs,
   POLL_INTERVAL_MS,
   POOL_SIZE,
+  requeueResolvedPr,
   RETRY_BUDGET_N,
   resolvePlanEmit,
   shouldQueryBuckets,
@@ -54,6 +55,10 @@ const MODELS = {
   PLANNING: "claude-opus-4-8",
   IMPLEMENTATION: "litellm/glm-5.1",
   REVIEW: "claude-opus-4-8",
+  // The Conflict resolver integrates a reviewed branch with origin/main — a
+  // careful, high-stakes merge (ADR-0012), so it runs on the same Opus model as
+  // review rather than the cheaper implementation model.
+  RESOLUTION: "claude-opus-4-8",
 };
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
@@ -279,7 +284,10 @@ const events = createEvents();
 // orchestrator acts on — the review gate + give-up transitions are performed here
 // in code (ADR-0011, #96). The merge phase is the deterministic, agent-free
 // Landing: the orchestrator merges + validates in a sandbox and runs
-// `gh pr merge` itself, escalating a failed Landing to ready-for-human (ADR-0012).
+// `gh pr merge` itself; a failed Landing spends a merge-phase attempt and
+// dispatches the Conflict resolver, which merges origin/main into the branch,
+// fixes it green, and routes it back through review — escalating to
+// ready-for-human only on Retry-budget exhaustion (ADR-0012, #101).
 const pool = createPool(POOL_SIZE);
 const inflight = createInflight();
 
@@ -308,13 +316,18 @@ const budget = createRetryBudget();
  * (issue-shaped for implement, PR-shaped for review/land), then emit
  * `budget-exhausted`. A gh failure during escalation is tolerated — it must not
  * crash the orchestrator loop; the next tick re-dispatches and re-attempts.
+ *
+ * Returns whether it **escalated** (the threshold was hit) so a caller can branch
+ * on it — the failed Landing hands off to the Conflict resolver only when it did
+ * NOT escalate (below the threshold); on exhaustion the item is already handed to
+ * a human (ADR-0012).
  */
 async function recordFailedAttempt(
   target: BudgetTarget,
   phase: string,
   issue: number,
   detail?: string
-): Promise<void> {
+): Promise<boolean> {
   const attempts = budget.fail(issue, phase);
   if (isBudgetExhausted(attempts)) {
     budget.clear(issue, phase);
@@ -324,9 +337,10 @@ async function recordFailedAttempt(
       events.ghError(["budget-escalate", phase, String(issue)], errorMessage(escErr));
     }
     events.budgetExhausted(issue, phase, attempts);
-  } else {
-    events.attemptFailed(issue, phase, attempts, RETRY_BUDGET_N);
+    return true;
   }
+  events.attemptFailed(issue, phase, attempts, RETRY_BUDGET_N);
+  return false;
 }
 
 /**
@@ -563,15 +577,18 @@ async function dispatchReviewer(pr: {
  * entry under the issue's runId.
  *
  * On failure — conflict, red suite, or the merge command failing — the ready +
- * `reviewed` PR spends one Retry-budget attempt via {@link recordFailedAttempt}
- * (ADR-0011, #98): below the threshold NO GitHub state changes and the PR stays in
- * the ready-for-merge bucket for a re-land next tick; on the N=3rd attempt the
+ * `reviewed` PR spends one merge-phase ("land") Retry-budget attempt via
+ * {@link recordFailedAttempt} (ADR-0011/0012, #98): on the N=3rd attempt the
  * PR-shaped gated escalation strips the `reviewed` gate + reverts to draft and
- * hands the PR to a human (crash-safe: terminal label first). A follow-up replaces
- * the re-land with a Conflict resolver dispatch on the first failure (ADR-0012).
- * Whatever happens, the finally disposes the sandbox, removes the issue from the
- * In-flight set, and frees the Pool slot. The runId is issue-derived, shared with
- * impl/rev.
+ * hands the PR to a human (crash-safe: terminal label first). **Below the
+ * threshold, the orchestrator dispatches the Conflict resolver** ({@link
+ * dispatchResolver}) instead of escalating — it merges `origin/main` into the
+ * branch, fixes it green, and routes it back through review (ADR-0012). The issue
+ * is kept in-flight across the handoff (`handoff` short-circuits the finally's
+ * `inflight.delete`) so no re-Landing races in before the resolver runs; the
+ * resolver takes ownership of clearing it. Whatever happens, the finally disposes
+ * the sandbox and frees the Pool slot. The runId is issue-derived, shared with
+ * impl/rev/resolve.
  */
 async function dispatchLanding(pr: {
   prNumber: number;
@@ -584,6 +601,9 @@ async function dispatchLanding(pr: {
   const lc = lifecycle(label);
   lc.start();
   const startedAt = new Date();
+  // Did a failed Landing hand off to the Conflict resolver? Then keep the issue
+  // in-flight (the resolver owns removing it) so no re-Landing races in.
+  let handoff = false;
   events.landingStarted(pr.prNumber, pr.issue, pr.branch);
   try {
     // Validate in an ISOLATED worktree forked from `origin/main`, NOT head mode. A
@@ -642,16 +662,146 @@ async function dispatchLanding(pr: {
       })
     );
     events.landingFailed(pr.prNumber, pr.issue, pr.branch, failure);
-    // A failed Landing — textual conflict or red suite — is a failed attempt against
-    // the Retry budget (ADR-0011/0012, #98), NOT an immediate escalation: below the
-    // threshold no GitHub state changes and the ready + `reviewed` PR stays in the
-    // ready-for-merge bucket for a re-land next tick. On exhaustion, escalate the
-    // PR-shaped gated target (strip the `reviewed` gate + revert to draft) to a human.
-    await recordFailedAttempt(
+    // A failed Landing — textual conflict or red suite — spends one merge-phase
+    // ("land") Retry-budget attempt (ADR-0011/0012, #98). On exhaustion the
+    // PR-shaped gated escalation (strip the `reviewed` gate + revert to draft)
+    // hands the PR to a human. Below the threshold, dispatch the Conflict resolver
+    // instead of escalating — keep the issue in-flight across the handoff.
+    const escalated = await recordFailedAttempt(
       { kind: "pr", prNumber: pr.prNumber, gated: true },
       "land",
       pr.issue,
       failure
+    );
+    handoff = !escalated;
+  } finally {
+    lc.done();
+    // On a resolver handoff the issue stays in-flight — dispatchResolver clears it
+    // when it resolves. Otherwise (landed, or escalated) remove it here.
+    if (!handoff) inflight.delete(pr.issue);
+    pool.release();
+  }
+  if (handoff) {
+    events.dispatchResolver(pr.prNumber, pr.issue, pr.branch);
+    void dispatchResolver(pr); // fire-and-forget; acquires its own Pool slot.
+  }
+}
+
+/**
+ * Dispatch one Conflict resolver for a PR whose Landing failed (CONTEXT.md:
+ * Conflict resolver; ADR-0012). Occupies its own Pool slot (acquire) — the issue
+ * is already in-flight from the failed Landing that handed off to it, kept so no
+ * re-Landing races in. In a **fresh sandbox checked out on the PR branch** (like
+ * the Reviewer, decoupled from the Landing's disposed sandbox) it runs
+ * resolve-prompt.md: the agent merges `origin/main` INTO the branch, fixes the
+ * conflicts / integration breakage until `pnpm typecheck && pnpm test` are green,
+ * pushes, and ends its Session with a structured **Outcome** (ADR-0011). The
+ * orchestrator parses it and mutates GitHub state itself:
+ *
+ * - **pass** → {@link requeueResolvedPr}: strip the `reviewed` gate + revert the
+ *   PR to draft so it re-enters the ready-for-review bucket and is re-reviewed
+ *   before it can land again. The `land` Retry budget is deliberately NOT cleared
+ *   — it is the shared merge-phase counter that bounds the
+ *   Landing → resolve → review → Landing loop (a successful *Landing* clears it).
+ * - **give-up / no parseable Outcome / crash** → spends another merge-phase
+ *   (`land`) Retry-budget attempt via {@link recordFailedAttempt}; on exhaustion
+ *   the gated escalation hands the PR to a human. Below the threshold the PR stays
+ *   ready + `reviewed`, so the next tick re-Lands it (which re-enters this path).
+ *
+ * Whatever happens, the finally disposes the sandbox, removes the issue from the
+ * In-flight set (ownership handed over by the Landing), and frees the Pool slot.
+ * The Manifest/Live-feed phase is `resolve`; the runId is issue-derived, shared
+ * with impl/rev/land.
+ */
+async function dispatchResolver(pr: {
+  prNumber: number;
+  issue: number;
+  branch: string;
+}): Promise<void> {
+  await pool.acquire();
+  const issueRunId = generateRunId(pr.issue);
+  const label = "resolve #" + pr.issue;
+  const lc = lifecycle(label);
+  lc.start();
+  try {
+    await using sandbox = await sandcastle.createSandbox({
+      sandbox: dockerSandbox(),
+      branch: pr.branch,
+      copyToWorktree: ["node_modules"],
+      hooks: {
+        sandbox: {
+          onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
+        },
+      },
+    });
+    lc.sandbox();
+
+    const result = await recordedRun({
+      runId: issueRunId,
+      phase: "resolve",
+      issue: pr.issue,
+      branch: pr.branch,
+      // ADR-0011: record the resolver's parsed Outcome in the Manifest entry.
+      outcome: (r) => parseOutcome(r.stdout),
+      run: () =>
+        sandbox.run({
+          name: "Conflict resolver #" + pr.issue,
+          agent: sandcastle.pi(MODELS.RESOLUTION, piSessions),
+          promptFile: "./.sandcastle/resolve-prompt.md",
+          promptArgs: {
+            ISSUE_NUMBER: String(pr.issue),
+            ISSUE_TITLE: "Issue #" + pr.issue,
+            BRANCH: pr.branch,
+          },
+          logging: observe(label),
+        }),
+    });
+    events.sessionResolved({
+      role: "resolver",
+      issue: pr.issue,
+      branch: pr.branch,
+      status: "ok",
+      commits: result.commits.length,
+    });
+
+    // ADR-0012: the agent judged; the orchestrator mutates. On pass, re-queue the
+    // resolved branch for review; on give-up / no parseable Outcome, spend a
+    // merge-phase (`land`) attempt (the shared counter that bounds the loop).
+    const outcome = parseOutcome(result.stdout);
+    events.resolverOutcome(
+      pr.issue,
+      outcome?.kind ?? "none",
+      outcome?.kind === "give-up" ? outcome.reason : null
+    );
+    if (outcome?.kind === "pass") {
+      await requeueResolvedPr(pr, ghRunner);
+      events.resolverRequeued(pr.issue);
+    } else {
+      const reason =
+        outcome?.kind === "give-up" ? outcome.reason : "the resolver produced no parseable Outcome";
+      await recordFailedAttempt(
+        { kind: "pr", prNumber: pr.prNumber, gated: true },
+        "land",
+        pr.issue,
+        reason
+      );
+    }
+  } catch (err) {
+    events.sessionResolved({
+      role: "resolver",
+      issue: pr.issue,
+      branch: pr.branch,
+      status: "failed",
+      commits: 0,
+      error: errorMessage(err),
+    });
+    // A CRASHED resolver is a failed merge-phase attempt (#98) — same PR-shaped,
+    // gated:true escalation on exhaustion as the give-up / no-Outcome case.
+    await recordFailedAttempt(
+      { kind: "pr", prNumber: pr.prNumber, gated: true },
+      "land",
+      pr.issue,
+      errorMessage(err)
     );
   } finally {
     lc.done();

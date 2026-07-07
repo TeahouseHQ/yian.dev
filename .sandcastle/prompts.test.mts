@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
  *   The test below pins that the prompt file no longer exists.
  */
 const reviewPrompt = readFileSync(new URL("./review-prompt.md", import.meta.url), "utf8");
+const resolvePrompt = readFileSync(new URL("./resolve-prompt.md", import.meta.url), "utf8");
 
 describe("review-prompt.md — Outcome contract (ADR-0011)", () => {
   it("instructs a pass verdict via the <outcome>pass</outcome> tag", () => {
@@ -55,5 +56,41 @@ describe("review-prompt.md — Outcome contract (ADR-0011)", () => {
 describe("merge-prompt.md — deleted for the agent-free Landing (ADR-0012)", () => {
   it("no longer exists: the merge phase is scripted orchestrator code, not a prompt", () => {
     expect(existsSync(new URL("./merge-prompt.md", import.meta.url))).toBe(false);
+  });
+});
+
+describe("resolve-prompt.md — Conflict resolver (ADR-0012, #101)", () => {
+  it("instructs merging origin/main INTO the PR branch (not the other direction)", () => {
+    expect(resolvePrompt).toMatch(/git merge origin\/main/);
+  });
+
+  it("instructs pushing the resolved branch back to the PR", () => {
+    expect(resolvePrompt).toMatch(/git push/);
+  });
+
+  it("instructs the resolver to fix until the suite is green (typecheck + test)", () => {
+    expect(resolvePrompt).toMatch(/pnpm typecheck/);
+    expect(resolvePrompt).toMatch(/pnpm test/);
+  });
+
+  it("reports a pass verdict via the <outcome>pass</outcome> tag", () => {
+    expect(resolvePrompt).toMatch(/<outcome>pass<\/outcome>/);
+  });
+
+  it("reports a give-up verdict with a one-line reason via the outcome tag", () => {
+    expect(resolvePrompt).toMatch(/<outcome>give-up: .*<\/outcome>/);
+  });
+
+  it("contains no dispatch-controlling gh mutations — the orchestrator owns those (ADR-0011)", () => {
+    expect(resolvePrompt).not.toMatch(/--add-label/);
+    expect(resolvePrompt).not.toMatch(/--remove-label/);
+    expect(resolvePrompt).not.toMatch(/gh label create/);
+    expect(resolvePrompt).not.toMatch(/gh pr ready/);
+    expect(resolvePrompt).not.toMatch(/gh pr merge/);
+  });
+
+  it("does not tell the agent to touch the reviewed / ready-for-human labels", () => {
+    expect(resolvePrompt).not.toMatch(/ready-for-human/);
+    expect(resolvePrompt).not.toMatch(/`reviewed`/);
   });
 });

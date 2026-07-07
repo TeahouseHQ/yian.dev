@@ -25,6 +25,7 @@ import {
   pickImplementers,
   pickPrs,
   planCacheKey,
+  requeueResolvedPr,
   resolvePlanEmit,
   reviewerGiveUpComment,
   shouldQueryBuckets,
@@ -587,6 +588,33 @@ describe("reviewerGiveUpComment", () => {
     const body = reviewerGiveUpComment("missing dependency");
     expect(body).toContain("missing dependency");
     expect(body).toMatch(/out of all Dispatch buckets; a human owns it/i);
+  });
+});
+
+// ---- #101 — Conflict resolver PASS re-queue transition (ADR-0012) ----------
+//
+// A resolver PASS is NOT a landing and NOT an escalation: the resolved branch
+// must be re-reviewed before it can land again (ADR-0012). `requeueResolvedPr`
+// strips the `reviewed` gate and reverts the PR to draft so it re-enters the
+// ready-for-review bucket. The terminal-label-first ordering rule does not apply
+// here (no terminal label is added) — this is a re-queue, not a give-up. A
+// resolver give-up / missing Outcome is NOT handled here; it spends a merge-phase
+// Retry-budget attempt in the orchestrator (the shared `land` counter).
+describe("requeueResolvedPr", () => {
+  it("strips the reviewed gate and reverts the PR to draft (re-queue for review)", async () => {
+    const gh = mockGh();
+    await requeueResolvedPr({ prNumber: 7 }, gh);
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /pr edit 7 --remove-label reviewed/.test(s))).toBe(true);
+    expect(calls.some((s) => /pr ready 7 --undo/.test(s))).toBe(true);
+  });
+
+  it("is a re-queue, not an escalation: never touches ready-for-human and never re-adds reviewed", async () => {
+    const gh = mockGh();
+    await requeueResolvedPr({ prNumber: 7 }, gh);
+    const calls = gh.calls.map((c) => c.join(" "));
+    expect(calls.some((s) => /ready-for-human/.test(s))).toBe(false);
+    expect(calls.some((s) => /--add-label reviewed/.test(s))).toBe(false);
   });
 });
 

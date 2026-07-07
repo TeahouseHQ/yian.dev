@@ -38,7 +38,7 @@ export type EventFormat = "prose" | "ndjson";
  *  every renderer speaks (see {@link ROLE_LABELS}). The merge phase is NOT here:
  *  the Landing is agent-free (ADR-0012) and flows through its own `landing-*`
  *  events, not the Session-shaped `dispatch` / `session-resolved` ones. */
-export type OrchestratorRole = "implementer" | "reviewer";
+export type OrchestratorRole = "implementer" | "reviewer" | "resolver";
 
 /** Shared fields carried by every event. The NDJSON renderer keeps `ts`. */
 interface BaseEvent {
@@ -162,6 +162,25 @@ interface ReviewTransitionEvent extends BaseEvent {
   readonly transition: "gate" | "give-up";
 }
 
+/** The orchestrator parsed a Conflict-resolver Session's Outcome (ADR-0012):
+ *  `pass` (branch resolved + pushed), `give-up` (with its one-line `reason`), or
+ *  `none` when the Session produced no parseable Outcome tag. give-up / none each
+ *  spend a merge-phase Retry-budget attempt (the shared `land` counter). */
+interface ResolverOutcomeEvent extends BaseEvent {
+  readonly type: "resolver-outcome";
+  readonly issue: number;
+  readonly outcome: "pass" | "give-up" | "none";
+  readonly reason: string | null;
+}
+
+/** The orchestrator applied a resolver PASS re-queue (ADR-0012): it stripped the
+ *  `reviewed` gate and reverted the PR to draft, so the resolved branch re-enters
+ *  the ready-for-review bucket. A re-queue, NOT an escalation. */
+interface ResolverRequeuedEvent extends BaseEvent {
+  readonly type: "resolver-requeued";
+  readonly issue: number;
+}
+
 /** A Landing (the agent-free merge phase, ADR-0012) began: it took a Pool slot
  *  and started its sandbox lifecycle for a ready + `reviewed` PR. Not a Session
  *  (`dispatch`) — a Landing runs no agent. */
@@ -182,8 +201,9 @@ interface LandingLandedEvent extends BaseEvent {
 }
 
 /** A Landing failed — a textual `git merge` conflict or a red suite after a clean
- *  merge — so the PR was escalated to `ready-for-human` (ADR-0012, this slice).
- *  `reason` is the one-line failure summary. */
+ *  merge — so the orchestrator spends a merge-phase attempt and dispatches the
+ *  Conflict resolver (or escalates to `ready-for-human` on budget exhaustion)
+ *  (ADR-0012). `reason` is the one-line failure summary. */
 interface LandingFailedEvent extends BaseEvent {
   readonly type: "landing-failed";
   readonly issue: number;
@@ -234,6 +254,8 @@ export type OrchestratorEvent =
   | SessionResolvedEvent
   | ReviewerOutcomeEvent
   | ReviewTransitionEvent
+  | ResolverOutcomeEvent
+  | ResolverRequeuedEvent
   | LandingStartedEvent
   | LandingLandedEvent
   | LandingFailedEvent
@@ -293,6 +315,13 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return event.transition === "gate"
         ? `  → review gate opened for #${event.issue} (reviewed + ready).`
         : `  → #${event.issue} escalated to ready-for-human (Reviewer gave up).`;
+    case "resolver-outcome":
+      if (event.outcome === "pass") return `  ✓ Conflict resolver #${event.issue} reported pass.`;
+      if (event.outcome === "give-up")
+        return `  ⚠ Conflict resolver #${event.issue} gave up: ${event.reason}`;
+      return `  ⚠ Conflict resolver #${event.issue} reported no parseable Outcome — no state change.`;
+    case "resolver-requeued":
+      return `  → #${event.issue} resolved — reverted to draft for re-review (reviewed stripped).`;
     case "landing-started":
       return `  → landing PR #${event.pr} (issue #${event.issue}) → ${event.branch}`;
     case "landing-landed":
@@ -315,6 +344,7 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
 const ROLE_LABELS: Record<OrchestratorRole, { readonly word: string; readonly abbr: string }> = {
   implementer: { word: "Implementer", abbr: "impl" },
   reviewer: { word: "Reviewer", abbr: "rev" },
+  resolver: { word: "Conflict resolver", abbr: "res" },
 };
 
 /** The capitalized role word for a dispatch line (`Implementer`/`Reviewer`). */
@@ -412,6 +442,13 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return event.transition === "gate"
         ? `→ #${event.issue} gate opened · reviewed + ready`
         : `→ #${event.issue} escalated to ready-for-human`;
+    case "resolver-outcome":
+      if (event.outcome === "give-up")
+        return `⚠ res #${event.issue} outcome · give-up · ${event.reason}`;
+      if (event.outcome === "none") return `⚠ res #${event.issue} outcome · none`;
+      return `✓ res #${event.issue} outcome · pass`;
+    case "resolver-requeued":
+      return `→ #${event.issue} re-queued for review · draft + reviewed stripped`;
     case "landing-started":
       return `▶ landing PR #${event.pr} (#${event.issue})`;
     case "landing-landed":
@@ -456,6 +493,7 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "budget-exhausted":
       return "warn";
     case "reviewer-outcome":
+    case "resolver-outcome":
       // A give-up or no-parseable-Outcome is a soft escalation (warn); a pass is
       // routine progress (normal).
       return event.outcome === "pass" ? "normal" : "warn";
@@ -467,6 +505,7 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "plan-reused":
     case "planner-skipped":
     case "review-transition":
+    case "resolver-requeued":
     case "landing-started":
     case "landing-landed":
       return "normal";
@@ -500,6 +539,8 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "session-resolved": true,
   "reviewer-outcome": true,
   "review-transition": true,
+  "resolver-outcome": true,
+  "resolver-requeued": true,
   "landing-started": true,
   "landing-landed": true,
   "landing-failed": true,
@@ -559,11 +600,15 @@ export interface OrchestratorEvents {
   dispatchImplementer(issue: number, title: string, branch: string): void;
   /** Dispatching a Reviewer for `pr` (issue `issue`, branch `branch`). */
   dispatchReviewer(pr: number, issue: number, branch: string): void;
+  /** Dispatching a Conflict resolver for `pr` (issue `issue`, branch `branch`)
+   *  after a failed Landing (ADR-0012). */
+  dispatchResolver(pr: number, issue: number, branch: string): void;
   /** A Landing began for `pr` (issue `issue`, branch `branch`) — took a Pool slot. */
   landingStarted(pr: number, issue: number, branch: string): void;
   /** A Landing succeeded: the PR merged clean + green (`gh pr merge` ran). */
   landingLanded(pr: number, issue: number, branch: string): void;
-  /** A Landing failed (conflict / red suite), escalated to `ready-for-human`. */
+  /** A Landing failed (conflict / red suite) — spends a merge-phase attempt and
+   *  dispatches the Conflict resolver (or escalates on budget exhaustion). */
   landingFailed(pr: number, issue: number, branch: string, reason: string): void;
   /** The Planner emitted `count` unblocked issues. */
   plannerEmitted(count: number): void;
@@ -597,6 +642,12 @@ export interface OrchestratorEvents {
   /** The applied Reviewer terminal transition: `gate` (reviewed + ready) or
    *  `give-up` (ready-for-human). */
   reviewTransition(issue: number, transition: "gate" | "give-up"): void;
+  /** The Conflict resolver's parsed Outcome (ADR-0012): `pass` / `give-up` (with
+   *  `reason`) / `none` when no parseable Outcome tag was produced. */
+  resolverOutcome(issue: number, outcome: "pass" | "give-up" | "none", reason: string | null): void;
+  /** The applied resolver PASS re-queue: `reviewed` stripped + PR reverted to
+   *  draft so it re-enters the ready-for-review bucket (ADR-0012). */
+  resolverRequeued(issue: number): void;
   /** A Retry-budget attempt failed below the threshold (#98): `attempt` of
    *  `limit` for `issue`+`phase` — no state changed, the item stays in its bucket. */
   attemptFailed(issue: number, phase: string, attempt: number, limit: number): void;
@@ -651,6 +702,8 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       emit({ type: "dispatch", role: "implementer", issue, branch, pr: null, title, ts: stamp() }),
     dispatchReviewer: (pr, issue, branch) =>
       emit({ type: "dispatch", role: "reviewer", issue, branch, pr, title: null, ts: stamp() }),
+    dispatchResolver: (pr, issue, branch) =>
+      emit({ type: "dispatch", role: "resolver", issue, branch, pr, title: null, ts: stamp() }),
     landingStarted: (pr, issue, branch) =>
       emit({ type: "landing-started", pr, issue, branch, ts: stamp() }),
     landingLanded: (pr, issue, branch) =>
@@ -680,6 +733,9 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       emit({ type: "reviewer-outcome", issue, outcome, reason, ts: stamp() }),
     reviewTransition: (issue, transition) =>
       emit({ type: "review-transition", issue, transition, ts: stamp() }),
+    resolverOutcome: (issue, outcome, reason) =>
+      emit({ type: "resolver-outcome", issue, outcome, reason, ts: stamp() }),
+    resolverRequeued: (issue) => emit({ type: "resolver-requeued", issue, ts: stamp() }),
     attemptFailed: (issue, phase, attempt, limit) =>
       emit({ type: "attempt-failed", issue, phase, attempt, limit, ts: stamp() }),
     budgetExhausted: (issue, phase, attempts) =>

@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sandcastle:build-image": "sandcastle docker build-image",
-    "sandcastle": "sandcastle docker build-image && tsx .sandcastle/main.mts",
+    "sandcastle": "sandcastle docker build-image && tsx .sandcastle/run.mts",
     "sandcastle:browse": "tsx .sandcastle/session-browser.tsx",
     "sandcastle:cockpit": "tsx .sandcastle/cockpit.tsx",
     "sandcastle:prune": "tsx .sandcastle/prune.mts",

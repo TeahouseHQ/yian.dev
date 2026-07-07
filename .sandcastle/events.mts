@@ -234,6 +234,25 @@ interface BudgetExhaustedEvent extends BaseEvent {
   readonly attempts: number;
 }
 
+/** The orchestrator's own code changed on the freshly-fetched `origin/main`, so
+ *  it is **draining** to self-restart on the new code (ADR-0013, #102): it stops
+ *  dispatching and lets `inflight` in-flight Session(s) finish before exiting.
+ *  `commit` is the short `origin/main` SHA the process will restart on. */
+interface DrainStartedEvent extends BaseEvent {
+  readonly type: "drain-started";
+  readonly commit: string;
+  readonly inflight: number;
+}
+
+/** The self-restart drain finished — the In-flight set emptied — so the
+ *  orchestrator is exiting with {@link DRAIN_EXIT_CODE} for the supervisor /
+ *  headless wrapper to respawn it on the new code (ADR-0013, #102). `commit` is
+ *  the short `origin/main` SHA it restarts on. */
+interface DrainCompleteEvent extends BaseEvent {
+  readonly type: "drain-complete";
+  readonly commit: string;
+}
+
 /**
  * The discriminated union of every orchestrator event. `type` is the single
  * discriminator the renderers switch on; the contract the Cockpit consumes.
@@ -260,7 +279,9 @@ export type OrchestratorEvent =
   | LandingLandedEvent
   | LandingFailedEvent
   | AttemptFailedEvent
-  | BudgetExhaustedEvent;
+  | BudgetExhaustedEvent
+  | DrainStartedEvent
+  | DrainCompleteEvent;
 
 /** Which stdout stream a prose-rendered event belongs on (preserves the
  *  existing stdout/stderr split so headless output is unchanged). */
@@ -332,6 +353,10 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return `  ⚠ #${event.issue} ${event.phase} attempt ${event.attempt}/${event.limit} failed — retrying.`;
     case "budget-exhausted":
       return `  ⚠ #${event.issue} ${event.phase} Retry budget exhausted after ${event.attempts} attempts — escalated to ready-for-human.`;
+    case "drain-started":
+      return `  ⟳ orchestrator code changed on origin/main (${event.commit}) — draining ${event.inflight} in-flight Session(s) before restart.`;
+    case "drain-complete":
+      return `  ⟳ drain complete — exiting to restart on origin/main (${event.commit}).`;
   }
 }
 
@@ -459,6 +484,10 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return `⚠ #${event.issue} ${event.phase} attempt ${event.attempt}/${event.limit} failed`;
     case "budget-exhausted":
       return `⚠ #${event.issue} ${event.phase} budget exhausted · ${event.attempts} attempts · escalated to ready-for-human`;
+    case "drain-started":
+      return `⟳ code changed (${event.commit}) · draining ${event.inflight} in-flight · will restart`;
+    case "drain-complete":
+      return `⟳ drain complete · restarting on ${event.commit}`;
     default: {
       // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
       // line here is a compile error, so the Live log can never silently omit one.
@@ -491,6 +520,10 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "planner-no-plan":
     case "attempt-failed":
     case "budget-exhausted":
+    // The self-restart drain is benign by design (ADR-0013), but a notable state
+    // transition the Live tab should surface — warn (yellow), not a failure.
+    case "drain-started":
+    case "drain-complete":
       return "warn";
     case "reviewer-outcome":
     case "resolver-outcome":
@@ -546,6 +579,8 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "landing-failed": true,
   "attempt-failed": true,
   "budget-exhausted": true,
+  "drain-started": true,
+  "drain-complete": true,
 };
 
 /** Every `type` discriminator the orchestrator can emit, derived from the union
@@ -654,6 +689,12 @@ export interface OrchestratorEvents {
   /** The Retry budget for `issue`+`phase` was exhausted after `attempts` failed
    *  attempts — the item was escalated to `ready-for-human` (#98). */
   budgetExhausted(issue: number, phase: string, attempts: number): void;
+  /** The orchestrator's own code changed on origin/main — draining `inflight`
+   *  Session(s) before self-restarting on `commit` (ADR-0013, #102). */
+  drainStarted(commit: string, inflight: number): void;
+  /** The self-restart drain finished (In-flight emptied) — exiting to restart on
+   *  `commit` (ADR-0013, #102). */
+  drainComplete(commit: string): void;
 }
 
 /** Options for {@link createEvents}; every dependency is injectable for tests. */
@@ -740,5 +781,8 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
       emit({ type: "attempt-failed", issue, phase, attempt, limit, ts: stamp() }),
     budgetExhausted: (issue, phase, attempts) =>
       emit({ type: "budget-exhausted", issue, phase, attempts, ts: stamp() }),
+    drainStarted: (commit, inflight) =>
+      emit({ type: "drain-started", commit, inflight, ts: stamp() }),
+    drainComplete: (commit) => emit({ type: "drain-complete", commit, ts: stamp() }),
   };
 }

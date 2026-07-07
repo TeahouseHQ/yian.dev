@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   BASE_BRANCH,
+  DRAIN_EXIT_CODE,
   NOOP_IMPLEMENTER_COMMENT,
   POOL_SIZE,
   POLL_INTERVAL_MS,
   RETRY_BUDGET_N,
   budgetExhaustedComment,
+  orchestratorCodeChanged,
+  shouldRestart,
   createInflight,
   createRetryBudget,
   escalateBudgetExhausted,
@@ -1001,6 +1004,68 @@ describe("landingSandboxSpec — validate the merge against origin/main (ADR-001
   });
 });
 
+describe("self-restart drain decision (ADR-0013, #102)", () => {
+  describe("orchestratorCodeChanged", () => {
+    it("triggers on a changed orchestrator source file", () => {
+      // The orchestrator's own .mts/.tsx code is loaded once at process start, so
+      // a fetched origin/main commit that changes it makes the running process
+      // stale — it must drain and restart on the new code.
+      expect(orchestratorCodeChanged([".sandcastle/main.mts"])).toBe(true);
+      expect(orchestratorCodeChanged([".sandcastle/dispatch.mts"])).toBe(true);
+      expect(orchestratorCodeChanged([".sandcastle/cockpit.tsx"])).toBe(true);
+      expect(orchestratorCodeChanged([".sandcastle/tsconfig.json"])).toBe(false);
+    });
+
+    it("ignores prompt changes — prompts are read per-Session from worktrees", () => {
+      // A prompt (.md) change is picked up by the next Session from its branch
+      // worktree; it does NOT stale the running process, so it must not restart.
+      expect(orchestratorCodeChanged([".sandcastle/plan-prompt.md"])).toBe(false);
+      expect(orchestratorCodeChanged([".sandcastle/review-prompt.md"])).toBe(false);
+    });
+
+    it("ignores test files — a test-only commit never wedges the running loop", () => {
+      expect(orchestratorCodeChanged([".sandcastle/dispatch.test.mts"])).toBe(false);
+      expect(orchestratorCodeChanged([".sandcastle/cockpit-core.test.mts"])).toBe(false);
+    });
+
+    it("ignores unrelated site / product / docs code", () => {
+      // Sessions pick up fresh product code via origin/main-based worktrees, so
+      // only the orchestrator process itself goes stale (ADR-0013).
+      expect(orchestratorCodeChanged(["app/home/page.tsx"])).toBe(false);
+      expect(orchestratorCodeChanged(["lib/gameCatalog.ts"])).toBe(false);
+      expect(orchestratorCodeChanged(["docs/adr/0013-origin-tracking.md"])).toBe(false);
+      expect(orchestratorCodeChanged(["package.json"])).toBe(false);
+    });
+
+    it("triggers when any one path in a mixed commit is orchestrator code", () => {
+      expect(orchestratorCodeChanged(["app/home/page.tsx", ".sandcastle/events.mts"])).toBe(true);
+    });
+
+    it("does not trigger on an empty change set (SHA unmoved / no diff)", () => {
+      expect(orchestratorCodeChanged([])).toBe(false);
+    });
+  });
+
+  describe("DRAIN_EXIT_CODE / shouldRestart", () => {
+    it("is a distinct non-zero code, separable from clean exit and crashes", () => {
+      // The restart signal must not collide with a clean exit (0), a generic
+      // crash (1), or a SIGINT (130) — the supervisor and headless wrapper key
+      // on exactly this code to decide auto-restart vs. stop.
+      expect(DRAIN_EXIT_CODE).not.toBe(0);
+      expect(DRAIN_EXIT_CODE).not.toBe(1);
+      expect(DRAIN_EXIT_CODE).not.toBe(130);
+    });
+
+    it("shouldRestart is true only for the drain exit code", () => {
+      expect(shouldRestart(DRAIN_EXIT_CODE)).toBe(true);
+      expect(shouldRestart(0)).toBe(false);
+      expect(shouldRestart(1)).toBe(false);
+      expect(shouldRestart(130)).toBe(false);
+      expect(shouldRestart(null)).toBe(false);
+    });
+  });
+});
+
 const mainSource = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
 
 describe("main.mts — origin-tracking (ADR-0013, #100)", () => {
@@ -1032,14 +1097,56 @@ describe("main.mts — origin-tracking (ADR-0013, #100)", () => {
   });
 });
 
+describe("main.mts — self-restart on upgrade (ADR-0013, #102)", () => {
+  it("uses the pure orchestratorCodeChanged decision on the fetched diff", () => {
+    // The drain trigger is the pure decision from dispatch.mts, not ad-hoc string
+    // matching inlined in the loop.
+    expect(mainSource).toMatch(/orchestratorCodeChanged\(/);
+  });
+
+  it("reads origin/main and diffs it by name to find what a fetch changed", () => {
+    // Detection compares the last-seen origin/main SHA to the freshly-fetched one
+    // and asks git which paths moved — never touching local main or the worktree.
+    expect(mainSource).toMatch(/"rev-parse",\s*"origin\/main"/);
+    expect(mainSource).toMatch(/"diff",\s*"--name-only"/);
+  });
+
+  it("detects the upgrade after the fetch and before dispatching new work", () => {
+    // The check must run on the fresh refs (post-fetch) and gate dispatch, so no
+    // new work starts on stale code the tick an upgrade lands.
+    const fetchIdx = mainSource.indexOf("await fetchOrigin();");
+    const detectIdx = mainSource.indexOf("detectOrchestratorUpgrade(lastMainSha)");
+    const dispatchIdx = mainSource.indexOf("[readyForAgent, prs] = await Promise.all(");
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(detectIdx).toBeGreaterThan(fetchIdx);
+    expect(detectIdx).toBeLessThan(dispatchIdx);
+  });
+
+  it("begins the drain by flagging it and emitting drainStarted", () => {
+    // Flipping `draining` is what stops future ticks from dispatching; the event
+    // makes the drain visible in the Live feed (ADR-0013).
+    expect(mainSource).toMatch(/draining = true/);
+    expect(mainSource).toMatch(/events\.drainStarted\(/);
+  });
+
+  it("exits with DRAIN_EXIT_CODE once the In-flight set empties, emitting drainComplete", () => {
+    // In-flight Sessions run to completion (drain), THEN the process exits with the
+    // distinct restart code the supervisor / headless wrapper key on.
+    expect(mainSource).toMatch(/events\.drainComplete\(/);
+    expect(mainSource).toMatch(/process\.exit\(DRAIN_EXIT_CODE\)/);
+    expect(mainSource).toMatch(/draining && inflight\.size\(\) === 0/);
+  });
+});
+
 describe("main.mts — persistent shared-pool orchestrator (ADR-0006)", () => {
   it("drops the discrete MAX_ITERATIONS for-loop", () => {
     expect(mainSource).not.toMatch(/MAX_ITERATIONS/);
     expect(mainSource).not.toMatch(/MAX_PARALLEL/);
   });
 
-  it("runs as a persistent loop (never self-exits)", () => {
-    // A persistent Poll tick loop, not a bounded `for (let iteration ...)`.
+  it("runs as a persistent loop (self-exits only to self-restart)", () => {
+    // A persistent Poll tick loop, not a bounded `for (let iteration ...)`. It
+    // self-exits only for the ADR-0013 self-restart drain (DRAIN_EXIT_CODE).
     expect(mainSource).toMatch(/for\s*\(\s*;;\s*\)|while\s*\(\s*true\s*\)/);
   });
 
@@ -1256,5 +1363,38 @@ describe("main.mts — Retry budget (ADR-0011, #98)", () => {
     expect(clearIdx).toBeGreaterThan(-1);
     expect(escalateIdx).toBeGreaterThan(-1);
     expect(clearIdx).toBeLessThan(escalateIdx);
+  });
+});
+
+describe("run.mts — headless restart wrapper (ADR-0013, #102)", () => {
+  // Read lazily so a missing wrapper fails only these tests, not the whole file.
+  const runSource = (): string => readFileSync(new URL("./run.mts", import.meta.url), "utf8");
+
+  it("spawns the orchestrator entrypoint (main.mts)", () => {
+    expect(runSource()).toMatch(/main\.mts/);
+  });
+
+  it("restarts only via the shared shouldRestart contract, not a hard-coded number", () => {
+    // The wrapper and the Cockpit supervisor share one restart predicate so the
+    // headless and supervised restart behaviours can never drift.
+    expect(runSource()).toMatch(/shouldRestart\(/);
+    expect(runSource()).toMatch(/from\s+["']\.\/dispatch\.mts["']/);
+  });
+
+  it("exits with the child's own code on any non-restart exit (stop on anything else)", () => {
+    // Only a drain code restarts; a clean stop or a crash leaves the wrapper for
+    // good, propagating the child's exit code.
+    expect(runSource()).toMatch(/process\.exit\(/);
+  });
+});
+
+describe("package.json — headless sandcastle restarts on drain (ADR-0013, #102)", () => {
+  it("routes the sandcastle script through the restart wrapper", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts.sandcastle).toMatch(/run\.mts/);
+    // The one-time image build still precedes the loop (the wrapper only loops main.mts).
+    expect(pkg.scripts.sandcastle).toMatch(/docker build-image/);
   });
 });

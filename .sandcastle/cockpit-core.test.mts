@@ -20,6 +20,7 @@ import {
   type InputKey,
   type OrchestratorHandlers,
 } from "./cockpit-core.mts";
+import { DRAIN_EXIT_CODE } from "./dispatch.mts";
 import { formatEventLog, type OrchestratorEvent } from "./events.mts";
 import type { PrunePlan } from "./prune-plan.mts";
 
@@ -576,6 +577,29 @@ describe("describeChildExit", () => {
       status: "stopped",
       message: "orchestrator exited",
     });
+  });
+
+  it("classifies the drain exit code as restarting (auto-respawn), not a crash", () => {
+    // A self-restart drain exits with DRAIN_EXIT_CODE (ADR-0013, #102). The
+    // supervisor must recognize it as `restarting` so it auto-respawns on the new
+    // code — NOT `crashed` (which is surfaced but never respawned).
+    expect(
+      describeChildExit({ code: DRAIN_EXIT_CODE, signal: null, stoppedByUser: false })
+    ).toEqual({
+      status: "restarting",
+      message: `orchestrator restarting on new code (drain exit code ${DRAIN_EXIT_CODE})`,
+    });
+  });
+
+  it("does not restart when the user's Stop coincides with the drain code", () => {
+    // A user Stop wins: they asked it to stop, so even a drain-coded exit must not
+    // auto-respawn behind their back.
+    expect(describeChildExit({ code: DRAIN_EXIT_CODE, signal: null, stoppedByUser: true })).toEqual(
+      {
+        status: "stopped",
+        message: "orchestrator stopped",
+      }
+    );
   });
 
   it("distinguishes a forced kill (unresponsive to SIGTERM) from a clean stop", () => {

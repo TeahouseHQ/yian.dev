@@ -28,6 +28,58 @@ export const POLL_INTERVAL_MS = 60_000;
  */
 export const BASE_BRANCH = "origin/main";
 
+/**
+ * The distinct exit code a self-restarting orchestrator exits with after it has
+ * drained (ADR-0013, #102). It must NOT collide with a clean exit (`0`), a
+ * generic crash (`1`), or a signal-derived code (e.g. `130` for SIGINT), because
+ * the Cockpit supervisor and the headless wrapper key on exactly this code to
+ * decide **auto-restart** vs. leave-stopped: a drain code means "the code
+ * upstream changed, respawn on it"; anything else is a stop or a crash. `75` is
+ * `EX_TEMPFAIL` from sysexits.h — "temporary failure, retry" — which reads
+ * exactly right for a benign drain-and-respawn.
+ */
+export const DRAIN_EXIT_CODE = 75;
+
+/**
+ * Whether an exited orchestrator child should be **restarted** rather than left
+ * stopped — the single predicate the supervisor and the headless wrapper share
+ * so the restart contract lives in one place. True only for {@link
+ * DRAIN_EXIT_CODE}; a `null` code (killed by signal) and every other numeric
+ * code are a stop/crash, not a restart. Pure so the contract is unit-testable.
+ */
+export function shouldRestart(code: number | null): boolean {
+  return code === DRAIN_EXIT_CODE;
+}
+
+/**
+ * Decide whether a fetched `origin/main` commit staled the running orchestrator
+ * — i.e. whether any path it changed is the orchestrator's **own code** (ADR-0013,
+ * #102). The orchestrator's `.mts`/`.tsx` code is loaded once at process start,
+ * while prompts are re-read per Session from branch worktrees, so only a change
+ * to the loaded code can wedge the loop (old code driving new prompts). A path
+ * counts as own-code when it is a TypeScript source file under `.sandcastle/`
+ * — **excluding** test files (a test-only commit never wedges the running loop)
+ * and prompt/doc `.md` files (picked up per-Session, not at process start). Every
+ * other path — site/product code, docs, build/config — leaves the process valid,
+ * because Sessions already pick up fresh product code via `origin/main`-based
+ * worktrees; only the orchestrator process itself goes stale (ADR-0013).
+ *
+ * Pure (paths in, boolean out) so the drain trigger is unit-testable without a
+ * live fetch or git diff — `main.mts` supplies the changed-path list from a
+ * `git diff --name-only <old> <new>` against the freshly fetched ref.
+ */
+export function orchestratorCodeChanged(changedPaths: readonly string[]): boolean {
+  return changedPaths.some(isOrchestratorSourcePath);
+}
+
+/** True for a TypeScript source file under `.sandcastle/` that is loaded into the
+ *  orchestrator process at start — not a test file, not a prompt/doc. */
+function isOrchestratorSourcePath(path: string): boolean {
+  if (!path.startsWith(".sandcastle/")) return false;
+  if (/\.test\.(mts|ts|tsx)$/.test(path)) return false;
+  return /\.(mts|ts|tsx)$/.test(path);
+}
+
 /** The install+build hook every sandbox runs before its work. Frozen-lockfile
  *  because this repo is pnpm-only — a plain install would resolve a competing
  *  lockfile (see main.mts). */

@@ -5,6 +5,7 @@ import {
   EVENT_TYPES,
   eventSeverity,
   eventStream,
+  formatEventLog,
   formatEventNdjson,
   formatEventProse,
   isKnownEventType,
@@ -663,6 +664,8 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "landing-failed",
     "attempt-failed",
     "budget-exhausted",
+    "drain-started",
+    "drain-complete",
   ];
 
   it("contains exactly every orchestrator event type, no more, no fewer", () => {
@@ -715,6 +718,15 @@ describe("eventSeverity", () => {
     ).toBe("warn");
   });
 
+  it("classifies the self-restart drain as warn (notable but benign)", () => {
+    // The drain/restart is benign by design (ADR-0013) but a notable state
+    // transition the Live tab should surface — warn (yellow), not failure/normal.
+    expect(eventSeverity(evt({ type: "drain-started", commit: "abc1234", inflight: 2 }))).toBe(
+      "warn"
+    );
+    expect(eventSeverity(evt({ type: "drain-complete", commit: "abc1234" }))).toBe("warn");
+  });
+
   it("classifies progress events (incl. a successful resolution) as normal", () => {
     expect(eventSeverity(evt({ type: "tick", free: 1, poolSize: 10, inflight: 0 }))).toBe("normal");
     expect(eventSeverity(evt({ type: "planner-emitted", count: 1 }))).toBe("normal");
@@ -737,5 +749,66 @@ describe("eventSeverity", () => {
         })
       )
     ).toBe("normal");
+  });
+});
+
+// ── drain events: the Live feed shows the self-restart (ADR-0013, #102) ──────
+
+describe("drain events", () => {
+  it("prose renders the drain start and completion on stdout", () => {
+    // The Live feed shows the drain throughout: which upstream commit staled the
+    // process, how many Sessions must finish, then the exit-to-restart.
+    expect(formatEventProse(evt({ type: "drain-started", commit: "abc1234", inflight: 2 }))).toBe(
+      "  ⟳ orchestrator code changed on origin/main (abc1234) — draining 2 in-flight Session(s) before restart."
+    );
+    expect(formatEventProse(evt({ type: "drain-complete", commit: "abc1234" }))).toBe(
+      "  ⟳ drain complete — exiting to restart on origin/main (abc1234)."
+    );
+    expect(eventStream(evt({ type: "drain-started", commit: "abc1234", inflight: 2 }))).toBe(
+      "stdout"
+    );
+    expect(eventStream(evt({ type: "drain-complete", commit: "abc1234" }))).toBe("stdout");
+  });
+
+  it("renders one compact Cockpit log line per drain event", () => {
+    expect(formatEventLog(evt({ type: "drain-started", commit: "abc1234", inflight: 2 }))).toBe(
+      "⟳ code changed (abc1234) · draining 2 in-flight · will restart"
+    );
+    expect(formatEventLog(evt({ type: "drain-complete", commit: "abc1234" }))).toBe(
+      "⟳ drain complete · restarting on abc1234"
+    );
+  });
+
+  it("the emitter stamps and routes both drain events", () => {
+    const out = vi.fn();
+    const err = vi.fn();
+    const events = createEvents({
+      format: "prose",
+      now: () => new Date("2026-07-04T10:00:00.000Z"),
+      out,
+      err,
+    });
+    events.drainStarted("abc1234", 2);
+    events.drainComplete("abc1234");
+    expect(err).not.toHaveBeenCalled();
+    expect(out).toHaveBeenNthCalledWith(
+      1,
+      "  ⟳ orchestrator code changed on origin/main (abc1234) — draining 2 in-flight Session(s) before restart."
+    );
+    expect(out).toHaveBeenNthCalledWith(
+      2,
+      "  ⟳ drain complete — exiting to restart on origin/main (abc1234)."
+    );
+  });
+
+  it("ndjson carries the discriminator + payload for both drain events", () => {
+    const started = JSON.parse(
+      formatEventNdjson(evt({ type: "drain-started", commit: "abc1234", inflight: 2 }))
+    ) as Record<string, unknown>;
+    expect(started).toMatchObject({ type: "drain-started", commit: "abc1234", inflight: 2 });
+    const done = JSON.parse(
+      formatEventNdjson(evt({ type: "drain-complete", commit: "abc1234" }))
+    ) as Record<string, unknown>;
+    expect(done).toMatchObject({ type: "drain-complete", commit: "abc1234" });
   });
 });

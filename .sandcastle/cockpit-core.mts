@@ -20,6 +20,7 @@
  * it into view state; it renders no event strings of its own.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { DRAIN_EXIT_CODE } from "./dispatch.mts";
 import {
   isKnownEventType,
   roleAbbr,
@@ -150,9 +151,10 @@ export function appendLogLine<T>(lines: readonly T[], entry: T, cap: number): T[
 
 /** How a supervised orchestrator child ended, once it is gone. `stopped` is a
  *  clean end (a user Stop, or a rare clean exit); `crashed` is surfaced in the
- *  UI as an error without taking the Cockpit down (ADR-0008). */
+ *  UI as an error without taking the Cockpit down (ADR-0008); `restarting` is a
+ *  self-restart drain (ADR-0013) the supervisor auto-respawns from. */
 export interface ChildExit {
-  readonly status: "stopped" | "crashed";
+  readonly status: "stopped" | "crashed" | "restarting";
   /** A short human line for the status bar / event log. */
   readonly message: string;
 }
@@ -171,11 +173,15 @@ export interface ChildExitInput {
 }
 
 /**
- * Classify a departed orchestrator child as a clean Stop or a crash to surface.
- * The orchestrator loop never self-exits, so any exit the Cockpit did NOT ask
- * for is unexpected: a non-zero code or an unexpected signal is a crash (shown
- * in the UI without killing the Cockpit, per ADR-0008), while a user-requested
- * Stop — or the degenerate clean `exit(0)` — is just "stopped". Pure so the
+ * Classify a departed orchestrator child as a clean Stop, a self-restart drain,
+ * or a crash to surface. A user-requested Stop — or the degenerate clean
+ * `exit(0)` — is "stopped". Otherwise the orchestrator loop self-exits only to
+ * self-restart on upgraded code, which it signals with {@link DRAIN_EXIT_CODE}
+ * (ADR-0013): that is "restarting", and the supervisor auto-respawns it. Any
+ * OTHER unexpected exit — a different non-zero code or an unexpected signal — is
+ * a crash, shown in the UI without killing the Cockpit (ADR-0008) and never
+ * auto-respawned. The user-Stop check comes first so a Stop that happens to
+ * coincide with the drain code never respawns behind the user's back. Pure so the
  * classification is unit-testable without spawning a process.
  */
 export function describeChildExit(input: ChildExitInput): ChildExit {
@@ -183,6 +189,12 @@ export function describeChildExit(input: ChildExitInput): ChildExit {
     return input.forced
       ? { status: "stopped", message: "orchestrator force-killed (ignored stop)" }
       : { status: "stopped", message: "orchestrator stopped" };
+  }
+  if (input.code === DRAIN_EXIT_CODE) {
+    return {
+      status: "restarting",
+      message: `orchestrator restarting on new code (drain exit code ${DRAIN_EXIT_CODE})`,
+    };
   }
   if (input.code !== null && input.code !== 0) {
     return { status: "crashed", message: `orchestrator crashed (exit code ${input.code})` };

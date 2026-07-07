@@ -6,6 +6,7 @@ import {
   createInflight,
   createPool,
   createRetryBudget,
+  DRAIN_EXIT_CODE,
   escalateBudgetExhausted,
   filterReadyForAgent,
   filterReadyForMerge,
@@ -16,6 +17,7 @@ import {
   isBudgetExhausted,
   issueFromBranch,
   landingSandboxSpec,
+  orchestratorCodeChanged,
   parseOutcome,
   pickImplementers,
   pickPrs,
@@ -160,6 +162,61 @@ async function fetchOrigin(): Promise<{ ok: true } | { ok: false; error: string 
   } catch (err) {
     return { ok: false, error: errorMessage(err) };
   }
+}
+
+/**
+ * The current `origin/main` commit SHA on the host (the remote-tracking ref
+ * {@link fetchOrigin} refreshes), or `null` when it can't be read. Seeded once at
+ * startup and re-read after each fetch: a change means the fetch advanced the ref
+ * (ADR-0013, #102). Read-only — like the bare fetch, it never touches local main.
+ */
+async function originMainSha(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "origin/main"], {
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Detect whether a fetch advanced `origin/main` onto a commit that changed the
+ * orchestrator's OWN code — the self-restart drain trigger (ADR-0013, #102). The
+ * orchestrator's `.mts`/`.tsx` code is loaded once at process start, so a change
+ * to it staled the running process (old code driving new prompts, which wedges
+ * the loop). Compares `lastSha` to the freshly-fetched SHA and asks git which
+ * paths moved (`git diff --name-only`), then applies the pure
+ * {@link orchestratorCodeChanged} classifier. Returns the new SHA (so the caller
+ * advances its last-seen marker even for a benign product-only change) and
+ * whether it staled us; `null` when the ref is unreadable or unchanged. A first
+ * detection with no `lastSha` records the ref without restarting (nothing to
+ * diff against).
+ */
+async function detectOrchestratorUpgrade(
+  lastSha: string | null
+): Promise<{ sha: string; shortSha: string; codeChanged: boolean } | null> {
+  const newSha = await originMainSha();
+  if (newSha === null || newSha === lastSha) return null;
+  let codeChanged = false;
+  if (lastSha !== null) {
+    try {
+      const { stdout } = await execFileAsync("git", ["diff", "--name-only", lastSha, newSha], {
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      const paths = stdout
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      codeChanged = orchestratorCodeChanged(paths);
+    } catch {
+      // A diff failure must not restart on a guess — treat as no orchestrator
+      // change; the next fetch re-detects against the now-advanced marker.
+      codeChanged = false;
+    }
+  }
+  return { sha: newSha, shortSha: newSha.slice(0, 7), codeChanged };
 }
 
 /**
@@ -845,11 +902,26 @@ async function runPlanner(): Promise<EmittedIssue[]> {
   return issues;
 }
 
+// Self-restart on upgrade (ADR-0013, #102). The orchestrator's own code is loaded
+// once here at process start, so a later fetch that advances origin/main onto a
+// commit touching that code makes the running process stale. We track the SHA the
+// code was loaded from; when a fetch moves it onto our own code, we DRAIN — stop
+// dispatching, let in-flight Sessions finish — then exit with DRAIN_EXIT_CODE for
+// the supervisor (Cockpit) / headless wrapper to respawn on the new code. Seeded
+// here so the first detected change diffs against startup.
+let lastMainSha = await originMainSha();
+let draining = false;
+let drainCommit = "";
+
 for (;;) {
   const free = pool.free();
   events.tick(free, POOL_SIZE, inflight.size());
 
-  if (!shouldQueryBuckets(free)) {
+  if (draining) {
+    // Draining: dispatch nothing more. In-flight Sessions (fire-and-forget) keep
+    // resolving across ticks; the exit gate at the end of the loop fires the
+    // moment the In-flight set empties.
+  } else if (!shouldQueryBuckets(free)) {
     events.poolFull();
   } else {
     // ADR-0013: fetch origin once per dispatching tick so new branches fork,
@@ -858,8 +930,19 @@ for (;;) {
     // the next tick re-fetches. (Bare fetch: remote-tracking refs only, never the
     // human's local main or working tree.)
     const fetched = await fetchOrigin();
+    // ADR-0013 self-restart: with fresh refs in hand, check whether the fetch
+    // advanced origin/main onto a commit touching our OWN code before dispatching
+    // anything — so no new work starts on stale code the tick an upgrade lands.
+    const upgrade = fetched.ok ? await detectOrchestratorUpgrade(lastMainSha) : null;
+    if (upgrade !== null) lastMainSha = upgrade.sha;
     if (!fetched.ok) {
       events.fetchFailed(fetched.error);
+    } else if (upgrade?.codeChanged) {
+      // Our own code changed upstream — begin the drain. Flipping `draining` stops
+      // every future tick from dispatching; the event surfaces it in the Live feed.
+      draining = true;
+      drainCommit = upgrade.shortSha;
+      events.drainStarted(drainCommit, inflight.size());
     } else {
       // One ready-for-agent issue query + one PR query feeds all three buckets:
       // the PR list is split into ready-for-merge / ready-for-review, and its
@@ -938,6 +1021,18 @@ for (;;) {
         events.plannerSkipped();
       }
     }
+  }
+
+  // ADR-0013 self-restart exit gate: once draining, leave the moment the In-flight
+  // set empties — every dispatched Session has run to completion — exiting with the
+  // distinct DRAIN_EXIT_CODE the supervisor / headless wrapper recognize to respawn
+  // on the new code. Checked here (not only at the top) so a drain that begins with
+  // nothing in flight exits this same tick rather than idling a full interval. The
+  // restart is benign by design: the empty In-flight set is accurate, the Plan
+  // cache re-plans once, and Retry budgets reset (ADR-0006/0010/0011).
+  if (draining && inflight.size() === 0) {
+    events.drainComplete(drainCommit);
+    process.exit(DRAIN_EXIT_CODE);
   }
 
   await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));

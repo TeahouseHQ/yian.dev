@@ -111,8 +111,9 @@ const SESSIONS_WINDOW_LABEL = windowLabelOf(SESSIONS_WINDOW);
 
 /** The Live tab's supervised-child status. Launches `idle`; `running` while a
  *  child is alive; `stopped` after a clean Stop/exit; `crashed` after an
- *  unexpected exit (surfaced, never fatal to the Cockpit). */
-type ChildStatus = "idle" | "running" | "stopped" | "crashed";
+ *  unexpected exit (surfaced, never fatal to the Cockpit); `restarting` briefly
+ *  while a self-restart drain (ADR-0013) respawns the child on new code. */
+type ChildStatus = "idle" | "running" | "stopped" | "crashed" | "restarting";
 
 /** One rendered line in the scrolling event log, with optional colour/dim. */
 interface LogEntry {
@@ -196,6 +197,8 @@ function statusColor(status: ChildStatus): string {
       return "red";
     case "stopped":
       return "yellow";
+    case "restarting":
+      return "cyan";
     case "idle":
       return "gray";
   }
@@ -472,6 +475,10 @@ function Cockpit(): React.ReactElement {
   // the async stdout/exit handlers always see the current child without stale
   // closures and toggling it never triggers a re-render on its own.
   const supervisorRef = useRef<Supervisor | null>(null);
+  // Holds the latest `start` so the exit handler can respawn the child after a
+  // self-restart drain (ADR-0013) without `start` closing over a stale version of
+  // itself. Set from an effect below, once `start` is defined.
+  const startRef = useRef<() => void>(() => {});
   // Guards prune discovery against re-entrancy: the lazy-load effect and the `r`
   // key can both fire while a discovery microtask is already pending.
   const maintLoadingRef = useRef(false);
@@ -550,9 +557,13 @@ function Cockpit(): React.ReactElement {
         setStatus(exitStatus);
         setStatusMessage(message);
         pushLog({
-          text: `${exitStatus === "crashed" ? "✗" : "■"} ${message}`,
-          color: exitStatus === "crashed" ? "red" : "yellow",
+          text: `${exitStatus === "crashed" ? "✗" : exitStatus === "restarting" ? "⟳" : "■"} ${message}`,
+          color: exitStatus === "crashed" ? "red" : exitStatus === "restarting" ? "cyan" : "yellow",
         });
+        // ADR-0013: a self-restart drain auto-respawns the child on the new code —
+        // the supervisor's job, not the human's (an unattended loop must follow
+        // its own upgrades). A `crashed` exit is deliberately NOT respawned.
+        if (exitStatus === "restarting") startRef.current();
       },
       onSpawnError: (message) => {
         supervisorRef.current = null;
@@ -562,6 +573,12 @@ function Cockpit(): React.ReactElement {
       },
     });
   }, [pushLog]);
+
+  // Keep the respawn hook pointing at the latest `start` so the exit handler's
+  // self-restart (ADR-0013) never calls a stale closure.
+  useEffect(() => {
+    startRef.current = start;
+  }, [start]);
 
   /** Stop the running orchestrator child (no-op if none). */
   const stop = useCallback(() => {

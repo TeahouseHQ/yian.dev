@@ -102,6 +102,10 @@ async function recordedRun<R extends RunLike>(args: {
   phase: string;
   issue?: number | null;
   branch?: string | null;
+  /** The concrete model this Session runs on, resolved from the active Model
+   *  profile's map for the phase's role (ADR-0016). Recorded in the Manifest —
+   *  on both the ok and failed paths — so a cost/quality audit is a runId lookup. */
+  resolvedModel: string;
   run: () => Promise<R>;
   /** Extract the Session's structured Outcome from its result for the Manifest
    *  (ADR-0011). Given for the Reviewer (parses its `<outcome>` tag); omitted for
@@ -117,6 +121,7 @@ async function recordedRun<R extends RunLike>(args: {
         phase: args.phase,
         issue: args.issue,
         branch: args.branch,
+        resolvedModel: args.resolvedModel,
         result,
         startedAt,
         endedAt: new Date(),
@@ -135,6 +140,7 @@ async function recordedRun<R extends RunLike>(args: {
         phase: args.phase,
         issue: args.issue,
         branch: args.branch,
+        resolvedModel: args.resolvedModel,
         error,
         session,
         startedAt,
@@ -450,6 +456,7 @@ async function dispatchImplementer(issue: {
       phase: "impl",
       issue: issue.number,
       branch: issue.branch,
+      resolvedModel: activeProfile.models.implementer,
       run: () =>
         sandbox.run({
           name: "Implementer #" + issue.number,
@@ -551,6 +558,7 @@ async function dispatchReviewer(pr: {
       phase: "rev",
       issue: pr.issue,
       branch: pr.branch,
+      resolvedModel: activeProfile.models.reviewer,
       // ADR-0011: record the Reviewer's parsed Outcome in the Manifest entry.
       outcome: (r) => parseOutcome(r.stdout),
       run: () =>
@@ -808,6 +816,7 @@ async function dispatchResolver(pr: {
       phase: "resolve",
       issue: pr.issue,
       branch: pr.branch,
+      resolvedModel: activeProfile.models.resolver,
       // ADR-0011: record the resolver's parsed Outcome in the Manifest entry.
       outcome: (r) => parseOutcome(r.stdout),
       run: () =>
@@ -890,6 +899,7 @@ async function runPlanner(): Promise<EmittedIssue[]> {
   const plan = await recordedRun({
     runId: plannerRunId,
     phase: "planner",
+    resolvedModel: activeProfile.models.planner,
     run: () =>
       sandcastle.run({
         sandbox: dockerSandbox(),

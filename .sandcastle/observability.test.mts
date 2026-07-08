@@ -354,7 +354,25 @@ describe("buildManifestEntry", () => {
       endedAt: "2026-06-28T12:05:00.000Z",
       status: "ok",
       outcome: null,
+      resolvedModel: null,
     });
+  });
+
+  it("records the concrete resolved model the agent Session ran on (#126)", () => {
+    // At dispatch the orchestrator passes the active profile's model for this
+    // role; the durable audit trail records what the Session actually ran on so
+    // a cost/quality attribution is a runId lookup (ADR-0016).
+    const entry = buildManifestEntry({
+      runId: "run-issue-126",
+      phase: "impl",
+      issue: 126,
+      branch: "sandcastle/issue-126",
+      result: okResult(),
+      startedAt: new Date(0),
+      endedAt: new Date(0),
+      resolvedModel: "litellm/glm-5.2",
+    });
+    expect(entry.resolvedModel).toBe("litellm/glm-5.2");
   });
 
   it("records the parsed Outcome when one is supplied (ADR-0011)", () => {
@@ -391,6 +409,8 @@ describe("buildManifestEntry", () => {
     expect(entry.commits).toBe(0);
     expect(entry.outcome).toBeNull();
     expect(entry.status).toBe("ok");
+    // Agent-free: no agent ran, so no model was resolved for it (#126, ADR-0016).
+    expect(entry.resolvedModel).toBeNull();
   });
 
   it("defaults the Outcome to null for phases that report none (impl/planner/land)", () => {
@@ -451,6 +471,7 @@ describe("buildFailedManifestEntry", () => {
       status: "failed",
       error: "boom",
       outcome: null,
+      resolvedModel: null,
     });
   });
 

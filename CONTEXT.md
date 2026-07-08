@@ -33,6 +33,14 @@ _Avoid_: dashboard, launcher, menu.
 The interactive terminal UI (Ink, run via `tsx`) for navigating recent Runs and their Sessions from the Manifest and reading their Transcripts. Mounted both standalone (`sandcastle:browse`) and as the Cockpit's Sessions tab. Local-only, read-once (manual reload), post-hoc — the audit companion to the real-time Live feed. Two-pane: a run→session tree plus a full-screen Transcript pager. Distinct from `render-transcript`, the one-shot scriptable CLI over the same core.
 _Avoid_: viewer, dashboard, monitor.
 
+**Viewport**:
+A panel's visible, height-bounded window onto a longer list, sized to the terminal by **measuring** the rendered region rather than a hand-tuned constant. Content taller than the Viewport is reached by scrolling **within** it, never by overflowing the terminal (the Cockpit owns a full-height alternate-screen canvas — ADR-0015).
+_Avoid_: pane, window, visible area.
+
+**Follow mode**:
+The Live event log's default state of sticking to the newest events (the tail). Scrolling up **pauses** Follow mode so incoming events don't yank the view down; returning to the bottom (`G`/End) re-engages it.
+_Avoid_: tail mode, auto-scroll, stick-to-bottom.
+
 **Run**:
 One issue's **full lifecycle** through the pool — its Implementer and Reviewer Sessions, its Landing, and any Conflict-resolver Sessions — identified by a `runId` derived deterministically from the issue number (mirrors the `sandcastle/issue-N` branch). Auditing everything that happened to an issue is a single `runId` lookup. The Planner is cross-issue and does **not** belong to any issue's Run; its Sessions are recorded per-invocation with no issue binding. Distinct from sandcastle's `run()` API call, which is one agent invocation. Supersedes the old "one outer loop iteration" meaning (ADR-0006).
 _Avoid_: iteration, cycle (a Poll tick is not a Run).
@@ -89,8 +97,12 @@ _Avoid_: MR, change request.
 The orchestration engine to be extracted from `.sandcastle/` into its own repo and npm package (ADR-0014): the orchestrator loop, dispatch logic, events, observability, Cockpit, Session browser, Prune, and the Canonical prompts. Consumed per-repo via manual version bumps; each consumer repo runs its own orchestrator process. Distinct from **TeahouseHQ** (the GitHub org) and from **sandcastle**, which after extraction means only the `@ai-hero/sandcastle` sandbox library underneath.
 _Avoid_: sandcastle (for the engine, post-extraction), the harness.
 
+**Model profile**:
+A named preset of the role→model map — which model each of the four model-bearing roles (Planner, Implementer, Reviewer, Conflict resolver; the agent-free Landing has none) runs on. Two ship: `glm` (all four on glm-5.2) and `mixed` (the default: Implementer on glm-5.2, the rest on Opus 4.8). Chosen with `--profile <name>` on the sandcastle/cockpit commands, transported to the orchestrator as the `SANDCASTLE_PROFILE` env var so it survives a self-restart respawn for free (ADR-0013); an unknown name is a loud startup failure. The Cockpit distinguishes the **running** profile (the live child's) from the **selected** one (`p` cycles it; applied on the next Start, never smuggled in by an auto-restart). The concrete shape the **Repo profile**'s "per-role models" field resolves to (ADR-0016).
+_Avoid_: profile (bare — collides with Repo/Host profile), model set, roster.
+
 **Repo profile**:
-The typed per-repo config file that is a consumer repo's entire behavioral surface toward Teahouse: install/build hook, verify commands, base branch, per-role models, pool size (small default, 3–4), branch prefix, and the path to the repo-owned `CODING_STANDARDS.md`. Schema-versioned — an engine reading a profile from an incompatible schema version fails loudly at startup, never reinterprets (ADR-0014).
+The typed per-repo config file that is a consumer repo's entire behavioral surface toward Teahouse: install/build hook, verify commands, base branch, per-role models (a catalog of **Model profile**s plus the default selection), pool size (small default, 3–4), branch prefix, and the path to the repo-owned `CODING_STANDARDS.md`. Schema-versioned — an engine reading a profile from an incompatible schema version fails loudly at startup, never reinterprets (ADR-0014).
 _Avoid_: repo config, settings, sandcastle.config.
 
 **Host profile**:

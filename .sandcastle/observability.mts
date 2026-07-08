@@ -309,6 +309,12 @@ export interface ManifestEntry {
    *  parseable Outcome (a failed attempt against the Retry budget). Lets the
    *  Session browser show pass/give-up/no-outcome at a glance. */
   readonly outcome: ParsedOutcome | null;
+  /** The concrete model this Session actually ran on (e.g. `litellm/glm-5.2`,
+   *  `claude-opus-4-8`), resolved at dispatch from the active Model profile's map
+   *  for the phase's role (ADR-0016). Null for an agent-free Landing (ADR-0012),
+   *  which runs no agent and has no model. The profile name is reconstructable;
+   *  the resolved model is the fact worth persisting for cost/quality audits. */
+  readonly resolvedModel: string | null;
   /** Present only on failed entries: the error message. */
   readonly error?: string;
 }
@@ -321,6 +327,9 @@ interface ManifestEntryArgs {
   readonly branch?: string | null;
   readonly startedAt: Date;
   readonly endedAt: Date;
+  /** The concrete model resolved for this Session's role at dispatch (ADR-0016),
+   *  or null/omitted for an agent-free Landing that ran no agent (ADR-0012). */
+  readonly resolvedModel?: string | null;
 }
 
 /**
@@ -344,6 +353,7 @@ export function buildManifestEntry(
     endedAt: args.endedAt.toISOString(),
     status: "ok",
     outcome: args.outcome ?? null,
+    resolvedModel: args.resolvedModel ?? null,
   };
 }
 
@@ -384,6 +394,7 @@ export function buildFailedManifestEntry(
     endedAt: args.endedAt.toISOString(),
     status: "failed",
     outcome: null,
+    resolvedModel: args.resolvedModel ?? null,
     error: errorMessage(args.error),
   };
 }

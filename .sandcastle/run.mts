@@ -14,10 +14,22 @@
  */
 import { spawn } from "node:child_process";
 import { DRAIN_EXIT_CODE, shouldRestart } from "./dispatch.mts";
+import { parseProfileFlag } from "./model-profiles.mts";
 
 /** Absolute path to the orchestrator entrypoint — resolved off this module's URL
  *  so the wrapper works regardless of the process's cwd. */
 const ENTRY = new URL("./main.mts", import.meta.url).pathname;
+
+// Translate the human-facing `--profile <name>` flag into the SANDCASTLE_PROFILE
+// env var on THIS process (ADR-0016). Env is the transport, never a re-passed argv
+// flag: `main.mts` only ever reads the env var, and because every spawned child —
+// including a self-restart respawn (ADR-0013) — inherits this process's env, the
+// active profile survives a drain-restart with zero extra wiring. An absent flag
+// leaves the env untouched, so `main.mts` defaults to `mixed` (and any externally
+// exported SANDCASTLE_PROFILE still flows through). The NAME is validated by
+// `main.mts`, not here — the wrapper only transports.
+const profileFlag = parseProfileFlag(process.argv.slice(2));
+if (profileFlag !== null) process.env.SANDCASTLE_PROFILE = profileFlag;
 
 /**
  * Run the orchestrator once, inheriting stdio so its headless prose feed streams

@@ -48,20 +48,24 @@ import {
   type RunLike,
 } from "./observability.mts";
 import { createEvents } from "./events.mts";
+import { resolveProfile } from "./model-profiles.mts";
 
 const execFileAsync = promisify(execFile);
 
-// The merge phase (Landing) is agent-free and spends zero tokens (ADR-0012), so
-// it has no model entry — only the three agent roles do.
-const MODELS = {
-  PLANNING: "claude-opus-4-8",
-  IMPLEMENTATION: "litellm/glm-5.1",
-  REVIEW: "claude-opus-4-8",
-  // The Conflict resolver integrates a reviewed branch with origin/main — a
-  // careful, high-stakes merge (ADR-0012), so it runs on the same Opus model as
-  // review rather than the cheaper implementation model.
-  RESOLUTION: "claude-opus-4-8",
-};
+// Resolve the active Model profile from SANDCASTLE_PROFILE — never argv (ADR-0016).
+// This is the single source of the four model-bearing roles' models, replacing the
+// old hardcoded MODELS const. Unset falls back silently to `mixed` (the documented
+// default); an unknown name is a LOUD non-zero exit here, before the loop starts,
+// printing the valid names — a typo must not quietly run the wrong (expensive)
+// models. Env is the transport (not an argv flag) so the profile survives a
+// self-restart respawn (ADR-0013) for free via env inheritance; the `--profile`
+// flag on `pnpm sandcastle` is translated into this env var by run.mts.
+const profileResolution = resolveProfile(process.env.SANDCASTLE_PROFILE);
+if (!profileResolution.ok) {
+  console.error(profileResolution.error);
+  process.exit(1);
+}
+const activeProfile = profileResolution.profile;
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
 //
@@ -325,6 +329,12 @@ const ghRunner = { run: async (args: string[]) => void (await gh(args)) };
  *  the ad-hoc `console.log`s that used to be scattered through this file. */
 const events = createEvents();
 
+// Announce the active Model profile once at startup (ADR-0016), so the headless
+// prose feed (and the Cockpit) shows which models each role is running before the
+// first Poll tick. The name + resolved role→model map are the durable record of
+// what this process was launched on.
+events.profileSelected(activeProfile.name, activeProfile.models);
+
 // ── The persistent shared-pool orchestrator (ADR-0006) ──────────────────────
 //
 // One shared concurrency Pool of POOL_SIZE consumed by the two agent roles
@@ -443,7 +453,7 @@ async function dispatchImplementer(issue: {
       run: () =>
         sandbox.run({
           name: "Implementer #" + issue.number,
-          agent: sandcastle.pi(MODELS.IMPLEMENTATION, piSessions),
+          agent: sandcastle.pi(activeProfile.models.implementer, piSessions),
           promptFile: "./.sandcastle/implement-prompt.md",
           promptArgs: {
             ISSUE_NUMBER: String(issue.number),
@@ -546,7 +556,7 @@ async function dispatchReviewer(pr: {
       run: () =>
         sandbox.run({
           name: "Reviewer #" + pr.issue,
-          agent: sandcastle.pi(MODELS.REVIEW, piSessions),
+          agent: sandcastle.pi(activeProfile.models.reviewer, piSessions),
           promptFile: "./.sandcastle/review-prompt.md",
           // The prompt re-fetches the full issue via `gh issue view`, so the
           // title is just a header; it is not in the PR-bucket query, so a
@@ -803,7 +813,7 @@ async function dispatchResolver(pr: {
       run: () =>
         sandbox.run({
           name: "Conflict resolver #" + pr.issue,
-          agent: sandcastle.pi(MODELS.RESOLUTION, piSessions),
+          agent: sandcastle.pi(activeProfile.models.resolver, piSessions),
           promptFile: "./.sandcastle/resolve-prompt.md",
           promptArgs: {
             ISSUE_NUMBER: String(pr.issue),
@@ -884,7 +894,7 @@ async function runPlanner(): Promise<EmittedIssue[]> {
       sandcastle.run({
         sandbox: dockerSandbox(),
         name: "Planner",
-        agent: sandcastle.pi(MODELS.PLANNING, piSessions),
+        agent: sandcastle.pi(activeProfile.models.planner, piSessions),
         promptFile: "./.sandcastle/plan-prompt.md",
         logging: observe("planner"),
       }),

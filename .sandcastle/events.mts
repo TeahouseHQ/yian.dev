@@ -31,6 +31,8 @@
  * `lifecycle` markers cover it), so it renders to nothing in prose mode but is
  * still emitted to the NDJSON stream so the Cockpit can show live resolutions.
  */
+import { MODEL_ROLES, type RoleModels } from "./model-profiles.mts";
+
 /** Renderer mode for the event stream. */
 export type EventFormat = "prose" | "ndjson";
 
@@ -253,6 +255,15 @@ interface DrainCompleteEvent extends BaseEvent {
   readonly commit: string;
 }
 
+/** The active Model profile was selected at startup (ADR-0016): its `profile`
+ *  name plus the resolved `models` role→model map. Emitted once, before the loop,
+ *  so the headless prose feed (and the Cockpit) shows which models are running. */
+interface ProfileSelectedEvent extends BaseEvent {
+  readonly type: "profile-selected";
+  readonly profile: string;
+  readonly models: RoleModels;
+}
+
 /**
  * The discriminated union of every orchestrator event. `type` is the single
  * discriminator the renderers switch on; the contract the Cockpit consumes.
@@ -281,7 +292,8 @@ export type OrchestratorEvent =
   | AttemptFailedEvent
   | BudgetExhaustedEvent
   | DrainStartedEvent
-  | DrainCompleteEvent;
+  | DrainCompleteEvent
+  | ProfileSelectedEvent;
 
 /** Which stdout stream a prose-rendered event belongs on (preserves the
  *  existing stdout/stderr split so headless output is unchanged). */
@@ -357,7 +369,16 @@ export function formatEventProse(event: OrchestratorEvent): string | null {
       return `  ⟳ orchestrator code changed on origin/main (${event.commit}) — draining ${event.inflight} in-flight Session(s) before restart.`;
     case "drain-complete":
       return `  ⟳ drain complete — exiting to restart on origin/main (${event.commit}).`;
+    case "profile-selected":
+      return `  ▸ Model profile "${event.profile}": ${roleModelPairs(event.models, ", ")}`;
   }
+}
+
+/** Render a role→model map as ordered `role model` pairs (MODEL_ROLES order),
+ *  joined by `sep`. Shared by the prose and Cockpit-log renderings of the
+ *  `profile-selected` event so both list the roles identically. */
+function roleModelPairs(models: RoleModels, sep: string): string {
+  return MODEL_ROLES.map((role) => `${role} ${models[role]}`).join(sep);
 }
 
 /**
@@ -488,6 +509,8 @@ export function formatEventLog(event: OrchestratorEvent): string {
       return `⟳ code changed (${event.commit}) · draining ${event.inflight} in-flight · will restart`;
     case "drain-complete":
       return `⟳ drain complete · restarting on ${event.commit}`;
+    case "profile-selected":
+      return `▸ profile ${event.profile} · ${roleModelPairs(event.models, " · ")}`;
     default: {
       // Exhaustiveness guard: adding a new OrchestratorEvent type without a log
       // line here is a compile error, so the Live log can never silently omit one.
@@ -541,6 +564,8 @@ export function eventSeverity(event: OrchestratorEvent): EventSeverity {
     case "resolver-requeued":
     case "landing-started":
     case "landing-landed":
+    // The active-profile announcement is routine startup progress (normal).
+    case "profile-selected":
       return "normal";
     default: {
       const unreachable: never = event;
@@ -581,6 +606,7 @@ const EVENT_TYPE_TAGS: Record<OrchestratorEvent["type"], true> = {
   "budget-exhausted": true,
   "drain-started": true,
   "drain-complete": true,
+  "profile-selected": true,
 };
 
 /** Every `type` discriminator the orchestrator can emit, derived from the union
@@ -695,6 +721,9 @@ export interface OrchestratorEvents {
   /** The self-restart drain finished (In-flight emptied) — exiting to restart on
    *  `commit` (ADR-0013, #102). */
   drainComplete(commit: string): void;
+  /** The active Model profile was selected at startup — its `profile` name and
+   *  resolved `models` role→model map (ADR-0016). Emitted once, before the loop. */
+  profileSelected(profile: string, models: RoleModels): void;
 }
 
 /** Options for {@link createEvents}; every dependency is injectable for tests. */
@@ -784,5 +813,7 @@ export function createEvents(opts: CreateEventsOptions = {}): OrchestratorEvents
     drainStarted: (commit, inflight) =>
       emit({ type: "drain-started", commit, inflight, ts: stamp() }),
     drainComplete: (commit) => emit({ type: "drain-complete", commit, ts: stamp() }),
+    profileSelected: (profile, models) =>
+      emit({ type: "profile-selected", profile, models, ts: stamp() }),
   };
 }

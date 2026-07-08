@@ -17,9 +17,12 @@ import {
   describePruneApply,
   prunePlanTotal,
   stepPruneApply,
+  cycleProfile,
+  formatProfileHeader,
   type InputKey,
   type OrchestratorHandlers,
 } from "./cockpit-core.mts";
+import { profileNames } from "./model-profiles.mts";
 import { DRAIN_EXIT_CODE } from "./dispatch.mts";
 import { formatEventLog, type OrchestratorEvent } from "./events.mts";
 import type { PrunePlan } from "./prune-plan.mts";
@@ -67,6 +70,41 @@ describe("cycleTab", () => {
 
   it("lists the three tabs in Live → Sessions → Maintenance order", () => {
     expect(COCKPIT_TABS).toEqual(["live", "sessions", "maintenance"]);
+  });
+});
+
+// ── cycleProfile: the `p`-key model-profile picker (ADR-0016) ────────────────
+
+describe("cycleProfile", () => {
+  it("advances round-robin through the shipped profiles and wraps", () => {
+    // Source of truth is the ADR-0016 catalog order (glm, mixed), NOT derived
+    // from MODEL_PROFILES here, so the assertion can disagree with the const.
+    expect(cycleProfile("glm")).toBe("mixed");
+    expect(cycleProfile("mixed")).toBe("glm");
+  });
+
+  it("only ever produces a declared profile name (never an invalid one)", () => {
+    // The AC: an invalid profile can never be constructed from the picker.
+    const names = new Set(profileNames());
+    for (const start of profileNames()) {
+      expect(names.has(cycleProfile(start))).toBe(true);
+    }
+  });
+});
+
+// ── formatProfileHeader: the running/selected header copy (ADR-0016) ─────────
+
+describe("formatProfileHeader", () => {
+  it("shows no pending selection when running matches selected", () => {
+    expect(formatProfileHeader("mixed", "mixed")).toEqual({ running: "mixed", pending: null });
+  });
+
+  it("surfaces the pending selection only when it differs from running", () => {
+    expect(formatProfileHeader("mixed", "glm")).toEqual({ running: "mixed", pending: "glm" });
+  });
+
+  it("marks running as none before the first Start, showing the seed as pending", () => {
+    expect(formatProfileHeader(null, "mixed")).toEqual({ running: "—", pending: "mixed" });
   });
 });
 

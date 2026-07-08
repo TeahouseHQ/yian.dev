@@ -62,11 +62,13 @@ import { Box, render, Text, useApp, useInput, useStdin, useStdout } from "ink";
 import {
   appendLogLine,
   COCKPIT_TABS,
+  cycleProfile,
   cycleTab,
   describePruneApply,
   EMPTY_LIVE_VIEW,
   formatInFlight,
   formatPoolGauge,
+  formatProfileHeader,
   prunePlanTotal,
   reduceLiveEvent,
   routeCockpitInput,
@@ -75,9 +77,16 @@ import {
   type CockpitTab,
   type LiveView,
   type PruneApplyPhase,
+  type SpawnConfig,
   type Supervisor,
 } from "./cockpit-core.mjs";
 import { formatEventLog, eventSeverity, type OrchestratorEvent } from "./events.mjs";
+import {
+  parseProfileFlag,
+  profileNames,
+  resolveProfile,
+  type ProfileName,
+} from "./model-profiles.mjs";
 import { planPrune, type PrunePlan, type PruneWorktree } from "./prune-plan.mjs";
 import { applyPrunePlan, discoverPruneState } from "./prune-driver.mjs";
 import {
@@ -157,18 +166,27 @@ function eventEntry(ev: OrchestratorEvent): LogEntry {
 /** How the Cockpit launches the orchestrator: `tsx main.mts` in NDJSON mode,
  *  from the repo root, with `node_modules/.bin` on PATH so `tsx` resolves even
  *  when launched outside a pnpm script, and colour disabled so the child's
- *  stderr prose stays clean in the log. Passed to the tested `spawnOrchestrator`. */
-const ORCHESTRATOR_SPAWN = {
-  command: "tsx",
-  args: [ORCHESTRATOR_ENTRY],
-  cwd: REPO_ROOT,
-  env: {
-    ...process.env,
-    SANDCASTLE_EVENT_FORMAT: "ndjson",
-    PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH ?? ""}`,
-    FORCE_COLOR: "0",
-  },
-} as const;
+ *  stderr prose stays clean in the log. Passed to the tested `spawnOrchestrator`.
+ *
+ *  Parameterised by the Model profile to run (ADR-0016): the Cockpit is
+ *  authoritative about which profile the child uses, so it sets `SANDCASTLE_PROFILE`
+ *  explicitly (overriding any inherited value) — `main.mts` reads only that env var.
+ *  Every spawn names its profile: a manual Start passes `selected`, a self-restart
+ *  drain (ADR-0013) passes the draining child's own profile, never a pending switch. */
+function orchestratorSpawn(profile: ProfileName): SpawnConfig {
+  return {
+    command: "tsx",
+    args: [ORCHESTRATOR_ENTRY],
+    cwd: REPO_ROOT,
+    env: {
+      ...process.env,
+      SANDCASTLE_EVENT_FORMAT: "ndjson",
+      SANDCASTLE_PROFILE: profile,
+      PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH ?? ""}`,
+      FORCE_COLOR: "0",
+    },
+  };
+}
 
 /** The tab bar: the active tab bracketed + highlighted, the rest dim. */
 function TabBar({ tab }: { tab: CockpitTab }): React.ReactElement {
@@ -232,18 +250,25 @@ function InFlightPanel({ view }: { view: LiveView }): React.ReactElement {
 function LiveTab({
   status,
   statusMessage,
+  running,
+  selected,
   view,
   log,
   height,
 }: {
   status: ChildStatus;
   statusMessage: string;
+  /** The Model profile the live child was spawned with; null before first Start. */
+  running: ProfileName | null;
+  /** The Model profile the next manual Start will apply (`p` cycles it). */
+  selected: ProfileName;
   view: LiveView;
   log: LogEntry[];
   /** Max event-log rows to render (terminal-bounded; the log tail-follows). */
   height: number;
 }): React.ReactElement {
   const action = status === "running" ? "Stop" : "Start";
+  const profile = formatProfileHeader(running, selected);
   const visible = log.slice(Math.max(0, log.length - Math.max(1, height)));
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -254,6 +279,21 @@ function LiveTab({
         </Text>
         <Text dimColor> — {statusMessage}</Text>
         <Text dimColor> · Enter to {action}</Text>
+      </Box>
+      <Box flexDirection="row">
+        <Text dimColor>profile — running: </Text>
+        <Text bold color="magenta">
+          {profile.running}
+        </Text>
+        {profile.pending !== null && (
+          <>
+            <Text dimColor> · selected: </Text>
+            <Text bold color="cyan">
+              {profile.pending}
+            </Text>
+            <Text dimColor> (Start to apply)</Text>
+          </>
+        )}
       </Box>
       <Box marginTop={1}>
         <InFlightPanel view={view} />
@@ -448,7 +488,7 @@ function MaintenanceTab({
 }
 
 /** Top-level Cockpit frame: owns the tab + supervised-child state and input. */
-function Cockpit(): React.ReactElement {
+function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.ReactElement {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { stdout } = useStdout();
@@ -457,6 +497,13 @@ function Cockpit(): React.ReactElement {
   const [tab, setTab] = useState<CockpitTab>("live");
   const [status, setStatus] = useState<ChildStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("not started");
+  // The Model profile the next manual Start will apply — seeded from `--profile`
+  // and cycled by `p` (ADR-0016). `cycleProfile` keeps it a valid ProfileName.
+  const [selected, setSelected] = useState<ProfileName>(initialProfile);
+  // The profile the live child was spawned with; null until the first Start.
+  // Set optimistically on a manual Start (running := selected) and reconciled from
+  // the child's own `profile-selected` event (the source of truth, ADR-0016).
+  const [running, setRunning] = useState<ProfileName | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   // The derived Live monitor state (pool gauge + in-flight list), folded from
   // the event stream by the pure `reduceLiveEvent` — never the Manifest.
@@ -475,10 +522,10 @@ function Cockpit(): React.ReactElement {
   // the async stdout/exit handlers always see the current child without stale
   // closures and toggling it never triggers a re-render on its own.
   const supervisorRef = useRef<Supervisor | null>(null);
-  // Holds the latest `start` so the exit handler can respawn the child after a
-  // self-restart drain (ADR-0013) without `start` closing over a stale version of
-  // itself. Set from an effect below, once `start` is defined.
-  const startRef = useRef<() => void>(() => {});
+  // Holds the latest `spawnWith` so the exit handler can respawn the child after a
+  // self-restart drain (ADR-0013) without closing over a stale version of it. Set
+  // from an effect below, once `spawnWith` is defined.
+  const spawnRef = useRef<(profile: ProfileName) => void>(() => {});
   // Guards prune discovery against re-entrancy: the lazy-load effect and the `r`
   // key can both fire while a discovery microtask is already pending.
   const maintLoadingRef = useRef(false);
@@ -538,47 +585,71 @@ function Cockpit(): React.ReactElement {
     [pushMaintLog, reloadPlan]
   );
 
-  /** Start the orchestrator child (no-op if one is already running). */
-  const start = useCallback(() => {
-    if (supervisorRef.current) return;
-    setStatus("running");
-    setStatusMessage("running");
-    setView(EMPTY_LIVE_VIEW); // fresh monitor for this run (in-flight is non-durable)
-    pushLog({ text: "▶ started orchestrator (tsx main.mts)", color: "cyan" });
-    supervisorRef.current = spawnOrchestrator(ORCHESTRATOR_SPAWN, {
-      onEvent: (ev) => {
-        setView((v) => reduceLiveEvent(v, ev));
-        pushLog(eventEntry(ev));
-      },
-      onStdoutRaw: (line) => pushLog({ text: line, dim: true }),
-      onStderr: (line) => pushLog({ text: line, dim: true }),
-      onExit: (exitStatus, message) => {
-        supervisorRef.current = null;
-        setStatus(exitStatus);
-        setStatusMessage(message);
-        pushLog({
-          text: `${exitStatus === "crashed" ? "✗" : exitStatus === "restarting" ? "⟳" : "■"} ${message}`,
-          color: exitStatus === "crashed" ? "red" : exitStatus === "restarting" ? "cyan" : "yellow",
-        });
-        // ADR-0013: a self-restart drain auto-respawns the child on the new code —
-        // the supervisor's job, not the human's (an unattended loop must follow
-        // its own upgrades). A `crashed` exit is deliberately NOT respawned.
-        if (exitStatus === "restarting") startRef.current();
-      },
-      onSpawnError: (message) => {
-        supervisorRef.current = null;
-        setStatus("crashed");
-        setStatusMessage(`failed to start: ${message}`);
-        pushLog({ text: `✗ failed to start orchestrator: ${message}`, color: "red" });
-      },
-    });
-  }, [pushLog]);
+  /** Spawn the orchestrator child on a given Model profile (no-op if one is
+   *  already running). Used by both a manual Start (with `selected`) and a
+   *  self-restart drain respawn (with the draining child's own profile). */
+  const spawnWith = useCallback(
+    (profile: ProfileName) => {
+      if (supervisorRef.current) return;
+      setStatus("running");
+      setStatusMessage("running");
+      setView(EMPTY_LIVE_VIEW); // fresh monitor for this run (in-flight is non-durable)
+      pushLog({ text: `▶ started orchestrator (profile: ${profile})`, color: "cyan" });
+      supervisorRef.current = spawnOrchestrator(orchestratorSpawn(profile), {
+        onEvent: (ev) => {
+          setView((v) => reduceLiveEvent(v, ev));
+          // The child reports the profile it resolved (ADR-0016) — the source of
+          // truth for `running`, reconciling the optimistic set at manual Start.
+          if (ev.type === "profile-selected" && (profileNames() as string[]).includes(ev.profile)) {
+            setRunning(ev.profile as ProfileName);
+          }
+          pushLog(eventEntry(ev));
+        },
+        onStdoutRaw: (line) => pushLog({ text: line, dim: true }),
+        onStderr: (line) => pushLog({ text: line, dim: true }),
+        onExit: (exitStatus, message) => {
+          supervisorRef.current = null;
+          setStatus(exitStatus);
+          setStatusMessage(message);
+          pushLog({
+            text: `${exitStatus === "crashed" ? "✗" : exitStatus === "restarting" ? "⟳" : "■"} ${message}`,
+            color:
+              exitStatus === "crashed" ? "red" : exitStatus === "restarting" ? "cyan" : "yellow",
+          });
+          // ADR-0013: a self-restart drain auto-respawns the child on the new code —
+          // the supervisor's job, not the human's (an unattended loop must follow
+          // its own upgrades). It respawns with `profile` — the profile THIS
+          // draining child ran on — never `selected`, so a pending model switch is
+          // not smuggled into a code-freshness restart (ADR-0016). A `crashed` exit
+          // is deliberately NOT respawned.
+          if (exitStatus === "restarting") spawnRef.current(profile);
+        },
+        onSpawnError: (message) => {
+          supervisorRef.current = null;
+          setStatus("crashed");
+          setStatusMessage(`failed to start: ${message}`);
+          pushLog({ text: `✗ failed to start orchestrator: ${message}`, color: "red" });
+        },
+      });
+    },
+    [pushLog]
+  );
 
-  // Keep the respawn hook pointing at the latest `start` so the exit handler's
+  // Keep the respawn hook pointing at the latest `spawnWith` so the exit handler's
   // self-restart (ADR-0013) never calls a stale closure.
   useEffect(() => {
-    startRef.current = start;
-  }, [start]);
+    spawnRef.current = spawnWith;
+  }, [spawnWith]);
+
+  /** Manual Start (Enter on the Live tab): apply the pending selection —
+   *  `running := selected` (ADR-0016) — and spawn the child on it. */
+  const start = useCallback(
+    (target: ProfileName) => {
+      setRunning(target);
+      spawnWith(target);
+    },
+    [spawnWith]
+  );
 
   /** Stop the running orchestrator child (no-op if none). */
   const stop = useCallback(() => {
@@ -646,7 +717,14 @@ function Cockpit(): React.ReactElement {
       // lives in the shell: Enter toggles it, and is inert on the other tabs.
       if (key.return && tab === "live") {
         if (status === "running") stop();
-        else start();
+        else start(selected);
+        return;
+      }
+      // `p` on the Live tab cycles the selected Model profile round-robin
+      // (ADR-0016). It only ever mutates `selected`; the switch takes effect on
+      // the next Start, never mid-run. `cycleProfile` keeps it a valid name.
+      if (tab === "live" && input === "p") {
+        setSelected((s) => cycleProfile(s));
         return;
       }
       // The Maintenance tab likewise has no child component: the shell drives its
@@ -693,6 +771,8 @@ function Cockpit(): React.ReactElement {
           <LiveTab
             status={status}
             statusMessage={statusMessage}
+            running={running}
+            selected={selected}
             view={view}
             log={log}
             height={logHeight}
@@ -723,7 +803,7 @@ function Cockpit(): React.ReactElement {
         <Text dimColor>
           Tab/⇧Tab switch tab
           {tab === "live"
-            ? " · Enter Start/Stop"
+            ? " · Enter Start/Stop · p profile"
             : tab === "maintenance"
               ? " · a apply · r reload"
               : ""}{" "}
@@ -735,7 +815,18 @@ function Cockpit(): React.ReactElement {
 }
 
 async function main(): Promise<void> {
-  const instance = render(<Cockpit />);
+  // Seed the selected Model profile from `--profile <name>` (ADR-0016), reusing the
+  // exact parse + validate `run.mts`/`main.mts` use. Absent → the documented default
+  // (`mixed`); an unknown name is a LOUD non-zero exit here — a typo must not
+  // silently launch the wrong (expensive) models, the ADR-0014 fail-loud posture.
+  // Every name the Cockpit constructs after this (via `cycleProfile`) is valid by
+  // construction, so this is the only place a bad profile can enter.
+  const resolution = resolveProfile(parseProfileFlag(process.argv.slice(2)) ?? undefined);
+  if (!resolution.ok) {
+    console.error(resolution.error);
+    process.exit(1);
+  }
+  const instance = render(<Cockpit initialProfile={resolution.profile.name} />);
   await instance.waitUntilExit();
 }
 

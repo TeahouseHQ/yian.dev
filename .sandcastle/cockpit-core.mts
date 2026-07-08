@@ -27,6 +27,7 @@ import {
   type OrchestratorEvent,
   type OrchestratorRole,
 } from "./events.mts";
+import { profileNames, type ProfileName } from "./model-profiles.mts";
 import type { PrunePlan } from "./prune-plan.mts";
 
 /** The Cockpit's tabbed modes, in cycle order (CONTEXT.md: Cockpit). */
@@ -48,6 +49,47 @@ export function cycleTab(current: CockpitTab, direction: CycleDirection): Cockpi
   const delta = direction === "next" ? 1 : -1;
   const n = COCKPIT_TABS.length;
   return COCKPIT_TABS[(i + delta + n) % n];
+}
+
+/**
+ * The pure model behind the Live tab's `p` key (ADR-0016): return the next
+ * {@link ProfileName} round-robin through the shipped catalog, wrapping past the
+ * last so the profiles form a ring — exactly as {@link cycleTab} does for tabs.
+ * Because it steps only through {@link profileNames} (the declared catalog) and
+ * returns a `ProfileName`, an invalid profile can never be constructed from the
+ * Cockpit's own picker (the issue's invariant); a bad name is reachable only from
+ * a hand-typed `--profile` flag, which `main.mts` rejects loudly.
+ */
+export function cycleProfile(current: ProfileName): ProfileName {
+  const names = profileNames();
+  const i = names.indexOf(current);
+  return names[(i + 1) % names.length];
+}
+
+/** The Live header's Model-profile copy: the `running` profile the live child was
+ *  spawned with (`—` before the first Start), and the `pending` selection shown
+ *  as "Start to apply" — non-null ONLY when it differs from `running`. */
+export interface ProfileHeader {
+  readonly running: string;
+  readonly pending: string | null;
+}
+
+/**
+ * Format the Live tab's Model-profile header (ADR-0016). `running` is the profile
+ * the live orchestrator child was spawned with — `null` before the first Start,
+ * rendered `—`. `pending` is the `selected` profile the next manual Start will
+ * apply, surfaced ONLY when it differs from `running` (so an unchanged selection
+ * adds no noise); before the first Start it always differs from `null`, so the
+ * seed is shown as pending. Pure so the exact copy is unit-testable without Ink.
+ */
+export function formatProfileHeader(
+  running: ProfileName | null,
+  selected: ProfileName
+): ProfileHeader {
+  return {
+    running: running ?? "—",
+    pending: running === selected ? null : selected,
+  };
 }
 
 /** The structural slice of Ink's `Key` that {@link routeCockpitInput} inspects —

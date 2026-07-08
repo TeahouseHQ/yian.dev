@@ -666,6 +666,7 @@ describe("EVENT_TYPES / isKnownEventType", () => {
     "budget-exhausted",
     "drain-started",
     "drain-complete",
+    "profile-selected",
   ];
 
   it("contains exactly every orchestrator event type, no more, no fewer", () => {
@@ -736,6 +737,15 @@ describe("eventSeverity", () => {
     expect(eventSeverity(evt({ type: "review-transition", issue: 1, transition: "gate" }))).toBe(
       "normal"
     );
+    expect(
+      eventSeverity(
+        evt({
+          type: "profile-selected",
+          profile: "mixed",
+          models: { planner: "P", implementer: "I", reviewer: "R", resolver: "S" },
+        })
+      )
+    ).toBe("normal");
     expect(
       eventSeverity(
         evt({
@@ -810,5 +820,51 @@ describe("drain events", () => {
       formatEventNdjson(evt({ type: "drain-complete", commit: "abc1234" }))
     ) as Record<string, unknown>;
     expect(done).toMatchObject({ type: "drain-complete", commit: "abc1234" });
+  });
+});
+
+// ── profile-selected: the active Model profile shows in the feed (ADR-0016) ──
+
+describe("profile-selected event", () => {
+  // An explicit role→model map (independent of MODEL_PROFILES) so the renderer
+  // test pins the wording, not the profile const.
+  const models = { planner: "P", implementer: "I", reviewer: "R", resolver: "S" };
+
+  it("prose renders the name + full role→model map on stdout", () => {
+    const line = formatEventProse(evt({ type: "profile-selected", profile: "mixed", models }));
+    expect(line).toBe(
+      '  ▸ Model profile "mixed": planner P, implementer I, reviewer R, resolver S'
+    );
+    expect(eventStream(evt({ type: "profile-selected", profile: "mixed", models }))).toBe("stdout");
+  });
+
+  it("renders one compact Cockpit log line", () => {
+    expect(formatEventLog(evt({ type: "profile-selected", profile: "glm", models }))).toBe(
+      "▸ profile glm · planner P · implementer I · reviewer R · resolver S"
+    );
+  });
+
+  it("the emitter stamps and routes it once to stdout", () => {
+    const out = vi.fn();
+    const err = vi.fn();
+    const events = createEvents({
+      format: "prose",
+      now: () => new Date("2026-07-04T10:00:00.000Z"),
+      out,
+      err,
+    });
+    events.profileSelected("mixed", models);
+    expect(err).not.toHaveBeenCalled();
+    expect(out).toHaveBeenCalledTimes(1);
+    expect(out).toHaveBeenCalledWith(
+      '  ▸ Model profile "mixed": planner P, implementer I, reviewer R, resolver S'
+    );
+  });
+
+  it("ndjson carries the discriminator + name + map", () => {
+    const obj = JSON.parse(
+      formatEventNdjson(evt({ type: "profile-selected", profile: "glm", models }))
+    ) as Record<string, unknown>;
+    expect(obj).toMatchObject({ type: "profile-selected", profile: "glm", models });
   });
 });

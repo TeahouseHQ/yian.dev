@@ -192,48 +192,48 @@ function TreePane({
       </Text>
       <Box ref={contentRef} flexDirection="column" flexGrow={1} overflow="hidden">
         {visible.length === 0 ? (
-        <Text dimColor>(empty)</Text>
-      ) : (
-        visible.map((row, i) => {
-          const selected = offset + i === cursor;
-          const isPlanner = runIssue(row.run) === null;
-          if (row.kind === "run") {
-            const expanded = !collapsed.has(row.runId);
-            const glyph = expanded ? "▾" : "▸";
-            const issue = runIssue(row.run);
-            const name = issue == null ? row.runId : `${row.runId} · #${issue}`;
-            const n = row.run.entries.length;
+          <Text dimColor>(empty)</Text>
+        ) : (
+          visible.map((row, i) => {
+            const selected = offset + i === cursor;
+            const isPlanner = runIssue(row.run) === null;
+            if (row.kind === "run") {
+              const expanded = !collapsed.has(row.runId);
+              const glyph = expanded ? "▾" : "▸";
+              const issue = runIssue(row.run);
+              const name = issue == null ? row.runId : `${row.runId} · #${issue}`;
+              const n = row.run.entries.length;
+              return (
+                <Text
+                  key={`r-${row.runId}`}
+                  wrap="truncate-end"
+                  bold={selected}
+                  inverse={selected}
+                  dimColor={isPlanner && !selected}
+                >
+                  {selected ? "❯ " : "  "}
+                  {glyph} {name} ({n})
+                </Text>
+              );
+            }
+            const e = row.entry;
+            const ref = e.issue == null ? "-" : `#${e.issue}`;
+            const flag = e.status === "failed" ? " ✗" : "";
             return (
               <Text
-                key={`r-${row.runId}`}
+                key={`s-${i}`}
                 wrap="truncate-end"
                 bold={selected}
                 inverse={selected}
                 dimColor={isPlanner && !selected}
               >
                 {selected ? "❯ " : "  "}
-                {glyph} {name} ({n})
+                {"  "}
+                {e.phase ?? "?"} {ref} · {e.commits ?? 0}c{flag}
               </Text>
             );
-          }
-          const e = row.entry;
-          const ref = e.issue == null ? "-" : `#${e.issue}`;
-          const flag = e.status === "failed" ? " ✗" : "";
-          return (
-            <Text
-              key={`s-${i}`}
-              wrap="truncate-end"
-              bold={selected}
-              inverse={selected}
-              dimColor={isPlanner && !selected}
-            >
-              {selected ? "❯ " : "  "}
-              {"  "}
-              {e.phase ?? "?"} {ref} · {e.commits ?? 0}c{flag}
-            </Text>
-          );
-        })
-      )}
+          })
+        )}
       </Box>
     </Box>
   );

@@ -921,8 +921,11 @@ async function main(): Promise<void> {
   process.once("uncaughtException", onUncaught);
   process.once("unhandledRejection", onUnhandled);
 
-  const instance = render(<Cockpit initialProfile={resolution.profile.name} />);
+  // Render under the try so a failure in Ink's mount also restores the
+  // operator's terminal and deregisters the signal handlers above — the AC's
+  // "never left in the alt buffer" covers a render-time throw too.
   try {
+    const instance = render(<Cockpit initialProfile={resolution.profile.name} />);
     await instance.waitUntilExit();
   } finally {
     // Clean quit (q / Ctrl-C via the shell) — restore the operator's terminal.

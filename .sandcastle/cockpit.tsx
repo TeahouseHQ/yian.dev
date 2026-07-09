@@ -56,7 +56,7 @@
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, measureElement, render, Text, useApp, useInput, useStdin, useStdout, type DOMElement } from "ink";
 
 import {
@@ -67,6 +67,7 @@ import {
   describePruneApply,
   EMPTY_LIVE_VIEW,
   ENTER_ALT_SCREEN,
+  flattenPrunePlan,
   FOLLOWING_VIEWPORT,
   formatInFlight,
   formatPoolGauge,
@@ -79,9 +80,11 @@ import {
   shouldUseAltScreen,
   spawnOrchestrator,
   stepPruneApply,
+  viewportScrollFromKey,
   type CockpitTab,
   type LiveView,
   type PruneApplyPhase,
+  type PruneRow,
   type SpawnConfig,
   type Supervisor,
   type ViewportState,
@@ -93,7 +96,7 @@ import {
   resolveProfile,
   type ProfileName,
 } from "./model-profiles.mjs";
-import { planPrune, type PrunePlan, type PruneWorktree } from "./prune-plan.mjs";
+import { planPrune, type PrunePlan } from "./prune-plan.mjs";
 import { applyPrunePlan, discoverPruneState } from "./prune-driver.mjs";
 import {
   loadManifest,
@@ -221,6 +224,60 @@ function exitAltScreen(): void {
   altScreenActive = false;
 }
 
+// ── Shared viewport-panel hooks (ADR-0015) ───────────────────────────────────
+//
+// Both long Cockpit panels (the Live event log's Follow mode and the Maintenance
+// pager) measure a content Box's height and drive the SAME pure viewport reducer
+// over it. These two hooks keep that wiring in one place so each panel reduces
+// to "measure → reduce → slice": `useMeasuredHeight` returns a ref to attach to
+// the scrollable Box plus its measured row count, and `useViewport` owns the
+// follow/offset state and wires the shared scroll chord onto it. Shell only —
+// the transitions themselves live in the pure, unit-tested `reduceViewport`.
+
+/** Measure a Box's height each commit (Ink re-renders on resize) and bail on an
+ *  unchanged measurement so it converges without a render loop. Returns the ref
+ *  to attach to the measured Box and the (clamped, ≥1) height. */
+function useMeasuredHeight(
+  fallback: number
+): readonly [React.RefObject<DOMElement | null>, number] {
+  const ref = useRef<DOMElement>(null);
+  const [height, setHeight] = useState(fallback);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const h = Math.max(1, measureElement(node).height);
+    setHeight((prev) => (prev === h ? prev : h));
+  });
+  return [ref, Math.max(1, height)] as const;
+}
+
+/** Own a panel's viewport state: a `content` reconcile on every lines/height
+ *  change re-tails a following view but holds a paused offset, and the shared
+ *  scroll chord (`viewportScrollFromKey`) wires ↑/↓ · PgUp/PgDn · g/G — returning
+ *  null for every other key so it never collides with a panel's own controls
+ *  (the issue's no-collision AC). `initial` seeds the viewport: the Live log
+ *  follows the tail, the Maintenance pager starts at the top. */
+function useViewport(lines: number, height: number, initial: ViewportState): ViewportState {
+  const { isRawModeSupported } = useStdin();
+  const inputActive = isRawModeSupported === true;
+  const [viewport, setViewport] = useState<ViewportState>(initial);
+  useEffect(() => {
+    setViewport((v) => {
+      const next = reduceViewport(v, { kind: "content", lines, height });
+      return next.offset === v.offset && next.follow === v.follow ? v : next;
+    });
+  }, [lines, height]);
+  useInput(
+    (input, key) => {
+      const step = viewportScrollFromKey(input, key);
+      if (step === null) return;
+      setViewport((v) => reduceViewport(v, { kind: "scroll", step, lines, height }));
+    },
+    { isActive: inputActive }
+  );
+  return viewport;
+}
+
 /** The tab bar: the active tab bracketed + highlighted, the rest dim. */
 function TabBar({ tab }: { tab: CockpitTab }): React.ReactElement {
   return (
@@ -280,9 +337,12 @@ function InFlightPanel({ view }: { view: LiveView }): React.ReactElement {
 /** The Live tab: status/Start-Stop header + pool gauge & in-flight list + the
  *  scrolling event log. The gauge/list derive purely from the event stream via
  *  `view` (never the Manifest — ADR-0008); the log runs the shared viewport
- *  reducer in **always-following (tail) mode** (ADR-0015) — its height is
- *  measured from the rendered log box (no magic constant), so it self-corrects
- *  on terminal resize and the in-flight list above takes its natural height. */
+ *  reducer in **Follow mode** (ADR-0015): it auto-tails the newest events by
+ *  default, but ↑/↓ · PgUp/PgDn · g/G scroll back through history. While scrolled
+ *  up, Follow is **paused** — a paused indicator shows and incoming events do
+ *  not yank the view down; `G`/End re-engages the tail. Its height is measured
+ *  from the rendered log box (no magic constant), so it self-corrects on
+ *  terminal resize and the in-flight list above takes its natural height. */
 function LiveTab({
   status,
   statusMessage,
@@ -303,28 +363,14 @@ function LiveTab({
   const action = status === "running" ? "Stop" : "Start";
   const profile = formatProfileHeader(running, selected);
 
-  // Measure the event-log box each commit (Ink re-renders on resize) so the log
-  // fills the remaining rows after the in-flight list — never a hand-tuned
-  // `termRows - N`. setLogHeight bails on an unchanged measurement, so this
-  // converges without a render loop (ADR-0015).
-  const logBoxRef = useRef<DOMElement>(null);
-  const [logHeight, setLogHeight] = useState(20);
-  useEffect(() => {
-    const node = logBoxRef.current;
-    if (!node) return;
-    const h = Math.max(1, measureElement(node).height);
-    setLogHeight((prev) => (prev === h ? prev : h));
-  });
-
-  // Always-following: run the pure reducer over a tail state each frame so the
-  // log shows the newest `logHeight` events (and a future slice can swap in a
-  // real scrollable state here without changing the seam).
-  const height = Math.max(1, logHeight);
-  const viewport: ViewportState = reduceViewport(FOLLOWING_VIEWPORT, {
-    kind: "content",
-    lines: log.length,
-    height,
-  });
+  // Follow-mode viewport (ADR-0015): the log auto-tails the newest events, but
+  // ↑/↓ · PgUp/PgDn · g/G scroll back through history (pausing Follow); G/End
+  // re-engages the tail. `useMeasuredHeight` sizes the log box (no magic
+  // constant); `useViewport` owns the state + wires the shared scroll chord,
+  // which returns null for Enter/`p`/`q`/Tab so it never collides with the
+  // Cockpit's Start/Stop, profile-cycle, or quit/tab-switch keys.
+  const [logBoxRef, height] = useMeasuredHeight(20);
+  const viewport = useViewport(log.length, height, FOLLOWING_VIEWPORT);
   const visible = log.slice(viewport.offset, viewport.offset + height);
 
   return (
@@ -365,6 +411,9 @@ function LiveTab({
       >
         <Text bold>
           Event log <Text dimColor>({log.length})</Text>
+          {!viewport.follow && (
+            <Text color="yellow"> ⏸ paused — G/End to follow the tail</Text>
+          )}
         </Text>
         <Box ref={logBoxRef} flexDirection="column" flexGrow={1} overflow="hidden">
           {visible.length === 0 ? (
@@ -389,36 +438,49 @@ interface MaintPlan {
   readonly repoRoot: string;
 }
 
-/** Render one prune bucket as a labelled count over its items — a worktree
- *  bucket shows `path [branch]`, a branch bucket the branch name. Paths are
- *  shown relative to `repoRoot` to stay compact, mirroring the CLI's report. */
-function PruneBucket({
-  label,
-  color,
-  items,
-  repoRoot,
-}: {
-  label: string;
-  color?: string;
-  items: readonly (string | PruneWorktree)[];
-  repoRoot: string;
-}): React.ReactElement {
-  const rel = (p: string) => p.replace(repoRoot + "/", "");
+/** The Maintenance prune plan as one pager-scrollable viewport (ADR-0015).
+ *  The 5–6 buckets are flattened (pure `flattenPrunePlan`) into a single ordered
+ *  list of rows — bucket headers stay inline as separators, their items follow —
+ *  and the whole thing scrolls as one offset. Apply is all-or-nothing, so there
+ *  is no per-row cursor to track. ↑/↓ · PgUp/PgDn · g/G share the Live log's
+ *  chord (`viewportScrollFromKey`); those keys never collide with the apply
+ *  controls (`a`/`y`/`n`/`r`), which the Cockpit shell owns — the mapper returns
+ *  null for every one of them (the issue's no-collision AC). Starts at the TOP
+ *  (offset 0, not following) so the operator reads the dry-run preview from the
+ *  first bucket down; the measured body box self-corrects on terminal resize. */
+function PrunePager({ rows }: { rows: PruneRow[] }): React.ReactElement {
+  // The plan is static, so the viewport starts at the TOP (offset 0, follow
+  // off) to read the preview top-to-bottom. `useViewport` owns the state +
+  // wires the shared scroll chord, which returns null for `a`/`y`/`n`/`r` so it
+  // never collides with the apply controls the Cockpit shell owns (ADR-0015).
+  const [bodyRef, height] = useMeasuredHeight(20);
+  const viewport = useViewport(rows.length, height, { offset: 0, follow: false });
+  const visible = rows.slice(viewport.offset, viewport.offset + height);
+
   return (
-    <Box flexDirection="column">
-      <Text color={color}>
-        {label} ({items.length})
-      </Text>
-      {items.length === 0 ? (
-        <Text dimColor> (none)</Text>
-      ) : (
-        items.map((it, i) => (
-          <Text key={i} dimColor wrap="truncate-end">
-            {" "}
-            · {typeof it === "string" ? it : `${rel(it.path)} [${it.branch}]`}
-          </Text>
-        ))
-      )}
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      marginTop={1}
+      borderStyle="single"
+      borderColor="gray"
+      paddingX={1}
+      overflow="hidden"
+    >
+      <Box ref={bodyRef} flexDirection="column" flexGrow={1} overflow="hidden">
+        {visible.map((row, i) =>
+          row.kind === "bucket-header" ? (
+            <Text key={i} color={row.tone === "warn" ? "yellow" : undefined}>
+              {row.label} ({row.count})
+            </Text>
+          ) : (
+            <Text key={i} dimColor wrap="truncate-end">
+              {" "}
+              · {row.text}
+            </Text>
+          )
+        )}
+      </Box>
     </Box>
   );
 }
@@ -471,6 +533,10 @@ function MaintenanceTab({
   const { plan, repoRoot } = maint;
   const decision = describePruneApply({ running, plan });
   const total = prunePlanTotal(plan);
+  // Flatten the 5–6 buckets into one ordered list of rows the pager scrolls as
+  // a single offset (ADR-0015). Memoized so a re-render (e.g. applyPhase change)
+  // doesn't re-flatten; the plan is stable between reloads.
+  const rows = useMemo(() => flattenPrunePlan(plan, repoRoot), [plan, repoRoot]);
 
   // The apply control line: the confirm prompt when armed, else the guard's
   // reason (blocked/empty) or the ready-to-arm hint.
@@ -490,48 +556,12 @@ function MaintenanceTab({
     );
 
   return (
-    <Box flexDirection="column" flexGrow={1} marginTop={1}>
+    <Box flexDirection="column" flexGrow={1} marginTop={1} overflow="hidden">
       <Box flexDirection="row">
         <Text bold>Maintenance — Prune </Text>
         <Text dimColor>dry-run plan · {total} deletion(s)</Text>
       </Box>
-      <Box
-        flexDirection="column"
-        marginTop={1}
-        borderStyle="single"
-        borderColor="gray"
-        paddingX={1}
-      >
-        <PruneBucket label="Run logs to delete" items={plan.runLogs} repoRoot={repoRoot} />
-        <PruneBucket
-          label="Merged worktrees to remove"
-          items={plan.removableWorktrees}
-          repoRoot={repoRoot}
-        />
-        <PruneBucket
-          label="Merged sandcastle branches to delete"
-          items={plan.deletableBranches}
-          repoRoot={repoRoot}
-        />
-        <PruneBucket
-          label="Leftover Merger worktrees to remove"
-          items={plan.removableMergerWorktrees}
-          repoRoot={repoRoot}
-        />
-        <PruneBucket
-          label="Leftover Merger branches to force-delete"
-          items={plan.deletableMergerBranches}
-          repoRoot={repoRoot}
-        />
-        {plan.skippedDirtyWorktrees.length > 0 && (
-          <PruneBucket
-            label="⚠ Skipped — uncommitted changes (kept)"
-            color="yellow"
-            items={plan.skippedDirtyWorktrees}
-            repoRoot={repoRoot}
-          />
-        )}
-      </Box>
+      <PrunePager rows={rows} />
       <Box marginTop={1}>{control}</Box>
       {log.length > 0 && (
         <Box flexDirection="column" marginTop={1} borderStyle="single" borderColor="cyan">
@@ -871,9 +901,9 @@ function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.Rea
         <Text dimColor>
           Tab/⇧Tab switch tab
           {tab === "live"
-            ? " · Enter Start/Stop · p profile"
+            ? " · Enter Start/Stop · p profile · ↑/↓ PgUp/PgDn g/G scroll (G follow)"
             : tab === "maintenance"
-              ? " · a apply · r reload"
+              ? " · a apply · r reload · ↑/↓ PgUp/PgDn g/G scroll"
               : ""}{" "}
           · q quit
         </Text>

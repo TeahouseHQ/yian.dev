@@ -28,7 +28,7 @@ import {
   type OrchestratorRole,
 } from "./events.mts";
 import { profileNames, type ProfileName } from "./model-profiles.mts";
-import type { PrunePlan } from "./prune-plan.mts";
+import type { PrunePlan, PruneWorktree } from "./prune-plan.mts";
 
 /** The Cockpit's tabbed modes, in cycle order (CONTEXT.md: Cockpit). */
 export const COCKPIT_TABS = ["live", "sessions", "maintenance"] as const;
@@ -623,6 +623,103 @@ export function stepPruneApply(
   return { phase, apply: false };
 }
 
+// ── Flatten the prune buckets into one pager-scrollable list (ADR-0015) ────────
+//
+// The Maintenance tab no longer stacks its 5–6 buckets as separate boxes (which
+// overflow the terminal once the plan is large); it flattens them into a single
+// ordered list of rows the shared viewport reducer scrolls as one offset.
+// Bucket headers stay inline as separators, so the operator still reads the
+// plan category-by-category; apply is all-or-nothing, so there is no per-row
+// cursor to track. Pure so the layout is unit-testable without the Ink layer.
+
+/** A row's semantic tone — `warn` is the kept (skipped-dirty) bucket surfaced in
+ *  yellow; every other bucket is `normal`. Carried on the row (not derived from
+ *  the label) so the shell's colour choice is stable, not string-matched. */
+export type PruneRowTone = "normal" | "warn";
+
+/** One row of the flattened Maintenance prune list (ADR-0015). A `bucket-header`
+ *  is an inline separator carrying its bucket's label + live count (and tone);
+ *  an `item` is one concrete deletion (a run-log path, a worktree, or a branch).
+ *  Flattening lets the pager scroll a single offset over every bucket at once —
+ *  apply is all-or-nothing, so nothing here is selectable. */
+export type PruneRow =
+  | { kind: "bucket-header"; label: string; count: number; tone: PruneRowTone }
+  | { kind: "item"; text: string };
+
+/** The bucket order the Maintenance preview always lays out (ADR-0004): the
+ *  five standard deletion buckets in a fixed reading order, with the kept
+ *  skipped-dirty bucket appended only when non-empty. Defined as data so the
+ *  flatten (and its tests) reference one source of truth for the ordering. */
+export function pruneBuckets(plan: PrunePlan): {
+  readonly label: string;
+  readonly tone: PruneRowTone;
+  readonly items: readonly (string | PruneWorktree)[];
+}[] {
+  const standard: { label: string; tone: PruneRowTone; items: readonly (string | PruneWorktree)[] }[] =
+    [
+      { label: "Run logs to delete", tone: "normal", items: plan.runLogs },
+      { label: "Merged worktrees to remove", tone: "normal", items: plan.removableWorktrees },
+      {
+        label: "Merged sandcastle branches to delete",
+        tone: "normal",
+        items: plan.deletableBranches,
+      },
+      {
+        label: "Leftover Merger worktrees to remove",
+        tone: "normal",
+        items: plan.removableMergerWorktrees,
+      },
+      {
+        label: "Leftover Merger branches to force-delete",
+        tone: "normal",
+        items: plan.deletableMergerBranches,
+      },
+    ];
+  // The skipped-dirty bucket is surfaced only when there is something to warn
+  // about — mirroring the prior per-bucket preview, which rendered it
+  // conditionally. Kept items carry the `warn` tone so the shell paints them
+  // yellow without string-matching the label.
+  if (plan.skippedDirtyWorktrees.length > 0) {
+    standard.push({
+      label: "⚠ Skipped — uncommitted changes (kept)",
+      tone: "warn",
+      items: plan.skippedDirtyWorktrees,
+    });
+  }
+  return standard;
+}
+
+/** Render one prune item to its row text. Run logs and branch names are plain
+ *  strings shown verbatim (matching the prior per-bucket preview); a worktree
+ *  shows its repo-relative path plus the branch checked out in it. Pure. */
+export function pruneItemText(item: string | PruneWorktree, repoRoot: string): string {
+  if (typeof item === "string") return item;
+  const rel = item.path.replace(repoRoot + "/", "");
+  return `${rel} [${item.branch}]`;
+}
+
+/**
+ * Flatten a prune plan into one ordered list of rows the Maintenance pager
+ * scrolls as a single viewport (ADR-0015). The five standard buckets always
+ * appear (in {@link pruneBuckets}' fixed order) as header rows carrying their
+ * live count, followed by their item rows; the kept skipped-dirty bucket is
+ * appended (header + items) only when non-empty. Worktree paths are
+ * repo-relativized via {@link pruneItemText} so the rows stay compact, exactly
+ * as the prior per-bucket preview rendered them — only the layout changes
+ * (stacked boxes → one scrollable list), not the content. Pure (plan + repoRoot
+ * in, rows out) so the whole flatten is unit-testable without the Ink layer.
+ */
+export function flattenPrunePlan(plan: PrunePlan, repoRoot: string): PruneRow[] {
+  const rows: PruneRow[] = [];
+  for (const bucket of pruneBuckets(plan)) {
+    rows.push({ kind: "bucket-header", label: bucket.label, count: bucket.items.length, tone: bucket.tone });
+    for (const item of bucket.items) {
+      rows.push({ kind: "item", text: pruneItemText(item, repoRoot) });
+    }
+  }
+  return rows;
+}
+
 // ── Alternate screen buffer (ADR-0015) ───────────────────────────────────────
 
 /** Enter the alternate screen buffer (`ESC[?1049h`) — the blank full-height
@@ -733,4 +830,41 @@ export function reduceViewport(state: ViewportState, input: ViewportInput): View
   // Up-steps always pause follow; down-steps leave it exactly as-is.
   const follow = step.dir < 0 ? false : state.follow;
   return { offset, follow };
+}
+
+/** The structural slice of Ink's `Key` that {@link viewportScrollFromKey}
+ *  inspects — the navigation bits shared by the Live log and the Maintenance
+ *  pager. Mirrors {@link InputKey} (the global router's slice) in shape. */
+export interface ScrollKey {
+  readonly upArrow?: boolean;
+  readonly downArrow?: boolean;
+  readonly pageUp?: boolean;
+  readonly pageDown?: boolean;
+  readonly home?: boolean;
+  readonly end?: boolean;
+}
+
+/**
+ * Map one Ink key chord to a {@link ViewportScroll} step, or `null` when it is
+ * not a scroll key. Shared by both scrolling Cockpit panels (ADR-0015): the Live
+ * event log's Follow mode and the Maintenance pager answer the SAME chord —
+ * ↑/↓ line, PgUp/PgDn page, g/Home top, G/End tail — so an operator's fingers
+ * move identically between them. `G`/End resolve to `end` (which
+ * {@link reduceViewport} wires to re-engage Follow), and `g`/Home to `home`
+ * (which pauses it).
+ *
+ * Returns `null` for every key that is NOT a scroll key — critically including
+ * the Maintenance apply controls `a`/`y`/`n`/`r` and the Live action keys
+ * (Enter/`p`) — so this chord never collides with a panel's other controls (the
+ * issue's AC). Pure (input + key in, step out) so the whole chord + the
+ * non-collision guarantee are unit-testable without Ink.
+ */
+export function viewportScrollFromKey(input: string, key: ScrollKey): ViewportScroll | null {
+  if (key.upArrow) return { kind: "line", dir: -1 };
+  if (key.downArrow) return { kind: "line", dir: 1 };
+  if (key.pageUp) return { kind: "page", dir: -1 };
+  if (key.pageDown) return { kind: "page", dir: 1 };
+  if (input === "g" || key.home) return { kind: "home" };
+  if (input === "G" || key.end) return { kind: "end" };
+  return null;
 }

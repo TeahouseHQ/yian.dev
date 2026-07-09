@@ -21,13 +21,16 @@ import {
   spawnOrchestrator,
   splitNdjsonChunk,
   describePruneApply,
+  flattenPrunePlan,
   prunePlanTotal,
   stepPruneApply,
   tailViewportOffset,
+  viewportScrollFromKey,
   cycleProfile,
   formatProfileHeader,
   type InputKey,
   type OrchestratorHandlers,
+  type PruneRow,
   type ViewportInput,
   type ViewportScroll,
   type ViewportState,
@@ -1180,5 +1183,170 @@ describe("reduceViewport — follow survives across inputs", () => {
     expect(v).toEqual({ offset: 89, follow: false }); // held, not yanked to 110
     v = reduceViewport(v, scroll({ kind: "end" }, 120, 10));
     expect(v).toEqual({ offset: 110, follow: true }); // End re-tails
+  });
+});
+
+// ── flattenPrunePlan: flatten the prune buckets into one pager-scrollable list ─
+
+/** A PrunePlan fixture; every bucket empty unless overridden (kept local so each
+ *  bucket can be built up independently of the shared `plan()` helper above). */
+function fullPlan(repoRoot: string): PrunePlan {
+  return {
+    runLogs: [`${repoRoot}/.sandcastle/logs/a.log`, `${repoRoot}/.sandcastle/logs/b.log`],
+    removableWorktrees: [{ path: `${repoRoot}/wt-1`, branch: "sandcastle/issue-1" }],
+    deletableBranches: ["sandcastle/issue-2"],
+    removableMergerWorktrees: [{ path: `${repoRoot}/wt-2`, branch: "sandcastle/merge-3" }],
+    deletableMergerBranches: ["sandcastle/merge-4"],
+    skippedDirtyWorktrees: [{ path: `${repoRoot}/wt-3`, branch: "sandcastle/issue-5" }],
+  };
+}
+
+describe("flattenPrunePlan", () => {
+  it("lays every bucket out as a header row followed by its item rows", () => {
+    const rows = flattenPrunePlan(fullPlan("/repo"), "/repo");
+    // Header, then 2 run logs, header, 1 worktree, header, 1 branch, header,
+    // 1 merger worktree, header, 1 merger branch, header, 1 skipped worktree.
+    expect(rows.map((r) => r.kind)).toEqual([
+      "bucket-header",
+      "item",
+      "item",
+      "bucket-header",
+      "item",
+      "bucket-header",
+      "item",
+      "bucket-header",
+      "item",
+      "bucket-header",
+      "item",
+      "bucket-header",
+      "item",
+    ]);
+  });
+
+  it("keeps the five standard buckets in a fixed order, skipped last", () => {
+    const rows = flattenPrunePlan(fullPlan("/repo"), "/repo");
+    const headers = rows.filter((r): r is Extract<PruneRow, { kind: "bucket-header" }> => r.kind === "bucket-header");
+    expect(headers.map((h) => h.label)).toEqual([
+      "Run logs to delete",
+      "Merged worktrees to remove",
+      "Merged sandcastle branches to delete",
+      "Leftover Merger worktrees to remove",
+      "Leftover Merger branches to force-delete",
+      "⚠ Skipped — uncommitted changes (kept)",
+    ]);
+  });
+
+  it("carries each bucket's live count on its header row", () => {
+    const rows = flattenPrunePlan(fullPlan("/repo"), "/repo");
+    const headers = rows.filter((r): r is Extract<PruneRow, { kind: "bucket-header" }> => r.kind === "bucket-header");
+    expect(headers.map((h) => h.count)).toEqual([2, 1, 1, 1, 1, 1]);
+  });
+
+  it("renders a worktree item as a repo-relative path with its branch", () => {
+    const rows = flattenPrunePlan(fullPlan("/repo"), "/repo");
+    const items = rows
+      .filter((r): r is Extract<PruneRow, { kind: "item" }> => r.kind === "item")
+      .map((r) => r.text);
+    expect(items).toContain("wt-1 [sandcastle/issue-1]");
+    expect(items).toContain("wt-2 [sandcastle/merge-3]");
+    expect(items).toContain("wt-3 [sandcastle/issue-5]");
+  });
+
+  it("renders run-log and branch items verbatim (the bucket's stored string)", () => {
+    // Run logs and branch names are plain strings; they render as-is (matching
+    // the prior per-bucket preview), only worktree paths are repo-relativized.
+    const rows = flattenPrunePlan(fullPlan("/repo"), "/repo");
+    const items = rows
+      .filter((r): r is Extract<PruneRow, { kind: "item" }> => r.kind === "item")
+      .map((r) => r.text);
+    expect(items).toContain("/repo/.sandcastle/logs/a.log");
+    expect(items).toContain("sandcastle/issue-2");
+    expect(items).toContain("sandcastle/merge-4");
+  });
+
+  it("relativizes worktree paths against the repo root", () => {
+    const rows = flattenPrunePlan(fullPlan("/home/me/repo"), "/home/me/repo");
+    const items = rows
+      .filter((r): r is Extract<PruneRow, { kind: "item" }> => r.kind === "item")
+      .map((r) => r.text);
+    expect(items).toContain("wt-1 [sandcastle/issue-1]");
+  });
+
+  it("keeps the five standard buckets even when empty (header, no items)", () => {
+    // An empty plan still lays out its structure: five header rows, zero items.
+    const rows = flattenPrunePlan(
+      {
+        runLogs: [],
+        removableWorktrees: [],
+        deletableBranches: [],
+        removableMergerWorktrees: [],
+        deletableMergerBranches: [],
+        skippedDirtyWorktrees: [],
+      },
+      "/repo"
+    );
+    expect(rows.length).toBe(5);
+    const headers = rows.filter(
+      (r): r is Extract<PruneRow, { kind: "bucket-header" }> => r.kind === "bucket-header"
+    );
+    expect(headers.length).toBe(5);
+    expect(headers.every((h) => h.count === 0)).toBe(true);
+  });
+
+  it("omits the skipped-dirty bucket entirely when there are none", () => {
+    const noSkip: PrunePlan = { ...fullPlan("/repo"), skippedDirtyWorktrees: [] };
+    const rows = flattenPrunePlan(noSkip, "/repo");
+    const labels = rows
+      .filter((r): r is Extract<PruneRow, { kind: "bucket-header" }> => r.kind === "bucket-header")
+      .map((h) => h.label);
+    expect(labels).not.toContain("⚠ Skipped — uncommitted changes (kept)");
+    expect(labels).toHaveLength(5);
+  });
+
+  it("flags only the skipped-dirty header with the warn tone", () => {
+    const rows = flattenPrunePlan(fullPlan("/repo"), "/repo");
+    const headers = rows.filter((r): r is Extract<PruneRow, { kind: "bucket-header" }> => r.kind === "bucket-header");
+    expect(headers.map((h) => h.tone)).toEqual([
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "warn",
+    ]);
+  });
+});
+
+// ── viewportScrollFromKey: the shared scroll-key chord for both panels ────────
+
+describe("viewportScrollFromKey", () => {
+  it("maps the arrow keys to single-line steps", () => {
+    expect(viewportScrollFromKey("", { upArrow: true })).toEqual({ kind: "line", dir: -1 });
+    expect(viewportScrollFromKey("", { downArrow: true })).toEqual({ kind: "line", dir: 1 });
+  });
+
+  it("maps PgUp/PgDn to full-page steps", () => {
+    expect(viewportScrollFromKey("", { pageUp: true })).toEqual({ kind: "page", dir: -1 });
+    expect(viewportScrollFromKey("", { pageDown: true })).toEqual({ kind: "page", dir: 1 });
+  });
+
+  it("maps g / Home to home (top) and G / End to end (tail, re-follow)", () => {
+    expect(viewportScrollFromKey("g", {})).toEqual({ kind: "home" });
+    expect(viewportScrollFromKey("", { home: true })).toEqual({ kind: "home" });
+    expect(viewportScrollFromKey("G", {})).toEqual({ kind: "end" });
+    expect(viewportScrollFromKey("", { end: true })).toEqual({ kind: "end" });
+  });
+
+  it("returns null for every Maintenance apply key (no collision, ADR-0015)", () => {
+    // The pager shares its panel with a/y/n/r — those must NOT scroll.
+    for (const c of ["a", "y", "n", "r"]) {
+      expect(viewportScrollFromKey(c, {})).toBeNull();
+    }
+  });
+
+  it("returns null for the Live tab's action keys (Enter, p) and global keys", () => {
+    for (const c of ["", "\r", "p", "q", " ", "j", "k"]) {
+      expect(viewportScrollFromKey(c, {})).toBeNull();
+    }
   });
 });

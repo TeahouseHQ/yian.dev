@@ -36,11 +36,19 @@ scrolls internally.
    - **In-flight list** — shows every Pool slot at natural height (≤ 10); the
      event log `flexGrow`s into the remainder, so the operator always sees
      everything currently running.
+   - **Transcript pager** — the Sessions browser's full-screen Transcript scrolls
+     inside the same measured Viewport on the same chord. Static like Maintenance:
+     offset-only, starts at the top, no Follow (no paused indicator). Previously it
+     ran on its own `pagerOffset` helper + a `termRows - 4` constant and was keyed
+     with `j`/`k`; it now answers ↑/↓ · PgUp/PgDn · g/G like every other panel.
 
 4. **Logic in the pure core.** The offset-clamp + Follow-mode transitions are one
-   pure, unit-tested reducer in `cockpit-core.mts`, shared by both live scrollers.
-   The `.tsx` shell only wires refs, `measureElement`, and the alt-screen escape
-   writes (untested, per `CODING_STANDARDS.md`).
+   pure, unit-tested reducer in `cockpit-core.mts`, shared by all three scroll
+   surfaces (Live log, Maintenance pager, transcript pager). The React wiring
+   (`useMeasuredHeight` + `useViewport` — refs, `measureElement`, the scoped
+   scroll-chord `useInput`) lives in one shared shell module, `viewport-hooks.tsx`,
+   imported by both `cockpit.tsx` and `SessionBrowser.tsx` (untested shell, per
+   `CODING_STANDARDS.md`), so the panels cannot drift apart.
 
 ## Considered options
 
@@ -64,3 +72,7 @@ scrolls internally.
 - The footer help line gains the per-tab scroll keys.
 - The Session browser's tree, already Viewport-scrolled via a `termRows - 6`
   constant, migrates onto the same measured model.
+- The Session browser's transcript pager migrates onto the shared measured
+  Viewport + chord too; its bespoke `pagerOffset` helper (and unit tests) are
+  deleted and its `j`/`k` binding dropped, so all three scroll surfaces answer
+  one identical chord.

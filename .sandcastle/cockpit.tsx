@@ -57,7 +57,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, measureElement, render, Text, useApp, useInput, useStdin, useStdout, type DOMElement } from "ink";
+import { Box, render, Text, useApp, useInput, useStdin, useStdout } from "ink";
+
+import { useMeasuredHeight, useViewport } from "./viewport-hooks.jsx";
 
 import {
   appendLogLine,
@@ -74,20 +76,17 @@ import {
   formatProfileHeader,
   prunePlanTotal,
   reduceLiveEvent,
-  reduceViewport,
   RESTORE_NORMAL_SCREEN,
   routeCockpitInput,
   shouldUseAltScreen,
   spawnOrchestrator,
   stepPruneApply,
-  viewportScrollFromKey,
   type CockpitTab,
   type LiveView,
   type PruneApplyPhase,
   type PruneRow,
   type SpawnConfig,
   type Supervisor,
-  type ViewportState,
 } from "./cockpit-core.mjs";
 import { formatEventLog, eventSeverity, type OrchestratorEvent } from "./events.mjs";
 import {
@@ -224,60 +223,6 @@ function exitAltScreen(): void {
   altScreenActive = false;
 }
 
-// ── Shared viewport-panel hooks (ADR-0015) ───────────────────────────────────
-//
-// Both long Cockpit panels (the Live event log's Follow mode and the Maintenance
-// pager) measure a content Box's height and drive the SAME pure viewport reducer
-// over it. These two hooks keep that wiring in one place so each panel reduces
-// to "measure → reduce → slice": `useMeasuredHeight` returns a ref to attach to
-// the scrollable Box plus its measured row count, and `useViewport` owns the
-// follow/offset state and wires the shared scroll chord onto it. Shell only —
-// the transitions themselves live in the pure, unit-tested `reduceViewport`.
-
-/** Measure a Box's height each commit (Ink re-renders on resize) and bail on an
- *  unchanged measurement so it converges without a render loop. Returns the ref
- *  to attach to the measured Box and the (clamped, ≥1) height. */
-function useMeasuredHeight(
-  fallback: number
-): readonly [React.RefObject<DOMElement | null>, number] {
-  const ref = useRef<DOMElement>(null);
-  const [height, setHeight] = useState(fallback);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const h = Math.max(1, measureElement(node).height);
-    setHeight((prev) => (prev === h ? prev : h));
-  });
-  return [ref, Math.max(1, height)] as const;
-}
-
-/** Own a panel's viewport state: a `content` reconcile on every lines/height
- *  change re-tails a following view but holds a paused offset, and the shared
- *  scroll chord (`viewportScrollFromKey`) wires ↑/↓ · PgUp/PgDn · g/G — returning
- *  null for every other key so it never collides with a panel's own controls
- *  (the issue's no-collision AC). `initial` seeds the viewport: the Live log
- *  follows the tail, the Maintenance pager starts at the top. */
-function useViewport(lines: number, height: number, initial: ViewportState): ViewportState {
-  const { isRawModeSupported } = useStdin();
-  const inputActive = isRawModeSupported === true;
-  const [viewport, setViewport] = useState<ViewportState>(initial);
-  useEffect(() => {
-    setViewport((v) => {
-      const next = reduceViewport(v, { kind: "content", lines, height });
-      return next.offset === v.offset && next.follow === v.follow ? v : next;
-    });
-  }, [lines, height]);
-  useInput(
-    (input, key) => {
-      const step = viewportScrollFromKey(input, key);
-      if (step === null) return;
-      setViewport((v) => reduceViewport(v, { kind: "scroll", step, lines, height }));
-    },
-    { isActive: inputActive }
-  );
-  return viewport;
-}
-
 /** The tab bar: the active tab bracketed + highlighted, the rest dim. */
 function TabBar({ tab }: { tab: CockpitTab }): React.ReactElement {
   return (
@@ -411,9 +356,7 @@ function LiveTab({
       >
         <Text bold>
           Event log <Text dimColor>({log.length})</Text>
-          {!viewport.follow && (
-            <Text color="yellow"> ⏸ paused — G/End to follow the tail</Text>
-          )}
+          {!viewport.follow && <Text color="yellow"> ⏸ paused — G/End to follow the tail</Text>}
         </Text>
         <Box ref={logBoxRef} flexDirection="column" flexGrow={1} overflow="hidden">
           {visible.length === 0 ? (
@@ -938,7 +881,7 @@ async function main(): Promise<void> {
   };
   const onUncaught = (err: unknown): void => {
     exitAltScreen();
-    console.error(err instanceof Error ? err.stack ?? err.message : String(err));
+    console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
     process.exit(1);
   };
   const onUnhandled = (reason: unknown): void => {

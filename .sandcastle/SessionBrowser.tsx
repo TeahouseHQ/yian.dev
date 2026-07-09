@@ -9,7 +9,8 @@
  * focusable **run→session tree** (left) beside a **detail view** (right), and a
  * full-screen **transcript pager** reached with Enter. ↑/↓ move the selection,
  * ←/→ (or Space) collapse/expand a Run, `r` reloads the manifest in place, and
- * in the pager `j`/`k`, `PgUp`/`PgDn`, `g`/`G` scroll while `Esc` returns.
+ * in the pager ↑/↓, `PgUp`/`PgDn`, `g`/`G` scroll (the shared viewport chord,
+ * ADR-0015) while `Esc` returns.
  *
  * All query/render logic is imported from the zero-dep core in
  * `render-transcript.mjs` (readManifest / withinWindow / groupRuns /
@@ -29,7 +30,16 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, measureElement, Text, useApp, useInput, useStdin, useStdout, type DOMElement } from "ink";
+import {
+  Box,
+  measureElement,
+  Text,
+  useApp,
+  useInput,
+  useStdin,
+  useStdout,
+  type DOMElement,
+} from "ink";
 
 import {
   DEFAULT_WINDOW_DAYS,
@@ -37,7 +47,6 @@ import {
   flattenTree,
   groupRuns,
   manifestPath,
-  pagerOffset,
   parseTranscript,
   readManifest,
   renderTranscript,
@@ -47,6 +56,7 @@ import {
   runSummaryFields,
   withinWindow,
 } from "./render-transcript.mjs";
+import { useMeasuredHeight, useViewport } from "./viewport-hooks.jsx";
 
 /** One manifest entry, as read by `readManifest` (a structural slice of the full shape). */
 export type Entry = {
@@ -75,12 +85,6 @@ type TreeRow =
 
 /** Left-pane width (columns). Generous enough for `run-<stamp>` ids + a count. */
 const LEFT_WIDTH = 46;
-
-/** Pager rows reserved for chrome: top/bottom border (2) + header (1) + help (1). */
-const PAGER_OVERHEAD = 4;
-
-/** A scroll action the transcript pager understands (mirrors the core helper). */
-type PagerAction = "up" | "down" | "pageUp" | "pageDown" | "home" | "end";
 
 /** The window options the browser filters Runs against. */
 export interface WindowOpts {
@@ -277,30 +281,41 @@ function DetailPane({ current }: { current: TreeRow | undefined }): React.ReactE
 /**
  * The full-screen transcript pager (issue #74). Renders a Session's Transcript
  * (text produced by the reused core pipeline — `resolveTranscriptFile` →
- * `parseTranscript` → `renderTranscript`) scrolled by `offset`. While the file
- * resolves it shows a loading line; when none resolves locally it shows the
- * Session's manifest metadata plus a clear "transcript not available locally"
- * note. Each source line is truncated to the viewport width so a wide tool
- * result can't break the layout, and only the visible slice is rendered so a
- * long transcript scrolls smoothly.
+ * `parseTranscript` → `renderTranscript`) scrolled inside a **measured Viewport**
+ * (ADR-0015): the SAME shared `useMeasuredHeight` + `useViewport` the Live event
+ * log and Maintenance pager use, so all three scroll surfaces answer one chord
+ * — ↑/↓ · PgUp/PgDn · g/G — and can never drift apart. Like the Maintenance
+ * pager the Transcript is static, so the viewport starts at the TOP (offset 0,
+ * follow off) with no paused indicator; the measured body box self-corrects on
+ * terminal resize. While the file resolves it shows a loading line; when none
+ * resolves locally it shows the Session's manifest metadata plus a clear
+ * "transcript not available locally" note. Each source line is truncated to the
+ * viewport width so a wide tool result can't break the layout, and only the
+ * visible slice is rendered so a long transcript scrolls smoothly.
+ *
+ * `useViewport` registers its own scoped `useInput` for the scroll chord; because
+ * the Cockpit/browser mounts this component only in pager mode, that chord is
+ * naturally scoped to the pager (the shell's outer `useInput` keeps Esc/quit).
  */
 function PagerView({
   entry,
   text,
   loading,
-  offset,
-  height,
 }: {
   entry: Entry;
   /** The rendered transcript, or null when none resolved locally. */
   text: string | null;
   loading: boolean;
-  offset: number;
-  /** Max body rows to render (the terminal-bounded viewport). */
-  height: number;
 }): React.ReactElement {
   const ref = entry.issue == null ? "(planner)" : `#${entry.issue}`;
   const title = `${entry.phase ?? "?"} ${ref}`;
+  // Hooks run unconditionally (rules of hooks) even in the loading / not-available
+  // branches, where there is simply nothing to scroll (lines = 0). The body ref is
+  // only attached in the scrollable branch, so the measurement is a no-op otherwise.
+  const lines = text === null ? [] : text.split("\n");
+  const [bodyRef, height] = useMeasuredHeight(20);
+  const viewport = useViewport(lines.length, height, { offset: 0, follow: false });
+
   let body: React.ReactNode;
   if (loading) {
     body = <Text dimColor>Loading transcript…</Text>;
@@ -319,10 +334,9 @@ function PagerView({
       </Box>
     );
   } else {
-    const lines = text.split("\n");
-    const visible = lines.slice(offset, offset + Math.max(1, height));
+    const visible = lines.slice(viewport.offset, viewport.offset + height);
     body = (
-      <Box flexDirection="column" flexGrow={1}>
+      <Box ref={bodyRef} flexDirection="column" flexGrow={1} overflow="hidden">
         {visible.map((line, i) => (
           // Empty source lines render as a blank row so blank-separated blocks
           // keep their spacing; long lines truncate to the viewport width so a
@@ -335,12 +349,18 @@ function PagerView({
     );
   }
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="cyan">
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      borderStyle="single"
+      borderColor="cyan"
+      overflow="hidden"
+    >
       <Text bold>
         Transcript — {title} <Text dimColor>Esc back</Text>
       </Text>
       {body}
-      <Text dimColor>j/k line · PgUp/PgDn page · g/G top/bottom · Esc back · q quit</Text>
+      <Text dimColor>↑/↓ line · PgUp/PgDn page · g/G top/bottom · Esc back · q quit</Text>
     </Box>
   );
 }
@@ -382,7 +402,6 @@ export function SessionBrowser({
   const [pagerEntry, setPagerEntry] = useState<Entry | null>(null);
   const [pagerText, setPagerText] = useState<string | null>(null);
   const [pagerLoading, setPagerLoading] = useState(false);
-  const [pagerScroll, setPagerScroll] = useState(0);
 
   // Runs in-window (newest-first); re-derived on reload. resolveCutoff is
   // re-evaluated here so a reload re-windows against "now".
@@ -402,10 +421,9 @@ export function SessionBrowser({
   // not a hand-tuned `termRows - N`: the content box is a flexGrow child of the
   // bounded fullscreen canvas, so its measured height is exactly the rows that
   // fit, and it self-corrects on terminal resize (Ink re-renders → re-measure →
-  // re-clamp). The pager body keeps its full-terminal arithmetic — it IS the
-  // full screen, so `rows - border/header/help` is exact for it.
+  // re-clamp). The transcript pager measures its own body the same way, via the
+  // shared `useMeasuredHeight` inside `PagerView`.
   const termRows = stdout?.rows;
-  const pagerBodyHeight = termRows ? Math.max(1, termRows - PAGER_OVERHEAD) : 20;
   const treeRef = useRef<DOMElement>(null);
   const [treeHeight, setTreeHeight] = useState(() => termRows ?? rows.length);
   useEffect(() => {
@@ -503,12 +521,12 @@ export function SessionBrowser({
   }, [current, collapsed, expandCurrent, collapseCurrent]);
 
   /** Open the transcript pager for a Session (Enter on a session row). Resets
-   * loading/text/scroll synchronously so the first paint reads "Loading…". */
+   * loading/text synchronously so the first paint reads "Loading…"; the pager's
+   * own `useViewport` seeds a fresh top-of-transcript offset on mount. */
   const openPager = useCallback((entry: Entry) => {
     setPagerEntry(entry);
     setPagerText(null);
     setPagerLoading(true);
-    setPagerScroll(0);
   }, []);
 
   /** Close the pager and return to the two-pane tree (Esc); selection is intact. */
@@ -516,15 +534,15 @@ export function SessionBrowser({
     setPagerEntry(null);
     setPagerText(null);
     setPagerLoading(false);
-    setPagerScroll(0);
   }, []);
 
   useInput(
     (input, key) => {
       // Pager mode (#74): Esc returns to the tree; q / Ctrl-C quit (standalone
-      // only — embedded, the Cockpit owns quit); j/k, PgUp/PgDn, g/G scroll the
-      // rendered transcript. The scroll math is the pure `pagerOffset` helper,
-      // clamped to the current line count + viewport.
+      // only — embedded, the Cockpit owns quit). Scrolling (↑/↓ · PgUp/PgDn ·
+      // g/G) is owned by the transcript pager's own `useViewport` (ADR-0015),
+      // mounted only in pager mode so its chord is naturally scoped; the early
+      // return here keeps the tree keys inert while the transcript is open.
       if (pagerEntry) {
         if (key.escape) {
           closePager();
@@ -533,17 +551,6 @@ export function SessionBrowser({
         if (standalone && (input === "q" || (key.ctrl && input === "c"))) {
           void exit();
           return;
-        }
-        const lineCount = pagerText === null ? 0 : pagerText.split("\n").length;
-        let action: PagerAction | null = null;
-        if (input === "j") action = "down";
-        else if (input === "k") action = "up";
-        else if (key.pageDown) action = "pageDown";
-        else if (key.pageUp) action = "pageUp";
-        else if (input === "g") action = "home";
-        else if (input === "G") action = "end";
-        if (action) {
-          setPagerScroll((o) => pagerOffset(o, lineCount, pagerBodyHeight, action));
         }
         return;
       }
@@ -587,13 +594,7 @@ export function SessionBrowser({
       {pagerEntry ? (
         // Pager mode (#74): the transcript replaces the two-pane tree. Esc (handled
         // above) returns to the tree with the selection intact.
-        <PagerView
-          entry={pagerEntry}
-          text={pagerText}
-          loading={pagerLoading}
-          offset={pagerScroll}
-          height={pagerBodyHeight}
-        />
+        <PagerView entry={pagerEntry} text={pagerText} loading={pagerLoading} />
       ) : (
         <>
           <Box flexDirection="column">

@@ -224,6 +224,60 @@ function exitAltScreen(): void {
   altScreenActive = false;
 }
 
+// ── Shared viewport-panel hooks (ADR-0015) ───────────────────────────────────
+//
+// Both long Cockpit panels (the Live event log's Follow mode and the Maintenance
+// pager) measure a content Box's height and drive the SAME pure viewport reducer
+// over it. These two hooks keep that wiring in one place so each panel reduces
+// to "measure → reduce → slice": `useMeasuredHeight` returns a ref to attach to
+// the scrollable Box plus its measured row count, and `useViewport` owns the
+// follow/offset state and wires the shared scroll chord onto it. Shell only —
+// the transitions themselves live in the pure, unit-tested `reduceViewport`.
+
+/** Measure a Box's height each commit (Ink re-renders on resize) and bail on an
+ *  unchanged measurement so it converges without a render loop. Returns the ref
+ *  to attach to the measured Box and the (clamped, ≥1) height. */
+function useMeasuredHeight(
+  fallback: number
+): readonly [React.RefObject<DOMElement | null>, number] {
+  const ref = useRef<DOMElement>(null);
+  const [height, setHeight] = useState(fallback);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const h = Math.max(1, measureElement(node).height);
+    setHeight((prev) => (prev === h ? prev : h));
+  });
+  return [ref, Math.max(1, height)] as const;
+}
+
+/** Own a panel's viewport state: a `content` reconcile on every lines/height
+ *  change re-tails a following view but holds a paused offset, and the shared
+ *  scroll chord (`viewportScrollFromKey`) wires ↑/↓ · PgUp/PgDn · g/G — returning
+ *  null for every other key so it never collides with a panel's own controls
+ *  (the issue's no-collision AC). `initial` seeds the viewport: the Live log
+ *  follows the tail, the Maintenance pager starts at the top. */
+function useViewport(lines: number, height: number, initial: ViewportState): ViewportState {
+  const { isRawModeSupported } = useStdin();
+  const inputActive = isRawModeSupported === true;
+  const [viewport, setViewport] = useState<ViewportState>(initial);
+  useEffect(() => {
+    setViewport((v) => {
+      const next = reduceViewport(v, { kind: "content", lines, height });
+      return next.offset === v.offset && next.follow === v.follow ? v : next;
+    });
+  }, [lines, height]);
+  useInput(
+    (input, key) => {
+      const step = viewportScrollFromKey(input, key);
+      if (step === null) return;
+      setViewport((v) => reduceViewport(v, { kind: "scroll", step, lines, height }));
+    },
+    { isActive: inputActive }
+  );
+  return viewport;
+}
+
 /** The tab bar: the active tab bracketed + highlighted, the rest dim. */
 function TabBar({ tab }: { tab: CockpitTab }): React.ReactElement {
   return (
@@ -306,55 +360,17 @@ function LiveTab({
   view: LiveView;
   log: LogEntry[];
 }): React.ReactElement {
-  const { isRawModeSupported } = useStdin();
-  const inputActive = isRawModeSupported === true;
   const action = status === "running" ? "Stop" : "Start";
   const profile = formatProfileHeader(running, selected);
 
-  // Measure the event-log box each commit (Ink re-renders on resize) so the log
-  // fills the remaining rows after the in-flight list — never a hand-tuned
-  // `termRows - N`. setLogHeight bails on an unchanged measurement, so this
-  // converges without a render loop (ADR-0015).
-  const logBoxRef = useRef<DOMElement>(null);
-  const [logHeight, setLogHeight] = useState(20);
-  useEffect(() => {
-    const node = logBoxRef.current;
-    if (!node) return;
-    const h = Math.max(1, measureElement(node).height);
-    setLogHeight((prev) => (prev === h ? prev : h));
-  });
-
-  const height = Math.max(1, logHeight);
-
-  // Follow-mode viewport: starts following the tail; the scroll chord
-  // (↑/↓ · PgUp/PgDn · g/G) pauses Follow to scroll back through history, and
-  // G/End re-tails. The transitions are the pure, unit-tested `reduceViewport`;
-  // this component only owns the state + wires the keys. A `content` reconcile
-  // on every lines/height change re-tails a following view (so new events stream
-  // in) but holds a paused offset, so a live stream never yanks a scrolled-up
-  // view back down (ADR-0015). The identity check avoids a re-render when the
-  // reconcile moved nothing.
-  const [viewport, setViewport] = useState<ViewportState>(FOLLOWING_VIEWPORT);
-  useEffect(() => {
-    setViewport((v) => {
-      const next = reduceViewport(v, { kind: "content", lines: log.length, height });
-      return next.offset === v.offset && next.follow === v.follow ? v : next;
-    });
-  }, [log.length, height]);
-
-  // The shared scroll chord (`viewportScrollFromKey`) — the SAME keys the
-  // Maintenance pager answers. It returns null for Enter/`p`/`q`/Tab/`a`/`y`/`n`/`r`,
-  // so this never collides with the Cockpit's Start/Stop, profile-cycle, or
-  // quit/tab-switch keys (the issue's no-collision AC).
-  useInput(
-    (input, key) => {
-      const step = viewportScrollFromKey(input, key);
-      if (step === null) return;
-      setViewport((v) => reduceViewport(v, { kind: "scroll", step, lines: log.length, height }));
-    },
-    { isActive: inputActive }
-  );
-
+  // Follow-mode viewport (ADR-0015): the log auto-tails the newest events, but
+  // ↑/↓ · PgUp/PgDn · g/G scroll back through history (pausing Follow); G/End
+  // re-engages the tail. `useMeasuredHeight` sizes the log box (no magic
+  // constant); `useViewport` owns the state + wires the shared scroll chord,
+  // which returns null for Enter/`p`/`q`/Tab so it never collides with the
+  // Cockpit's Start/Stop, profile-cycle, or quit/tab-switch keys.
+  const [logBoxRef, height] = useMeasuredHeight(20);
+  const viewport = useViewport(log.length, height, FOLLOWING_VIEWPORT);
   const visible = log.slice(viewport.offset, viewport.offset + height);
 
   return (
@@ -433,42 +449,12 @@ interface MaintPlan {
  *  (offset 0, not following) so the operator reads the dry-run preview from the
  *  first bucket down; the measured body box self-corrects on terminal resize. */
 function PrunePager({ rows }: { rows: PruneRow[] }): React.ReactElement {
-  const { isRawModeSupported } = useStdin();
-  const inputActive = isRawModeSupported === true;
-
-  const bodyRef = useRef<DOMElement>(null);
-  const [bodyHeight, setBodyHeight] = useState(20);
-  useEffect(() => {
-    const node = bodyRef.current;
-    if (!node) return;
-    const h = Math.max(1, measureElement(node).height);
-    setBodyHeight((prev) => (prev === h ? prev : h));
-  });
-
-  const height = Math.max(1, bodyHeight);
-
-  // The plan is static (it only changes on reload), so the viewport starts at
-  // the TOP — offset 0, follow off — to read the preview top-to-bottom. A
-  // `content` reconcile re-clamps the held offset if a reload shrank the plan
-  // (and re-fits on resize); the identity check avoids a re-render when it
-  // moved nothing.
-  const [viewport, setViewport] = useState<ViewportState>({ offset: 0, follow: false });
-  useEffect(() => {
-    setViewport((v) => {
-      const next = reduceViewport(v, { kind: "content", lines: rows.length, height });
-      return next.offset === v.offset && next.follow === v.follow ? v : next;
-    });
-  }, [rows.length, height]);
-
-  useInput(
-    (input, key) => {
-      const step = viewportScrollFromKey(input, key);
-      if (step === null) return;
-      setViewport((v) => reduceViewport(v, { kind: "scroll", step, lines: rows.length, height }));
-    },
-    { isActive: inputActive }
-  );
-
+  // The plan is static, so the viewport starts at the TOP (offset 0, follow
+  // off) to read the preview top-to-bottom. `useViewport` owns the state +
+  // wires the shared scroll chord, which returns null for `a`/`y`/`n`/`r` so it
+  // never collides with the apply controls the Cockpit shell owns (ADR-0015).
+  const [bodyRef, height] = useMeasuredHeight(20);
+  const viewport = useViewport(rows.length, height, { offset: 0, follow: false });
   const visible = rows.slice(viewport.offset, viewport.offset + height);
 
   return (

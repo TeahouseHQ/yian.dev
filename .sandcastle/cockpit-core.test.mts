@@ -31,7 +31,6 @@ import {
   type InputKey,
   type OrchestratorHandlers,
   type PruneRow,
-  type ScrollKey,
   type ViewportInput,
   type ViewportScroll,
   type ViewportState,
@@ -1320,43 +1319,22 @@ describe("flattenPrunePlan", () => {
 
 // ── viewportScrollFromKey: the shared scroll-key chord for both panels ────────
 
-/** A scroll-key slice builder mirroring Ink's `Key` (only the bits we read). */
-function sk(over: Partial<ScrollKey> = {}, input = ""): { input: string; key: ScrollKey } {
-  return { input, key: over };
-}
-
 describe("viewportScrollFromKey", () => {
   it("maps the arrow keys to single-line steps", () => {
-    expect(viewportScrollFromKey(sk({ upArrow: true }).input, sk({ upArrow: true }).key)).toEqual({
-      kind: "line",
-      dir: -1,
-    });
-    expect(viewportScrollFromKey(sk({ downArrow: true }).input, sk({ downArrow: true }).key)).toEqual({
-      kind: "line",
-      dir: 1,
-    });
+    expect(viewportScrollFromKey("", { upArrow: true })).toEqual({ kind: "line", dir: -1 });
+    expect(viewportScrollFromKey("", { downArrow: true })).toEqual({ kind: "line", dir: 1 });
   });
 
   it("maps PgUp/PgDn to full-page steps", () => {
-    expect(viewportScrollFromKey(sk({ pageUp: true }).input, sk({ pageUp: true }).key)).toEqual({
-      kind: "page",
-      dir: -1,
-    });
-    expect(viewportScrollFromKey(sk({ pageDown: true }).input, sk({ pageDown: true }).key)).toEqual({
-      kind: "page",
-      dir: 1,
-    });
+    expect(viewportScrollFromKey("", { pageUp: true })).toEqual({ kind: "page", dir: -1 });
+    expect(viewportScrollFromKey("", { pageDown: true })).toEqual({ kind: "page", dir: 1 });
   });
 
   it("maps g / Home to home (top) and G / End to end (tail, re-follow)", () => {
     expect(viewportScrollFromKey("g", {})).toEqual({ kind: "home" });
-    expect(viewportScrollFromKey(sk({ home: true }).input, sk({ home: true }).key)).toEqual({
-      kind: "home",
-    });
+    expect(viewportScrollFromKey("", { home: true })).toEqual({ kind: "home" });
     expect(viewportScrollFromKey("G", {})).toEqual({ kind: "end" });
-    expect(viewportScrollFromKey(sk({ end: true }).input, sk({ end: true }).key)).toEqual({
-      kind: "end",
-    });
+    expect(viewportScrollFromKey("", { end: true })).toEqual({ kind: "end" });
   });
 
   it("returns null for every Maintenance apply key (no collision, ADR-0015)", () => {

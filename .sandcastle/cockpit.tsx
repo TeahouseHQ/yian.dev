@@ -57,7 +57,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, render, Text, useApp, useInput, useStdin, useStdout } from "ink";
+import { Box, measureElement, render, Text, useApp, useInput, useStdin, useStdout, type DOMElement } from "ink";
 
 import {
   appendLogLine,
@@ -66,12 +66,17 @@ import {
   cycleTab,
   describePruneApply,
   EMPTY_LIVE_VIEW,
+  ENTER_ALT_SCREEN,
+  FOLLOWING_VIEWPORT,
   formatInFlight,
   formatPoolGauge,
   formatProfileHeader,
   prunePlanTotal,
   reduceLiveEvent,
+  reduceViewport,
+  RESTORE_NORMAL_SCREEN,
   routeCockpitInput,
+  shouldUseAltScreen,
   spawnOrchestrator,
   stepPruneApply,
   type CockpitTab,
@@ -79,6 +84,7 @@ import {
   type PruneApplyPhase,
   type SpawnConfig,
   type Supervisor,
+  type ViewportState,
 } from "./cockpit-core.mjs";
 import { formatEventLog, eventSeverity, type OrchestratorEvent } from "./events.mjs";
 import {
@@ -188,6 +194,33 @@ function orchestratorSpawn(profile: ProfileName): SpawnConfig {
   };
 }
 
+// ── Alternate screen buffer (ADR-0015) ──────────────────────────────────────
+//
+// In a TTY the Cockpit owns a blank full-height canvas (the alternate screen
+// buffer vim/less/htop use) so it never overflows the real terminal; on any
+// teardown path that canvas is restored and the operator's prior scrollback
+// reappears. `altScreenActive` guards the restore so every exit path (clean
+// quit, SIGINT/SIGTERM, uncaught throw, React unmount) can call it idempotently.
+let altScreenActive = false;
+
+/** Enter the alternate screen buffer, but ONLY in a real TTY — a piped/non-TTY
+ *  run must emit no escapes (ADR-0015). Written before the first Ink paint so the
+ *  operator never sees a flash of the normal-buffer frame. */
+function enterAltScreen(): void {
+  if (altScreenActive) return;
+  if (!shouldUseAltScreen(process.stdout)) return;
+  process.stdout.write(ENTER_ALT_SCREEN);
+  altScreenActive = true;
+}
+
+/** Restore the normal screen buffer if the Cockpit took it over. Idempotent so
+ *  every teardown path can call it without double-writing the escape. */
+function exitAltScreen(): void {
+  if (!altScreenActive) return;
+  process.stdout.write(RESTORE_NORMAL_SCREEN);
+  altScreenActive = false;
+}
+
 /** The tab bar: the active tab bracketed + highlighted, the rest dim. */
 function TabBar({ tab }: { tab: CockpitTab }): React.ReactElement {
   return (
@@ -246,7 +279,10 @@ function InFlightPanel({ view }: { view: LiveView }): React.ReactElement {
 
 /** The Live tab: status/Start-Stop header + pool gauge & in-flight list + the
  *  scrolling event log. The gauge/list derive purely from the event stream via
- *  `view` (never the Manifest — ADR-0008); the log is the same bounded ring. */
+ *  `view` (never the Manifest — ADR-0008); the log runs the shared viewport
+ *  reducer in **always-following (tail) mode** (ADR-0015) — its height is
+ *  measured from the rendered log box (no magic constant), so it self-corrects
+ *  on terminal resize and the in-flight list above takes its natural height. */
 function LiveTab({
   status,
   statusMessage,
@@ -254,7 +290,6 @@ function LiveTab({
   selected,
   view,
   log,
-  height,
 }: {
   status: ChildStatus;
   statusMessage: string;
@@ -264,14 +299,36 @@ function LiveTab({
   selected: ProfileName;
   view: LiveView;
   log: LogEntry[];
-  /** Max event-log rows to render (terminal-bounded; the log tail-follows). */
-  height: number;
 }): React.ReactElement {
   const action = status === "running" ? "Stop" : "Start";
   const profile = formatProfileHeader(running, selected);
-  const visible = log.slice(Math.max(0, log.length - Math.max(1, height)));
+
+  // Measure the event-log box each commit (Ink re-renders on resize) so the log
+  // fills the remaining rows after the in-flight list — never a hand-tuned
+  // `termRows - N`. setLogHeight bails on an unchanged measurement, so this
+  // converges without a render loop (ADR-0015).
+  const logBoxRef = useRef<DOMElement>(null);
+  const [logHeight, setLogHeight] = useState(20);
+  useEffect(() => {
+    const node = logBoxRef.current;
+    if (!node) return;
+    const h = Math.max(1, measureElement(node).height);
+    setLogHeight((prev) => (prev === h ? prev : h));
+  });
+
+  // Always-following: run the pure reducer over a tail state each frame so the
+  // log shows the newest `logHeight` events (and a future slice can swap in a
+  // real scrollable state here without changing the seam).
+  const height = Math.max(1, logHeight);
+  const viewport: ViewportState = reduceViewport(FOLLOWING_VIEWPORT, {
+    kind: "content",
+    lines: log.length,
+    height,
+  });
+  const visible = log.slice(viewport.offset, viewport.offset + height);
+
   return (
-    <Box flexDirection="column" flexGrow={1}>
+    <Box flexDirection="column" flexGrow={1} overflow="hidden">
       <Box flexDirection="row">
         <Text>orchestrator: </Text>
         <Text bold color={statusColor(status)}>
@@ -304,19 +361,22 @@ function LiveTab({
         marginTop={1}
         borderStyle="single"
         borderColor="cyan"
+        overflow="hidden"
       >
         <Text bold>
           Event log <Text dimColor>({log.length})</Text>
         </Text>
-        {visible.length === 0 ? (
-          <Text dimColor>idle — no events yet. Press Enter to Start the orchestrator.</Text>
-        ) : (
-          visible.map((entry, i) => (
-            <Text key={i} wrap="truncate-end" color={entry.color} dimColor={entry.dim}>
-              {entry.text === "" ? " " : entry.text}
-            </Text>
-          ))
-        )}
+        <Box ref={logBoxRef} flexDirection="column" flexGrow={1} overflow="hidden">
+          {visible.length === 0 ? (
+            <Text dimColor>idle — no events yet. Press Enter to Start the orchestrator.</Text>
+          ) : (
+            visible.map((entry, i) => (
+              <Text key={i} wrap="truncate-end" color={entry.color} dimColor={entry.dim}>
+                {entry.text === "" ? " " : entry.text}
+              </Text>
+            ))
+          )}
+        </Box>
       </Box>
     </Box>
   );
@@ -665,8 +725,16 @@ function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.Rea
   }, [exit]);
 
   // Safety net: if the Cockpit unmounts for any other reason, don't orphan the
-  // child — SIGTERM it on teardown.
-  useEffect(() => () => supervisorRef.current?.stop(), []);
+  // child — SIGTERM it on teardown — and restore the operator's terminal if the
+  // Cockpit had taken over the alternate screen (ADR-0015: never strand them in
+  // the alt buffer).
+  useEffect(
+    () => () => {
+      supervisorRef.current?.stop();
+      exitAltScreen();
+    },
+    []
+  );
 
   // Lazily load the manifest the first time the Sessions tab is opened, so the
   // embedded browser has data to seed from; its own `r` key reloads in place
@@ -757,16 +825,17 @@ function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.Rea
     { isActive: inputActive }
   );
 
-  // Event-log viewport: terminal rows minus the surrounding chrome (tab bar,
-  // status line, log-box border + header, footer). A sane default keeps the
-  // slice math total when stdout has no rows (non-TTY).
+  // The Cockpit canvas is pinned to the terminal height (ADR-0015): the root
+  // Box takes stdout.rows so the flexGrow children (the tab content, the Live
+  // event log) are height-bounded and their measured viewports are real, not
+  // natural-content. Unset on a non-TTY stream (piped), where Ink renders the
+  // single final frame at natural height and the alt screen is skipped.
   const termRows = stdout?.rows;
-  const logHeight = termRows ? Math.max(3, termRows - 10) : 20;
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" height={termRows} overflow="hidden">
       <TabBar tab={tab} />
-      <Box flexDirection="column" flexGrow={1} marginTop={1}>
+      <Box flexDirection="column" flexGrow={1} marginTop={1} overflow="hidden">
         {tab === "live" ? (
           <LiveTab
             status={status}
@@ -775,7 +844,6 @@ function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.Rea
             selected={selected}
             view={view}
             log={log}
-            height={logHeight}
           />
         ) : tab === "sessions" ? (
           sessions ? (
@@ -826,8 +894,44 @@ async function main(): Promise<void> {
     console.error(resolution.error);
     process.exit(1);
   }
+
+  // Take over the alternate screen buffer BEFORE the first Ink paint (ADR-0015)
+  // so the operator never sees a flash of the normal-buffer frame, and register
+  // a restore on EVERY teardown path — clean exit, external SIGINT/SIGTERM, and
+  // an uncaught throw/rejection — so a crash never strands them in the alt
+  // buffer. `exitAltScreen` is idempotent, so overlapping paths are safe.
+  enterAltScreen();
+  const onSignal = (sig: "SIGINT" | "SIGTERM"): void => {
+    exitAltScreen();
+    // Conventional 128+signum exit so a wrapper sees a signal-driven stop.
+    process.exit(sig === "SIGINT" ? 130 : 143);
+  };
+  const onUncaught = (err: unknown): void => {
+    exitAltScreen();
+    console.error(err instanceof Error ? err.stack ?? err.message : String(err));
+    process.exit(1);
+  };
+  const onUnhandled = (reason: unknown): void => {
+    exitAltScreen();
+    console.error("Unhandled promise rejection:", reason);
+    process.exit(1);
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  process.once("uncaughtException", onUncaught);
+  process.once("unhandledRejection", onUnhandled);
+
   const instance = render(<Cockpit initialProfile={resolution.profile.name} />);
-  await instance.waitUntilExit();
+  try {
+    await instance.waitUntilExit();
+  } finally {
+    // Clean quit (q / Ctrl-C via the shell) — restore the operator's terminal.
+    exitAltScreen();
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    process.off("uncaughtException", onUncaught);
+    process.off("unhandledRejection", onUnhandled);
+  }
 }
 
 main().catch((err) => {

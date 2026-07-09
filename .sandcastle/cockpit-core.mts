@@ -622,3 +622,115 @@ export function stepPruneApply(
   }
   return { phase, apply: false };
 }
+
+// ── Alternate screen buffer (ADR-0015) ───────────────────────────────────────
+
+/** Enter the alternate screen buffer (`ESC[?1049h`) — the blank full-height
+ *  canvas vim/less/htop take over. Written once on Cockpit mount in a TTY. */
+export const ENTER_ALT_SCREEN = "\x1b[?1049h";
+
+/** Restore the normal screen buffer (`ESC[?1049l`) — switch back so the
+ *  operator's prior terminal contents/scrollback reappear intact on quit. */
+export const RESTORE_NORMAL_SCREEN = "\x1b[?1049l";
+
+/** Decide whether the Cockpit should take over the alternate screen buffer:
+ *  only in a real TTY. A piped/non-TTY run must stay in the normal buffer and
+ *  emit NO alt-screen escapes (ADR-0015: it still renders, it just does not grab
+ *  the canvas). Pure so the gate is unit-testable without a live stream. */
+export function shouldUseAltScreen(stdout: { isTTY?: boolean }): boolean {
+  return stdout.isTTY === true;
+}
+
+// ── Viewport + follow-mode reducer (ADR-0015) ─────────────────────────────────
+//
+// The shared, pure scroll model behind every long Cockpit panel. Each panel's
+// scroll region is a `flexGrow` Box whose real height is measured (Ink's
+// `measureElement`); the panel slices its content to that height via the
+// `offset` here, and `follow` decides whether new content re-tails the view. The
+// Live event log runs it in always-following (tail) mode; later panels (the
+// Maintenance pager, a scrollback-able log) reuse the same transitions. The .tsx
+// shell only wires refs + measureElement + keystrokes onto this pure core.
+
+/** The scrollable viewport state shared by every long panel. */
+export interface ViewportState {
+  /** Rows scrolled down from the top, clamped into `[0, max(lines-height, 0)]`. */
+  readonly offset: number;
+  /** True in tail/auto-follow mode (the view tracks new content); false once the
+   *  user scrolls up — a paused view is not yanked by live events. */
+  readonly follow: boolean;
+}
+
+/** The tail-following zero state a fresh viewport starts in (ADR-0015). The Live
+ *  event log never leaves follow, so it always shows the newest events. */
+export const FOLLOWING_VIEWPORT: ViewportState = { offset: 0, follow: true };
+
+/** A user scroll request against a viewport. `home`/`end` jump to the top/bottom
+ *  (and re-engage / pause follow); `line`/`page` step by one row or one viewport
+ *  height. */
+export type ViewportScroll =
+  | { kind: "line"; dir: -1 | 1 }
+  | { kind: "page"; dir: -1 | 1 }
+  | { kind: "home" }
+  | { kind: "end" };
+
+/** One viewport transition. `content` reconciles to new dimensions/content (it
+ *  is also dispatched on terminal resize, when the measured height changes);
+ *  `scroll` applies a user scroll step. Both carry the panel's current `lines`
+ *  and `height` so the offset can be clamped. */
+export type ViewportInput =
+  | { kind: "content"; lines: number; height: number }
+  | { kind: "scroll"; step: ViewportScroll; lines: number; height: number };
+
+/** Clamp `offset` into the valid `[0, max(lines-height, 0)]` range — the largest
+ *  offset at which the last `height` rows still fully fit. 0 once everything fits
+ *  (height >= lines), and 0 defensively for a non-positive height. Pure. */
+export function clampViewportOffset(offset: number, lines: number, height: number): number {
+  if (height <= 0) return 0;
+  const max = Math.max(0, lines - height);
+  if (offset <= 0) return 0;
+  if (offset >= max) return max;
+  return offset;
+}
+
+/** The tail offset — the start of the last `height` rows — so a following
+ *  viewport always shows the newest content. Pure. */
+export function tailViewportOffset(lines: number, height: number): number {
+  return clampViewportOffset(Number.POSITIVE_INFINITY, lines, height);
+}
+
+/** Advance a viewport by one input, keeping the offset clamped and the follow
+ *  flag consistent (ADR-0015):
+ *
+ *  - `content` (new lines / resize): a following view re-tails; a paused view
+ *    holds its offset (clamped) so a live stream never yanks a scrolled-up view
+ *    back down.
+ *  - `scroll` `end`: jump to the tail AND re-engage follow.
+ *  - `scroll` `home`: jump to the top AND pause follow.
+ *  - `scroll` `line`/`page` up: step back and PAUSE follow (the paused indicator
+ *    shows; new content will not move the view).
+ *  - `scroll` `line`/`page` down: step forward (clamped at the tail); leaves
+ *    follow as-is — a following view stays following, a paused view stays paused
+ *    (only `end` re-engages the tail).
+ *
+ *  Pure (state + input in, new state out) so every transition is unit-testable
+ *  without the Ink layer. */
+export function reduceViewport(state: ViewportState, input: ViewportInput): ViewportState {
+  if (input.kind === "content") {
+    if (state.follow) {
+      return { offset: tailViewportOffset(input.lines, input.height), follow: true };
+    }
+    return { offset: clampViewportOffset(state.offset, input.lines, input.height), follow: false };
+  }
+  const { step, lines, height } = input;
+  if (step.kind === "end") {
+    return { offset: tailViewportOffset(lines, height), follow: true };
+  }
+  if (step.kind === "home") {
+    return { offset: 0, follow: false };
+  }
+  const delta = step.kind === "line" ? step.dir : step.dir * Math.max(1, height);
+  const offset = clampViewportOffset(state.offset + delta, lines, height);
+  // Up-steps always pause follow; down-steps leave it exactly as-is.
+  const follow = step.dir < 0 ? false : state.follow;
+  return { offset, follow };
+}

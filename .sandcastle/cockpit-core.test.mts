@@ -7,20 +7,30 @@ import {
   cycleTab,
   describeChildExit,
   EMPTY_LIVE_VIEW,
+  ENTER_ALT_SCREEN,
+  FOLLOWING_VIEWPORT,
+  clampViewportOffset,
   formatInFlight,
   formatPoolGauge,
   parseEventLine,
   reduceLiveEvent,
+  reduceViewport,
+  RESTORE_NORMAL_SCREEN,
   routeCockpitInput,
+  shouldUseAltScreen,
   spawnOrchestrator,
   splitNdjsonChunk,
   describePruneApply,
   prunePlanTotal,
   stepPruneApply,
+  tailViewportOffset,
   cycleProfile,
   formatProfileHeader,
   type InputKey,
   type OrchestratorHandlers,
+  type ViewportInput,
+  type ViewportScroll,
+  type ViewportState,
 } from "./cockpit-core.mts";
 import { profileNames } from "./model-profiles.mts";
 import { DRAIN_EXIT_CODE } from "./dispatch.mts";
@@ -960,5 +970,215 @@ describe("stepPruneApply", () => {
 
   it("does not delete on a confirm that never armed", () => {
     expect(stepPruneApply("idle", "confirm", true)).toEqual({ phase: "idle", apply: false });
+  });
+});
+
+// ── shouldUseAltScreen + alt-screen escapes (ADR-0015) ────────────────────────
+
+describe("shouldUseAltScreen", () => {
+  it("takes over the alternate screen buffer in a real TTY", () => {
+    expect(shouldUseAltScreen({ isTTY: true })).toBe(true);
+  });
+
+  it("stays in the normal buffer when stdout is piped (non-TTY)", () => {
+    // The AC: a non-TTY run must emit NO alt-screen escapes (and still render).
+    expect(shouldUseAltScreen({ isTTY: false })).toBe(false);
+  });
+
+  it("defaults to the normal buffer when isTTY is unknown", () => {
+    expect(shouldUseAltScreen({})).toBe(false);
+    expect(shouldUseAltScreen({ isTTY: undefined })).toBe(false);
+  });
+});
+
+describe("alt-screen escape sequences", () => {
+  it("enters with the DECSC + alt-buffer + clear sequence vim/less/htop use", () => {
+    // ESC[?1049h: save cursor, switch to the alternate screen buffer. The
+    // Cockpit writes this once on mount in a TTY (ADR-0015).
+    expect(ENTER_ALT_SCREEN).toBe("\x1b[?1049h");
+  });
+
+  it("restores with the sequence that returns the operator's scrollback", () => {
+    // ESC[?1049l: switch back to the normal screen buffer + restore cursor, so
+    // the operator's prior terminal contents reappear intact on quit.
+    expect(RESTORE_NORMAL_SCREEN).toBe("\x1b[?1049l");
+  });
+});
+
+// ── clampViewportOffset / tailViewportOffset: the viewport bounds ────────────
+
+describe("clampViewportOffset", () => {
+  it("leaves an offset inside the valid range untouched", () => {
+    expect(clampViewportOffset(3, 100, 10)).toBe(3);
+  });
+
+  it("clamps a negative offset to the top", () => {
+    expect(clampViewportOffset(-5, 100, 10)).toBe(0);
+  });
+
+  it("clamps an offset past the last page to the tail", () => {
+    // max valid offset = lines - height = 90, so 95 → 90.
+    expect(clampViewportOffset(95, 100, 10)).toBe(90);
+  });
+
+  it("is 0 once everything fits (height >= lines)", () => {
+    expect(clampViewportOffset(7, 5, 10)).toBe(0);
+    expect(clampViewportOffset(0, 10, 10)).toBe(0);
+  });
+
+  it("is 0 for a non-positive height (defensive, never negative)", () => {
+    expect(clampViewportOffset(7, 100, 0)).toBe(0);
+    expect(clampViewportOffset(7, 100, -3)).toBe(0);
+  });
+});
+
+describe("tailViewportOffset", () => {
+  it("points at the start of the last full viewport (the newest content)", () => {
+    expect(tailViewportOffset(100, 10)).toBe(90);
+  });
+
+  it("is 0 once everything fits in one viewport", () => {
+    expect(tailViewportOffset(5, 10)).toBe(0);
+  });
+
+  it("clamps to 0 for a single-row viewport at the top of short content", () => {
+    expect(tailViewportOffset(1, 1)).toBe(0);
+  });
+});
+
+// ── reduceViewport: the pure offset + follow-mode reducer (ADR-0015) ─────────
+
+/** A paused viewport parked at a known offset, for follow-break assertions. */
+const PAUSED_AT_5: ViewportState = { offset: 5, follow: false };
+
+/** Shorthand scroll-input builder carrying the dimensions. */
+function scroll(step: ViewportScroll, lines = 100, height = 10): ViewportInput {
+  return { kind: "scroll", step, lines, height };
+}
+
+/** Shorthand content-input builder carrying the dimensions. */
+function frame(lines: number, height: number): ViewportInput {
+  return { kind: "content", lines, height };
+}
+
+describe("reduceViewport — content (follow / hold / clamp)", () => {
+  it("tails to the newest content while following", () => {
+    // The Live event log's always-following mode: new lines arrive, the view
+    // tracks the tail.
+    expect(reduceViewport(FOLLOWING_VIEWPORT, frame(100, 10))).toEqual({
+      offset: 90,
+      follow: true,
+    });
+  });
+
+  it("stays put (clamped) when paused — a live stream never yanks a scrolled-up view", () => {
+    // The AC's follow-mode contract: scrolled up, new events do not move it.
+    expect(reduceViewport(PAUSED_AT_5, frame(100, 10))).toEqual({ offset: 5, follow: false });
+  });
+
+  it("re-clamps the held offset if content shrinks below it", () => {
+    // A reload/state reset that shortens the log must not leave the offset
+    // pointing past the tail.
+    expect(reduceViewport({ offset: 50, follow: false }, frame(8, 10))).toEqual({
+      offset: 0,
+      follow: false,
+    });
+  });
+
+  it("re-tails on a resize while following (re-fit on terminal resize)", () => {
+    // Terminal shrank to 5 rows: the tail moves to 95, and a following view
+    // re-fits to it — no magic constant, just the measured height.
+    expect(reduceViewport({ offset: 90, follow: true }, frame(100, 5))).toEqual({
+      offset: 95,
+      follow: true,
+    });
+  });
+});
+
+describe("reduceViewport — home / end (follow transitions)", () => {
+  it("end re-engages follow and jumps to the tail", () => {
+    expect(reduceViewport(PAUSED_AT_5, scroll({ kind: "end" }))).toEqual({
+      offset: 90,
+      follow: true,
+    });
+  });
+
+  it("home jumps to the top and pauses follow", () => {
+    expect(reduceViewport({ offset: 90, follow: true }, scroll({ kind: "home" }))).toEqual({
+      offset: 0,
+      follow: false,
+    });
+  });
+});
+
+describe("reduceViewport — line / page steps", () => {
+  it("steps up one line and breaks follow (the paused indicator shows)", () => {
+    expect(reduceViewport({ offset: 90, follow: true }, scroll({ kind: "line", dir: -1 }))).toEqual({
+      offset: 89,
+      follow: false,
+    });
+  });
+
+  it("steps down one line without re-engaging follow (only End re-tails)", () => {
+    // A paused view advances but stays paused.
+    expect(reduceViewport(PAUSED_AT_5, scroll({ kind: "line", dir: 1 }))).toEqual({
+      offset: 6,
+      follow: false,
+    });
+  });
+
+  it("keeps a following view following on a line down", () => {
+    // Already at the tail; a down-step clamps to the tail and follow holds.
+    expect(reduceViewport({ offset: 90, follow: true }, scroll({ kind: "line", dir: 1 }))).toEqual({
+      offset: 90,
+      follow: true,
+    });
+  });
+
+  it("steps up a full page (one viewport height) and pauses", () => {
+    expect(reduceViewport({ offset: 90, follow: true }, scroll({ kind: "page", dir: -1 }))).toEqual({
+      offset: 80,
+      follow: false,
+    });
+  });
+
+  it("steps down a full page, clamped at the tail, follow unchanged", () => {
+    expect(reduceViewport({ offset: 80, follow: false }, scroll({ kind: "page", dir: 1 }))).toEqual({
+      offset: 90,
+      follow: false,
+    });
+  });
+
+  it("clamps an up-step at the top (offset never goes negative)", () => {
+    expect(reduceViewport({ offset: 2, follow: false }, scroll({ kind: "page", dir: -1 }))).toEqual({
+      offset: 0,
+      follow: false,
+    });
+  });
+
+  it("treats a single-row viewport's page as one row", () => {
+    // height=1 → a page step moves one row (Math.max(1, height)), not zero.
+    expect(
+      reduceViewport(
+        { offset: 5, follow: false },
+        scroll({ kind: "page", dir: -1 }, 100, 1)
+      )
+    ).toEqual({ offset: 4, follow: false });
+  });
+});
+
+describe("reduceViewport — follow survives across inputs", () => {
+  it("holds a paused view across several content frames until End re-tails", () => {
+    // The full follow-mode arc: scrolled up → events arrive (held) → End
+    // re-engages the tail. This is the ADR-0015 Live-log contract end-to-end.
+    let v: ViewportState = reduceViewport(
+      { offset: 90, follow: true },
+      scroll({ kind: "line", dir: -1 }, 100, 10)
+    );
+    expect(v).toEqual({ offset: 89, follow: false });
+    v = reduceViewport(v, frame(120, 10)); // 20 new lines arrive
+    expect(v).toEqual({ offset: 89, follow: false }); // held, not yanked to 110
+    v = reduceViewport(v, scroll({ kind: "end" }, 120, 10));
+    expect(v).toEqual({ offset: 110, follow: true }); // End re-tails
   });
 });

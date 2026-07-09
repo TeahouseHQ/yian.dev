@@ -28,8 +28,8 @@
  */
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Text, useApp, useInput, useStdin, useStdout } from "ink";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, measureElement, Text, useApp, useInput, useStdin, useStdout, type DOMElement } from "ink";
 
 import {
   DEFAULT_WINDOW_DAYS,
@@ -166,63 +166,75 @@ function TreePane({
   height,
   cursor,
   collapsed,
+  contentRef,
 }: {
   rows: TreeRow[];
   offset: number;
-  /** Max rows to render (the terminal-bounded viewport). */
+  /** Max rows to render — measured from the rendered content box (ADR-0015). */
   height: number;
   cursor: number;
   collapsed: Set<string>;
+  /** Ref on the scrollable content box; the parent measures it for `height`. */
+  contentRef: React.RefObject<DOMElement | null>;
 }): React.ReactElement {
   const visible = rows.slice(offset, offset + Math.max(1, height));
   return (
-    <Box flexDirection="column" width={LEFT_WIDTH} borderStyle="single" borderColor="cyan">
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      width={LEFT_WIDTH}
+      overflow="hidden"
+      borderStyle="single"
+      borderColor="cyan"
+    >
       <Text bold>
         Sessions <Text dimColor>({rows.length})</Text>
       </Text>
-      {visible.length === 0 ? (
-        <Text dimColor>(empty)</Text>
-      ) : (
-        visible.map((row, i) => {
-          const selected = offset + i === cursor;
-          const isPlanner = runIssue(row.run) === null;
-          if (row.kind === "run") {
-            const expanded = !collapsed.has(row.runId);
-            const glyph = expanded ? "▾" : "▸";
-            const issue = runIssue(row.run);
-            const name = issue == null ? row.runId : `${row.runId} · #${issue}`;
-            const n = row.run.entries.length;
+      <Box ref={contentRef} flexDirection="column" flexGrow={1} overflow="hidden">
+        {visible.length === 0 ? (
+          <Text dimColor>(empty)</Text>
+        ) : (
+          visible.map((row, i) => {
+            const selected = offset + i === cursor;
+            const isPlanner = runIssue(row.run) === null;
+            if (row.kind === "run") {
+              const expanded = !collapsed.has(row.runId);
+              const glyph = expanded ? "▾" : "▸";
+              const issue = runIssue(row.run);
+              const name = issue == null ? row.runId : `${row.runId} · #${issue}`;
+              const n = row.run.entries.length;
+              return (
+                <Text
+                  key={`r-${row.runId}`}
+                  wrap="truncate-end"
+                  bold={selected}
+                  inverse={selected}
+                  dimColor={isPlanner && !selected}
+                >
+                  {selected ? "❯ " : "  "}
+                  {glyph} {name} ({n})
+                </Text>
+              );
+            }
+            const e = row.entry;
+            const ref = e.issue == null ? "-" : `#${e.issue}`;
+            const flag = e.status === "failed" ? " ✗" : "";
             return (
               <Text
-                key={`r-${row.runId}`}
+                key={`s-${i}`}
                 wrap="truncate-end"
                 bold={selected}
                 inverse={selected}
                 dimColor={isPlanner && !selected}
               >
                 {selected ? "❯ " : "  "}
-                {glyph} {name} ({n})
+                {"  "}
+                {e.phase ?? "?"} {ref} · {e.commits ?? 0}c{flag}
               </Text>
             );
-          }
-          const e = row.entry;
-          const ref = e.issue == null ? "-" : `#${e.issue}`;
-          const flag = e.status === "failed" ? " ✗" : "";
-          return (
-            <Text
-              key={`s-${i}`}
-              wrap="truncate-end"
-              bold={selected}
-              inverse={selected}
-              dimColor={isPlanner && !selected}
-            >
-              {selected ? "❯ " : "  "}
-              {"  "}
-              {e.phase ?? "?"} {ref} · {e.commits ?? 0}c{flag}
-            </Text>
-          );
-        })
-      )}
+          })
+        )}
+      </Box>
     </Box>
   );
 }
@@ -386,13 +398,23 @@ export function SessionBrowser({
   // Clamp the cursor into range (a reload may shrink the tree).
   const clampedCursor = rows.length === 0 ? -1 : Math.min(cursor, rows.length - 1);
 
-  // Tree viewport height: reserve room for the header/help line + pane borders.
+  // Tree viewport height is MEASURED from the rendered content box (ADR-0015),
+  // not a hand-tuned `termRows - N`: the content box is a flexGrow child of the
+  // bounded fullscreen canvas, so its measured height is exactly the rows that
+  // fit, and it self-corrects on terminal resize (Ink re-renders → re-measure →
+  // re-clamp). The pager body keeps its full-terminal arithmetic — it IS the
+  // full screen, so `rows - border/header/help` is exact for it.
   const termRows = stdout?.rows;
-  const inner = termRows ? Math.max(3, termRows - 6) : rows.length;
-  // Pager body height: the terminal minus border (2) + header (1) + help (1).
-  // The pager is only reachable in TTY mode (Enter needs raw input), but a
-  // sane default keeps the slice math total when stdout has no rows.
   const pagerBodyHeight = termRows ? Math.max(1, termRows - PAGER_OVERHEAD) : 20;
+  const treeRef = useRef<DOMElement>(null);
+  const [treeHeight, setTreeHeight] = useState(() => termRows ?? rows.length);
+  useEffect(() => {
+    const node = treeRef.current;
+    if (!node) return;
+    const h = Math.max(1, measureElement(node).height);
+    setTreeHeight((prev) => (prev === h ? prev : h));
+  }); // every commit; bails on an unchanged measurement so it converges, no loop
+  const inner = treeHeight;
   // Keep the cursor within the visible window; only scroll when it leaves.
   useEffect(() => {
     setScroll((s) => {
@@ -561,7 +583,7 @@ export function SessionBrowser({
   );
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexGrow={1} overflow="hidden">
       {pagerEntry ? (
         // Pager mode (#74): the transcript replaces the two-pane tree. Esc (handled
         // above) returns to the tree with the selection intact.
@@ -583,13 +605,14 @@ export function SessionBrowser({
               {standalone ? " · q quit" : ""}
             </Text>
           </Box>
-          <Box flexDirection="row" marginTop={1}>
+          <Box flexDirection="row" marginTop={1} flexGrow={1} overflow="hidden">
             <TreePane
               rows={rows}
               offset={offset}
               height={inner}
               cursor={clampedCursor}
               collapsed={collapsed}
+              contentRef={treeRef}
             />
             <DetailPane current={current} />
           </Box>

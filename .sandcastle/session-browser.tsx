@@ -12,7 +12,7 @@
  * Run via `pnpm sandcastle:browse` (i.e. `tsx .sandcastle/session-browser.tsx`).
  */
 import React from "react";
-import { render } from "ink";
+import { Box, render } from "ink";
 
 import { parseWindowArgs } from "./render-transcript.mjs";
 import { loadManifest, SessionBrowser, windowLabelOf } from "./SessionBrowser.jsx";
@@ -34,13 +34,20 @@ async function main(): Promise<void> {
   // flash); the browser's `r` key re-reads from the same source on demand.
   const { entries: initialEntries, message: initialMessage } = await loadManifest();
 
+  // Pin the canvas to the terminal height (ADR-0015) so the tree's measured
+  // viewport is a real bounded height rather than its natural content height —
+  // the standalone mount must bound the tree exactly as the Cockpit's content
+  // area does when it embeds the same component.
+  const rows = process.stdout.rows;
   const instance = render(
-    <SessionBrowser
-      initialEntries={initialEntries}
-      initialMessage={initialMessage}
-      windowOpts={windowOpts}
-      windowLabel={windowLabel}
-    />
+    <Box flexDirection="column" height={rows} overflow="hidden">
+      <SessionBrowser
+        initialEntries={initialEntries}
+        initialMessage={initialMessage}
+        windowOpts={windowOpts}
+        windowLabel={windowLabel}
+      />
+    </Box>
   );
   await instance.waitUntilExit();
 }

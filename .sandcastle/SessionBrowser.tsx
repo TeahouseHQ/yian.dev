@@ -26,6 +26,15 @@
  * delegates every other key (↑/↓/←/→, Enter, r, pager keys) down to this
  * component while the Sessions tab is focused. The Cockpit mounts this only
  * while that tab is focused, so its `useInput` is naturally scoped.
+ *
+ * Because that mount is torn down on every tab switch, any local state would be
+ * lost on return — a remount re-seeds from props. So the Cockpit holds two
+ * things on the browser's behalf: `onReload` hoists each in-place `r` reload
+ * into the shell's `sessions` state (else a remount reverts to the first-load
+ * manifest), and `initialView`/`onViewChange` hoist the view position —
+ * expansion, cursor, scroll, and any open transcript — so a tab switch restores
+ * exactly where the operator was rather than resetting to the top of the tree.
+ * Standalone has no parent to hold either, so both are omitted and state is local.
  */
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -112,6 +121,33 @@ export interface ManifestLoad {
   entries: Entry[];
   message?: string;
 }
+
+/**
+ * The browser's transient view position — expansion, selection, scroll, and any
+ * open transcript. The Cockpit unmounts the browser on a tab switch, so it holds
+ * this on the browser's behalf: the browser seeds from `initialView` on mount and
+ * reports every change back via `onViewChange`, so switching away and back
+ * restores exactly where the operator was (issue #82 tab-switch state loss).
+ * Standalone has no parent to hold it, so both are omitted and it stays local.
+ */
+export interface BrowserView {
+  /** Run ids whose sessions are collapsed. */
+  collapsed: Set<string>;
+  /** Selected row index into the flattened tree. */
+  cursor: number;
+  /** Top row of the tree viewport. */
+  scroll: number;
+  /** The session whose transcript pager is open, or null for the two-pane tree. */
+  pagerEntry: Entry | null;
+}
+
+/** The browser's default view: nothing collapsed, top row selected, tree (not pager). */
+export const EMPTY_BROWSER_VIEW: BrowserView = {
+  collapsed: new Set(),
+  cursor: 0,
+  scroll: 0,
+  pagerEntry: null,
+};
 
 /**
  * Read the manifest, mapping the missing / empty / unreadable cases to a
@@ -378,12 +414,32 @@ export function SessionBrowser({
   windowOpts,
   windowLabel,
   standalone = true,
+  onReload,
+  initialView,
+  onViewChange,
 }: {
   initialEntries: Entry[];
   initialMessage?: string;
   windowOpts: WindowOpts;
   windowLabel: string;
   standalone?: boolean;
+  /**
+   * Called with the freshly-read manifest after an in-place `r` reload. The
+   * embedding Cockpit passes this to hoist the reload into its own `sessions`
+   * state, so the reloaded data survives this component being unmounted on a
+   * tab switch and re-seeds `initialEntries` on remount (without it, a remount
+   * reverts to the first-load manifest). Standalone has no parent to notify, so
+   * it is omitted there.
+   */
+  onReload?: (load: ManifestLoad) => void;
+  /**
+   * The view position to seed from on mount (expansion/cursor/scroll/pager).
+   * The embedding Cockpit passes the state it held while this was unmounted, so
+   * a tab switch restores where the operator was. Omitted standalone → defaults.
+   */
+  initialView?: BrowserView;
+  /** Reports the view position up so the parent can hold it across an unmount. */
+  onViewChange?: (view: BrowserView) => void;
 }): React.ReactElement {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
@@ -392,16 +448,36 @@ export function SessionBrowser({
 
   const [entries, setEntries] = useState<Entry[]>(initialEntries);
   const [message, setMessage] = useState<string | undefined>(initialMessage);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [cursor, setCursor] = useState(0);
-  const [scroll, setScroll] = useState(0);
+  // View position (expansion/cursor/scroll/pager) seeds from `initialView` so a
+  // remount after a tab switch restores where the operator was; the effect below
+  // reports every change back up. Standalone leaves `initialView` undefined and
+  // these fall back to the empty-view defaults.
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => initialView?.collapsed ?? new Set()
+  );
+  const [cursor, setCursor] = useState(() => initialView?.cursor ?? 0);
+  const [scroll, setScroll] = useState(() => initialView?.scroll ?? 0);
 
   // Pager state (#74). `pagerEntry` doubles as the mode flag: non-null means a
   // Session's transcript is open full-screen (the tree is hidden). `pagerText`
-  // is the rendered transcript, or null while loading / when none resolved.
-  const [pagerEntry, setPagerEntry] = useState<Entry | null>(null);
+  // is the rendered transcript, or null while loading / when none resolved. It
+  // seeds from `initialView` too; `pagerLoading` starts true when a pager is
+  // restored so the first paint reads "Loading…" (not a flash of "not available")
+  // until the load effect re-resolves the transcript.
+  const [pagerEntry, setPagerEntry] = useState<Entry | null>(() => initialView?.pagerEntry ?? null);
   const [pagerText, setPagerText] = useState<string | null>(null);
-  const [pagerLoading, setPagerLoading] = useState(false);
+  const [pagerLoading, setPagerLoading] = useState(
+    () => (initialView?.pagerEntry ?? null) !== null
+  );
+
+  // Report the view position up so the parent can hold it while this is unmounted
+  // (tab switch) and pass it back as `initialView` on remount. `onViewChange` is a
+  // stable setter, so this fires only when a view field actually changes; the
+  // parent re-render feeds a new `initialView` object, but that is read only at
+  // mount (lazy initial state), so there is no update loop.
+  useEffect(() => {
+    onViewChange?.({ collapsed, cursor, scroll, pagerEntry });
+  }, [collapsed, cursor, scroll, pagerEntry, onViewChange]);
 
   // Runs in-window (newest-first); re-derived on reload. resolveCutoff is
   // re-evaluated here so a reload re-windows against "now".
@@ -481,13 +557,15 @@ export function SessionBrowser({
     };
   }, [pagerEntry]);
 
-  /** Re-read the manifest in place (the `r` key). */
+  /** Re-read the manifest in place (the `r` key). Also hoists the fresh load to
+   * an embedding parent via `onReload` so it survives an unmount (tab switch). */
   const reload = useCallback(async () => {
-    const { entries: reloaded, message: reloadMessage } = await loadManifest();
-    setEntries(reloaded);
-    setMessage(reloadMessage);
+    const load = await loadManifest();
+    setEntries(load.entries);
+    setMessage(load.message);
     setCursor(0);
-  }, []);
+    onReload?.(load);
+  }, [onReload]);
 
   /** Collapse the run containing the cursor (← / Space when expanded). */
   const collapseCurrent = useCallback(() => {

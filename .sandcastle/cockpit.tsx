@@ -98,9 +98,11 @@ import {
 import { planPrune, type PrunePlan } from "./prune-plan.mjs";
 import { applyPrunePlan, discoverPruneState } from "./prune-driver.mjs";
 import {
+  EMPTY_BROWSER_VIEW,
   loadManifest,
   SessionBrowser,
   windowLabelOf,
+  type BrowserView,
   type ManifestLoad,
 } from "./SessionBrowser.jsx";
 
@@ -543,6 +545,10 @@ function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.Rea
   const [view, setView] = useState<LiveView>(EMPTY_LIVE_VIEW);
   // The Sessions tab's manifest, loaded lazily on first open (null until then).
   const [sessions, setSessions] = useState<ManifestLoad | null>(null);
+  // The Sessions browser's view position, held here so it survives the browser
+  // being unmounted on a tab switch (the browser seeds from it and reports every
+  // change back). Without this a tab switch resets expansion/cursor/scroll/pager.
+  const [sessionsView, setSessionsView] = useState<BrowserView>(EMPTY_BROWSER_VIEW);
   // The Maintenance tab's dry-run prune plan (null until first computed), the
   // last discovery error (if any), the arm→confirm apply phase, and the bounded
   // apply-output log.
@@ -826,6 +832,16 @@ function Cockpit({ initialProfile }: { initialProfile: ProfileName }): React.Rea
               windowOpts={SESSIONS_WINDOW}
               windowLabel={SESSIONS_WINDOW_LABEL}
               standalone={false}
+              // Persist the browser's in-place `r` reload into the shell's own
+              // `sessions` state so it survives the unmount on a tab switch and
+              // re-seeds the browser on return (otherwise a remount reverts to
+              // the first-load manifest).
+              onReload={setSessions}
+              // Likewise persist the view position (expansion/cursor/scroll/pager)
+              // so a tab switch restores where the operator was, not the top of
+              // the tree.
+              initialView={sessionsView}
+              onViewChange={setSessionsView}
             />
           ) : (
             <Text dimColor>Loading sessions…</Text>

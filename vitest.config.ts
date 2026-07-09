@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
@@ -11,6 +11,10 @@ export default defineConfig({
   test: {
     // Use node environment
     environment: "node",
+    // Sandcastle worktrees are full repo checkouts nested under a dot
+    // directory; vitest's default excludes don't skip dot directories
+    // generically, so without this their test files run twice.
+    exclude: [...configDefaults.exclude, "**/.sandcastle/worktrees/**"],
   },
   resolve: {
     alias: {

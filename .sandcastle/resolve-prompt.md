@@ -14,14 +14,6 @@ re-reviewed and land.
 
 You are already checked out on {{BRANCH}} with the repo installed and built.
 
-Here are the last 10 commits on this branch:
-
-<recent-commits>
-
-!`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
-
-</recent-commits>
-
 <issue>
 
 !`gh issue view {{ISSUE_NUMBER}}`

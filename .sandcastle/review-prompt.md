@@ -6,14 +6,6 @@ You are an expert code reviewer focused on enhancing code clarity, consistency, 
 
 # CONTEXT
 
-Here are the last 10 commits:
-
-<recent-commits>
-
-!`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
-
-</recent-commits>
-
 <issue>
 
 !`gh issue view {{ISSUE_NUMBER}}`
@@ -29,6 +21,7 @@ Here are the last 10 commits:
 # REVIEW PROCESS
 
 1. **Understand the change**:
+   - Confirm the changes satisfy all acceptance criteria
 
 2. **Analyze for improvements**: Look for opportunities to:
    - Reduce unnecessary complexity and nesting

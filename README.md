@@ -39,6 +39,18 @@ The port can be overridden with the `PORT` environment variable (default: `3030`
 | `pnpm test`       | Run tests (Vitest)           |
 | `pnpm test:watch` | Run tests in watch mode      |
 
+### Sandcastle Debug Shell
+
+`pnpm sandcastle:shell` builds the Sandcastle image and drops you into an interactive root `bash` shell inside a real sandbox — the same `createSandbox` environment the AFK agents run under (fresh `origin/main` worktree at `/home/agent/workspace`, `.sandcastle/.env` injected, baked-in `models.json`). Use it to test and debug the container environment by hand. Type `exit` to tear the sandbox down.
+
+```bash
+pnpm sandcastle:shell                                    # fresh origin/main, no build (fast)
+pnpm sandcastle:shell -- --build                         # run install + build first
+pnpm sandcastle:shell -- --branch sandcastle/issue-123   # reproduce a specific sandbox
+```
+
+Requires a running Docker daemon. Install/build hooks are skipped by default so a broken build can't lock you out of the shell — run `pnpm install`/`pnpm build` yourself inside it, or pass `--build`.
+
 ## Workflows
 
 Two CI/CD workflows run in this repo:

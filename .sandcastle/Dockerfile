@@ -51,6 +51,18 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 # .sandcastle/ — use `models.json`, not `.sandcastle/models.json`.
 COPY models.json /home/agent/.pi/agent/models.json
 
+# Bake Agent Skills into pi's GLOBAL skills dir (ADR-0017). pi loads
+# ~/.pi/agent/skills/ unconditionally, whereas project-level skills
+# (.agents/skills in the bind-mounted worktree) load only after a project is
+# "trusted" — and Sandcastle runs pi headless, with no human to grant trust.
+# Baking here is the only path that provably fires headless, and it mirrors the
+# models.json bake above rather than an `npx skills add` at build time (which
+# would pull unpinned upstream over the network). Skills are vendored under
+# .sandcastle/skills/ (one dir per skill, each with a SKILL.md) and COPY'd
+# wholesale; the build context is .sandcastle/, so the source path is `skills`.
+# Owned by root like the rest of .pi/agent (containerUid: 0), so no chown.
+COPY skills /home/agent/.pi/agent/skills
+
 # Run as root. Under ROOTLESS Docker (this machine), the container's root maps
 # to the host user that owns the bind-mounted worktree, so root is the ONLY
 # user that can write commits into it. main.mts must pass matching

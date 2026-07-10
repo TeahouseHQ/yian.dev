@@ -1,5 +1,12 @@
 # Reach the host LiteLLM proxy via its Tailscale IP, not `localhost`/bridge gateway
 
+> **Superseded in part by ADR-0014 / #109.** The bridge → Tailscale-IP network path
+> below still holds, but the IP is **no longer hard-coded in the image** (`models.json`
+> was deleted and is no longer baked at build). It now lives in the per-machine **Host
+> profile** (`~/.teahouse/host-profile.json`) and is generated into `models.json` and
+> mounted into the container at **runtime**, so changing the host never means rebuilding
+> images. Read the "Consequences" section as historical rationale.
+
 Sandcastle agents run inside Docker sandboxes and call an LLM through a **LiteLLM
 proxy that runs on the host** (baked into the image as pi's `glm-5.1` provider —
 `models.json`, copied to `~/.pi/agent/models.json` in the `Dockerfile`). The

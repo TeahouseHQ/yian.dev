@@ -9,7 +9,8 @@
  * "what the agent sees": a fresh `origin/main` worktree bind-mounted at
  * /home/agent/workspace, `.sandcastle/.env` injected as container env
  * (LITELLM_API_KEY, GH_TOKEN, model config — createSandbox calls `resolveEnv`
- * internally), `--user 0:0`, the same network, and the baked-in models.json.
+ * internally), the Host-profile uid/gid, the same network, and the Host-profile
+ * models.json mounted at runtime (ADR-0014, #109 — no longer baked into the image).
  * A hand-rolled `docker run` would re-derive all of that by hand and drift.
  *
  * The public `Sandbox` handle intentionally exposes only run()/interactive()
@@ -40,22 +41,30 @@
  * throwaway worktree cleaned (createSandbox preserves it only if dirty, printing
  * the path) — then the `sandcastle/shell` branch is deleted.
  *
- * containerUid/containerGid: 0 mirrors main.mts's `dockerSandbox()`: this machine
- * runs ROOTLESS Docker where the container's root maps to the host user that owns
- * the bind mount, and the image's USER must match or `checkImageUid` rejects it
+ * The container uid/gid and the mounted models.json both come from the Host profile
+ * (ADR-0014, #109), exactly as main.mts's `dockerSandbox()` derives them: under this
+ * machine's ROOTLESS Docker the container's root maps to the host user that owns the
+ * bind mount, and the image's USER must match or `checkImageUid` rejects it
  * (ADR-0002 background; see main.mts and .sandcastle/Dockerfile).
  */
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { implementerSandboxSpec } from "./dispatch.mts";
 import { forkBase, loadRepoProfile } from "./repo-profile.mts";
+import { dockerSandboxOptions, generateModelsJson, loadHostProfile } from "./host-profile.mts";
 
 // The debug shell forks from the same Repo-profile base as a real Implementer
 // (ADR-0014, #108) — no hardcoded origin/main.
 const repoProfile = loadRepoProfile();
+
+// ...and derives its uid/gid + provider config from the same Host profile a real
+// dispatch does (ADR-0014, #109) — no hardcoded containerUid, no baked models.json.
+const hostProfile = loadHostProfile();
 
 const execFileAsync = promisify(execFile);
 
@@ -173,8 +182,21 @@ console.log(
 let exitCode = 0;
 let sandbox: sandcastle.Sandbox | undefined;
 try {
+  // Generate the pi provider config from the Host profile and mount it at runtime,
+  // mirroring main.mts's `dockerSandbox()` (ADR-0014, #109).
+  const modelsJsonPath = join(tmpdir(), `teahouse-models-shell-${process.pid}.json`);
+  writeFileSync(modelsJsonPath, JSON.stringify(generateModelsJson(hostProfile), null, 2));
   sandbox = await sandcastle.createSandbox({
-    sandbox: docker({ containerUid: 0, containerGid: 0 }),
+    sandbox: docker({
+      ...dockerSandboxOptions(hostProfile),
+      mounts: [
+        {
+          hostPath: modelsJsonPath,
+          sandboxPath: "/home/agent/.pi/agent/models.json",
+          readonly: true,
+        },
+      ],
+    }),
     ...spec,
   });
   const container = await findContainer(sandbox.worktreePath);

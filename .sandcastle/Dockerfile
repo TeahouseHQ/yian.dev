@@ -38,18 +38,13 @@ RUN npm install -g @earendil-works/pi-coding-agent
 ENV COREPACK_HOME=/home/agent/.cache/node/corepack
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
-# Bake glm-5.1 LiteLLM provider config into the image (issue #49).
-# pi reads ~/.pi/agent/models.json at startup; containerUid: 0 means the
-# container runs as root, so /home/agent/.pi/agent is owned by root and no
-# chown is needed. The provider points at the host's Tailscale IP
-# (100.86.127.113:4000) — see docs/adr/0002-host-access-via-tailscale-ip.md
-# for why bridge -> Tailscale IP is the only working network path.
-# $LITELLM_API_KEY is resolved at request time from the container env.
-# COPY auto-creates /home/agent/.pi/agent, so no preceding mkdir is needed.
-# NOTE: `sandcastle docker build-image` uses the .sandcastle/ directory as the
-# build context (docker build <.sandcastle>), so COPY sources are relative to
-# .sandcastle/ — use `models.json`, not `.sandcastle/models.json`.
-COPY models.json /home/agent/.pi/agent/models.json
+# NOTE: the pi LiteLLM provider config (models.json) is NO LONGER baked into this
+# image (ADR-0014, #109). It is generated from the per-machine Host profile
+# (~/.teahouse/host-profile.json) and bind-mounted into the container at RUNTIME at
+# /home/agent/.pi/agent/models.json — the docker sandbox auto-creates that parent dir
+# for the file mount. This keeps a machine's Tailscale IP out of the image, so
+# changing the LiteLLM host never means rebuilding this image. pi still reads
+# ~/.pi/agent/models.json at startup and resolves $LITELLM_API_KEY from container env.
 
 # Run as root. Under ROOTLESS Docker (this machine), the container's root maps
 # to the host user that owns the bind-mounted worktree, so root is the ONLY

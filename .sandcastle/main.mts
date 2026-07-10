@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
@@ -49,6 +52,7 @@ import {
 import { createEvents } from "./events.mts";
 import { resolveProfile } from "./model-profiles.mts";
 import { loadRepoProfile, verifyCommand, type RepoProfile } from "./repo-profile.mts";
+import { dockerSandboxOptions, generateModelsJson, loadHostProfile } from "./host-profile.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -81,6 +85,19 @@ if (!profileResolution.ok) {
 }
 const activeProfile = profileResolution.profile;
 
+// Boot gate for the Host profile (CONTEXT.md: Host profile; ADR-0014, #109) — the
+// per-MACHINE config (`~/.teahouse/host-profile.json`) holding the LiteLLM base URL,
+// the api-key env-var name, and the rootless-Docker flag. Validate it LOUDLY at
+// startup here, before the loop, rather than only when the first dispatch tries to
+// build a sandbox (which could be much later). The per-dispatch `dockerSandbox()`
+// below re-reads it so a LiteLLM-URL edit takes effect on the next dispatch.
+try {
+  loadHostProfile();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
+
 // The repo-fact prompt args, sourced from the Repo profile (ADR-0014, #108) and
 // spread into every dispatch's promptArgs alongside the per-issue args
 // (ISSUE_NUMBER/TITLE/BRANCH). This is how the Canonical prompts stay engine-owned
@@ -95,19 +112,39 @@ const repoPromptArgs = {
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
 //
-// This machine runs ROOTLESS Docker. Under rootless, the container's root maps
-// to the host user (uid 1000) that owns the bind-mounted worktree, so root is
-// the ONLY user that can write commits into it. Plain docker() defaults --user
-// to the host uid (1000), which rootless maps to an unprivileged subuid
-// (~100999) that does NOT own the files — every chmod/touch/commit then fails
-// with "Operation not permitted" and the agent produces no commits. Passing
-// containerUid/containerGid: 0 runs the container as root and fixes this.
-// The image's USER must match (root) — see Dockerfile — or sandcastle's
-// checkImageUid guard rejects the mismatch.
+// Both machine-specific concerns are now driven by the Host profile (ADR-0014, #109),
+// not hardcoded here:
 //
-// For ROOTFUL Docker, drop these options (plain docker()) and restore
-// `USER ${AGENT_UID}:${AGENT_GID}` in the Dockerfile instead.
-const dockerSandbox = () => docker({ containerUid: 0, containerGid: 0 });
+//  1. Container uid/gid. Under ROOTLESS Docker (the `rootlessDocker` flag), the
+//     container's root maps to the host user that owns the bind-mounted worktree, so
+//     root is the ONLY user that can write commits into it — `dockerSandboxOptions`
+//     returns `{containerUid: 0, containerGid: 0}`. The image's USER must match (root)
+//     or sandcastle's `checkImageUid` guard rejects it. Under rootful Docker the flag
+//     is false and no uid/gid override is emitted (docker() defaults to the host uid).
+//
+//  2. The pi provider config (models.json). Generated from the Host profile's LiteLLM
+//     URL + api-key env-var NAME and bind-mounted into the sandbox at RUNTIME — never
+//     baked into an image (which used to carry a machine's Tailscale IP). pi reads
+//     ~/.pi/agent/models.json at startup; the docker provider auto-creates that parent
+//     dir in-container for a file mount.
+//
+// The Host profile is re-read on EVERY call so that editing the LiteLLM URL in
+// `~/.teahouse/host-profile.json` takes effect on the NEXT dispatch — no image
+// rebuild, no orchestrator restart. A malformed mid-run edit throws here, failing
+// that one dispatch loudly (the ADR-0014 fail-loud posture) rather than silently
+// running against a stale URL.
+const MODELS_JSON_SANDBOX_PATH = "/home/agent/.pi/agent/models.json";
+let modelsJsonSeq = 0;
+const dockerSandbox = () => {
+  const host = loadHostProfile();
+  // A fresh file per call (never overwritten while a prior sandbox still mounts it).
+  const modelsJsonPath = join(tmpdir(), `teahouse-models-${process.pid}-${modelsJsonSeq++}.json`);
+  writeFileSync(modelsJsonPath, JSON.stringify(generateModelsJson(host), null, 2));
+  return docker({
+    ...dockerSandboxOptions(host),
+    mounts: [{ hostPath: modelsJsonPath, sandboxPath: MODELS_JSON_SANDBOX_PATH, readonly: true }],
+  });
+};
 
 // `sessionStorage.hostSessionsDir` MUST be passed to every pi() call or
 // capture/resume desync (ADR 0001). One shared absolute path relocates all

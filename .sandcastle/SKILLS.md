@@ -2,7 +2,8 @@
 
 The skills under [`skills/`](./skills/) are **vendored** capabilities for the containerized
 Pi agent, baked into the image's global dir `/home/agent/.pi/agent/skills/` by the
-`COPY skills …` line in [`Dockerfile`](./Dockerfile). See **ADR-0017** for why they are
+`COPY skills …` line in [`base.Dockerfile`](./base.Dockerfile) — the reusable
+sandbox-contract base, not the repo overlay (ADR-0014, #110). See **ADR-0017** for why they are
 baked-and-vendored rather than committed to the repo's project-level `.agents/skills/` or
 fetched with `npx skills add` at build time.
 
@@ -43,8 +44,8 @@ record of _where each skill came from and at what revision_.
    ```bash
    gh api repos/<owner/repo>/commits/main --jq '.sha[0:12]'
    ```
-5. **No Dockerfile change needed** — `COPY skills /home/agent/.pi/agent/skills` already picks up
-   any new subdirectory.
+5. **No Dockerfile change needed** — the `COPY skills /home/agent/.pi/agent/skills` line in
+   `base.Dockerfile` already picks up any new subdirectory.
 6. **Rebuild + verify (one-time):**
    ```bash
    pnpm sandcastle:shell

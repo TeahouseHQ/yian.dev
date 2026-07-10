@@ -1409,7 +1409,10 @@ describe("package.json — headless sandcastle restarts on drain (ADR-0013, #102
       scripts: Record<string, string>;
     };
     expect(pkg.scripts.sandcastle).toMatch(/run\.mts/);
-    // The one-time image build still precedes the loop (the wrapper only loops main.mts).
-    expect(pkg.scripts.sandcastle).toMatch(/docker build-image/);
+    // The one-time image build still precedes the loop (the wrapper only loops
+    // main.mts). Post base/overlay split (ADR-0014, #110) that build is the chained
+    // `sandcastle:build-image`, which builds the base then the overlay.
+    expect(pkg.scripts.sandcastle).toMatch(/sandcastle:build-image\s*&&\s*tsx/);
+    expect(pkg.scripts["sandcastle:build-image"]).toMatch(/build-base\s*&&.*docker build-image/);
   });
 });

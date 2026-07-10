@@ -45,7 +45,8 @@
  * (ADR-0014, #109), exactly as main.mts's `dockerSandbox()` derives them: under this
  * machine's ROOTLESS Docker the container's root maps to the host user that owns the
  * bind mount, and the image's USER must match or `checkImageUid` rejects it
- * (ADR-0002 background; see main.mts and .sandcastle/Dockerfile).
+ * (ADR-0002 background; see main.mts and .sandcastle/base.Dockerfile — the
+ * USER/uid rationale lives on the contract base, ADR-0014 #110).
  */
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { realpathSync, writeFileSync } from "node:fs";

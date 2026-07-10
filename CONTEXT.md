@@ -117,6 +117,10 @@ _Avoid_: prompt overrides, prompt templates (as a repo-owned thing).
 A consumer repo's optional small Dockerfile `FROM` the Teahouse base image, adding stack extras only (e.g. yian.dev's corepack + pnpm pin). The base image owns the sandbox contract — git, gh, pi, the uid/HOME/worktree-mount layout — so no repo re-owns that subtle logic (ADR-0014).
 _Avoid_: repo Dockerfile, custom image.
 
+**Skill**:
+An on-demand capability the containerized Pi agent invokes _itself_ — a directory with a `SKILL.md` (name, description, instructions) that the model reads when a task matches its description. Baked into the agent image's global dir (trust-free, loads for every role) from vendored sources, and model-invocation-only, so the headless agent selects it by description, never by a human command (ADR-0017).
+_Avoid_: command, plugin, prompt, tool, `/skill`.
+
 ### Blog reader theming
 
 **Blog reader**:

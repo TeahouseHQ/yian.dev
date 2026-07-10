@@ -44,3 +44,12 @@ public/sitemap*.xml
 
 .playwright-cli/
 .pnpm-store/
+
+# Teahouse consumer state (ADR-0014). The engine writes observability under
+# .teahouse/ (logs + captured session Transcripts + Manifest), regenerated every
+# Run; .env holds operator secrets sourced before a Run. The @ai-hero/sandcastle
+# library creates sandbox checkouts under .sandcastle/worktrees/ at dispatch time.
+.teahouse/logs/
+.teahouse/sessions/
+.teahouse/.env
+.sandcastle/worktrees/

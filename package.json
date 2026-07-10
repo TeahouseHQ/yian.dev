@@ -10,18 +10,16 @@
     "postbuild": "next-sitemap",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc && pnpm sandcastle:typecheck",
-    "sandcastle:typecheck": "tsc -p .sandcastle/tsconfig.json",
+    "typecheck": "tsc",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sandcastle:build-base": "docker build -t sandcastle-base:latest --build-arg AGENT_UID=$(id -u) --build-arg AGENT_GID=$(id -g) -f .sandcastle/base.Dockerfile .sandcastle",
-    "sandcastle:build-image": "pnpm sandcastle:build-base && sandcastle docker build-image",
-    "sandcastle": "pnpm sandcastle:build-image && tsx .sandcastle/run.mts",
-    "sandcastle:shell": "pnpm sandcastle:build-image && tsx .sandcastle/shell.mts",
-    "sandcastle:browse": "tsx .sandcastle/session-browser.tsx",
-    "sandcastle:cockpit": "tsx .sandcastle/cockpit.tsx",
-    "sandcastle:prune": "tsx .sandcastle/prune.mts",
+    "build-base": "docker build -t sandcastle-base:latest --build-arg AGENT_UID=$(id -u) --build-arg AGENT_GID=$(id -g) -f node_modules/teahouse/engine/base.Dockerfile node_modules/teahouse/engine",
+    "build-image": "pnpm build-base && sandcastle docker build-image",
+    "orchestrate": "pnpm build-image && teahouse orchestrate",
+    "cockpit": "teahouse cockpit",
+    "browse": "teahouse browse",
+    "prune": "teahouse prune",
     "prepare": "node scripts/link-git-hooks.js"
   },
   "dependencies": {
@@ -40,6 +38,9 @@
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.0",
     "unified": "^11.0.4"
+  },
+  "optionalDependencies": {
+    "teahouse": "git+https://github.com/TeahouseHQ/teahouse.git"
   },
   "pnpm": {
     "overrides": {
@@ -65,7 +66,6 @@
     "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-promise": "^6.1.1",
     "eslint-plugin-react": "^7.33.2",
-    "ink": "^6.8.0",
     "lint-staged": "^17.0.8",
     "postcss": "^8.5.10",
     "prettier": "^3.2.5",

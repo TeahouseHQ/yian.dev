@@ -39,17 +39,20 @@ The port can be overridden with the `PORT` environment variable (default: `3030`
 | `pnpm test`       | Run tests (Vitest)           |
 | `pnpm test:watch` | Run tests in watch mode      |
 
-### Sandcastle Debug Shell
+### Orchestration (Teahouse)
 
-`pnpm sandcastle:shell` builds the Sandcastle image and drops you into an interactive root `bash` shell inside a real sandbox — the same `createSandbox` environment the AFK agents run under (fresh `origin/main` worktree at `/home/agent/workspace`, `.sandcastle/.env` injected, baked-in `models.json`). Use it to test and debug the container environment by hand. Type `exit` to tear the sandbox down.
+The AFK agentic workflow is provided by the [Teahouse](https://github.com/TeahouseHQ/teahouse)
+engine (ADR-0014), consumed as a package. This repo carries only the per-repo adoption surface:
+the Repo profile and coding standards under `.teahouse/`, and the overlay Dockerfile under
+`.sandcastle/`. Requires a running Docker daemon, a reachable LiteLLM endpoint (see the Host
+profile, `~/.teahouse/host-profile.json`), and secrets sourced from `.teahouse/.env`.
 
-```bash
-pnpm sandcastle:shell                                    # fresh origin/main, no build (fast)
-pnpm sandcastle:shell -- --build                         # run install + build first
-pnpm sandcastle:shell -- --branch sandcastle/issue-123   # reproduce a specific sandbox
-```
-
-Requires a running Docker daemon. Install/build hooks are skipped by default so a broken build can't lock you out of the shell — run `pnpm install`/`pnpm build` yourself inside it, or pass `--build`.
+| Command            | Description                                                      |
+| ------------------ | ---------------------------------------------------------------- |
+| `pnpm orchestrate` | Build the sandbox image, then run the headless orchestrator loop |
+| `pnpm cockpit`     | Launch the supervised Ink TUI (Live / Sessions / Maintenance)    |
+| `pnpm browse`      | Open the Session browser over captured Transcripts               |
+| `pnpm prune`       | Reclaim throwaway Run state (dry-run by default)                 |
 
 ## Workflows
 

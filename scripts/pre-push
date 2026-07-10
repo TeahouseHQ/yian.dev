@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
-# `next build` typechecks the web app (root tsconfig); .sandcastle/ is a
-# dot-dir the root globs skip, so typecheck it explicitly (see issue #103).
-pnpm build && pnpm sandcastle:typecheck
+# `next build` typechecks the web app (root tsconfig). The orchestration engine
+# now lives in the Teahouse package (ADR-0014, #112), not this repo, so there is
+# no longer a vendored `.sandcastle/` to typecheck here.
+pnpm build

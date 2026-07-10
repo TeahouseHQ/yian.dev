@@ -1,7 +1,0 @@
-{
-  "_comment": "Host profile (ADR-0014, #109) — per-MACHINE config, NOT committed with real values. Copy this to ~/.teahouse/host-profile.json and fill in this box's facts. It holds machine facts (LiteLLM URL, api-key env-var name, rootless-Docker flag), not repo facts (those live in repo-profile.json). Keeping a machine's LiteLLM URL here — never in the repo or a built image — means changing the host never requires an image rebuild.",
-  "schemaVersion": 1,
-  "liteLlmBaseUrl": "http://YOUR_HOST_TAILSCALE_IP:4000/v1",
-  "apiKeyEnvVar": "LITELLM_API_KEY",
-  "rootlessDocker": true
-}

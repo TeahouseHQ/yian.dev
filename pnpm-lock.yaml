@@ -55,6 +55,10 @@ importers:
       unified:
         specifier: ^11.0.4
         version: 11.0.4
+    optionalDependencies:
+      teahouse:
+        specifier: git+https://github.com/TeahouseHQ/teahouse.git
+        version: git+https://github.com/TeahouseHQ/teahouse.git#7c869fcf30f8a999ecd0b5875566cb0c96d97104(@types/react@19.2.17)
     devDependencies:
       "@ai-hero/sandcastle":
         specifier: ^0.12.0
@@ -101,9 +105,6 @@ importers:
       eslint-plugin-react:
         specifier: ^7.33.2
         version: 7.37.5(eslint@9.39.2(jiti@1.21.7))
-      ink:
-        specifier: ^6.8.0
-        version: 6.8.0(@types/react@19.2.17)(react@19.2.7)
       lint-staged:
         specifier: ^17.0.8
         version: 17.0.8
@@ -4573,6 +4574,17 @@ packages:
       }
     engines: { node: ">=6" }
 
+  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#7c869fcf30f8a999ecd0b5875566cb0c96d97104:
+    resolution:
+      {
+        commit: 7c869fcf30f8a999ecd0b5875566cb0c96d97104,
+        repo: https://github.com/TeahouseHQ/teahouse.git,
+        type: git,
+      }
+    version: 0.1.0
+    engines: { node: ">=22" }
+    hasBin: true
+
   terminal-size@4.0.1:
     resolution:
       {
@@ -5053,6 +5065,7 @@ snapshots:
     dependencies:
       ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
+    optional: true
 
   "@alloc/quick-lru@5.2.0": {}
 
@@ -5758,7 +5771,8 @@ snapshots:
 
   ast-types-flow@0.0.8: {}
 
-  auto-bind@5.0.1: {}
+  auto-bind@5.0.1:
+    optional: true
 
   autoprefixer@10.4.24(postcss@8.5.15):
     dependencies:
@@ -5844,7 +5858,8 @@ snapshots:
       ansi-styles: 4.3.0
       supports-color: 7.2.0
 
-  chalk@5.6.2: {}
+  chalk@5.6.2:
+    optional: true
 
   character-entities-html4@2.1.0: {}
 
@@ -5868,11 +5883,13 @@ snapshots:
 
   classnames@2.3.2: {}
 
-  cli-boxes@3.0.0: {}
+  cli-boxes@3.0.0:
+    optional: true
 
   cli-cursor@4.0.0:
     dependencies:
       restore-cursor: 4.0.0
+    optional: true
 
   cli-cursor@5.0.0:
     dependencies:
@@ -5888,6 +5905,7 @@ snapshots:
   code-excerpt@4.0.0:
     dependencies:
       convert-to-spaces: 2.0.1
+    optional: true
 
   color-convert@2.0.1:
     dependencies:
@@ -5903,7 +5921,8 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  convert-to-spaces@2.0.1: {}
+  convert-to-spaces@2.0.1:
+    optional: true
 
   cross-spawn@7.0.6:
     dependencies:
@@ -6105,7 +6124,8 @@ snapshots:
       is-date-object: 1.1.0
       is-symbol: 1.1.1
 
-  es-toolkit@1.49.0: {}
+  es-toolkit@1.49.0:
+    optional: true
 
   esbuild@0.28.1:
     optionalDependencies:
@@ -6138,7 +6158,8 @@ snapshots:
 
   escalade@3.2.0: {}
 
-  escape-string-regexp@2.0.0: {}
+  escape-string-regexp@2.0.0:
+    optional: true
 
   escape-string-regexp@4.0.0: {}
 
@@ -6715,7 +6736,8 @@ snapshots:
 
   imurmurhash@0.1.4: {}
 
-  indent-string@5.0.0: {}
+  indent-string@5.0.0:
+    optional: true
 
   ink@6.8.0(@types/react@19.2.17)(react@19.2.7):
     dependencies:
@@ -6750,6 +6772,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   inline-style-parser@0.2.7: {}
 
@@ -6834,7 +6857,8 @@ snapshots:
 
   is-hexadecimal@2.0.1: {}
 
-  is-in-ci@2.0.0: {}
+  is-in-ci@2.0.0:
+    optional: true
 
   is-map@2.0.3: {}
 
@@ -7279,7 +7303,8 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.1
 
-  mimic-fn@2.1.0: {}
+  mimic-fn@2.1.0:
+    optional: true
 
   mimic-function@5.0.1: {}
 
@@ -7392,6 +7417,7 @@ snapshots:
   onetime@5.1.2:
     dependencies:
       mimic-fn: 2.1.0
+    optional: true
 
   onetime@7.0.0:
     dependencies:
@@ -7438,7 +7464,8 @@ snapshots:
     dependencies:
       entities: 4.5.0
 
-  patch-console@2.0.0: {}
+  patch-console@2.0.0:
+    optional: true
 
   path-exists@4.0.0: {}
 
@@ -7554,6 +7581,7 @@ snapshots:
     dependencies:
       react: 19.2.7
       scheduler: 0.27.0
+    optional: true
 
   react@19.2.7: {}
 
@@ -7665,6 +7693,7 @@ snapshots:
     dependencies:
       onetime: 5.1.2
       signal-exit: 3.0.7
+    optional: true
 
   restore-cursor@5.1.0:
     dependencies:
@@ -7825,7 +7854,8 @@ snapshots:
 
   siginfo@2.0.0: {}
 
-  signal-exit@3.0.7: {}
+  signal-exit@3.0.7:
+    optional: true
 
   signal-exit@4.1.0: {}
 
@@ -7850,6 +7880,7 @@ snapshots:
   stack-utils@2.0.6:
     dependencies:
       escape-string-regexp: 2.0.0
+    optional: true
 
   stackback@0.0.2: {}
 
@@ -7971,7 +8002,8 @@ snapshots:
     dependencies:
       "@pkgr/core": 0.2.9
 
-  tagged-tag@1.0.0: {}
+  tagged-tag@1.0.0:
+    optional: true
 
   tailwindcss@3.4.19(tsx@4.22.4)(yaml@2.9.0):
     dependencies:
@@ -8003,7 +8035,23 @@ snapshots:
 
   tapable@2.2.1: {}
 
-  terminal-size@4.0.1: {}
+  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#7c869fcf30f8a999ecd0b5875566cb0c96d97104(@types/react@19.2.17):
+    dependencies:
+      "@ai-hero/sandcastle": 0.12.0
+      ink: 6.8.0(@types/react@19.2.17)(react@19.2.7)
+      react: 19.2.7
+      tsx: 4.22.4
+    transitivePeerDependencies:
+      - "@daytona/sdk"
+      - "@types/react"
+      - "@vercel/sandbox"
+      - bufferutil
+      - react-devtools-core
+      - utf-8-validate
+    optional: true
+
+  terminal-size@4.0.1:
+    optional: true
 
   thenify-all@1.6.0:
     dependencies:
@@ -8067,6 +8115,7 @@ snapshots:
   type-fest@5.7.0:
     dependencies:
       tagged-tag: 1.0.0
+    optional: true
 
   typed-array-buffer@1.0.3:
     dependencies:
@@ -8275,6 +8324,7 @@ snapshots:
   widest-line@6.0.0:
     dependencies:
       string-width: 8.2.1
+    optional: true
 
   wrap-ansi@10.0.0:
     dependencies:
@@ -8288,7 +8338,8 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.2.0
 
-  ws@8.21.0: {}
+  ws@8.21.0:
+    optional: true
 
   xml-js@1.6.11:
     dependencies:
@@ -8299,6 +8350,7 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  yoga-layout@3.2.1: {}
+  yoga-layout@3.2.1:
+    optional: true
 
   zwitch@2.0.4: {}

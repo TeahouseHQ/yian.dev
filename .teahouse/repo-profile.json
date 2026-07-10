@@ -8,7 +8,7 @@
   "baseBranch": "main",
   "branchPrefix": "teahouse/",
   "poolSize": 4,
-  "codingStandardsPath": "@.sandcastle/CODING_STANDARDS.md",
+  "codingStandardsPath": "@.teahouse/CODING_STANDARDS.md",
   "models": {
     "profiles": {
       "glm": {

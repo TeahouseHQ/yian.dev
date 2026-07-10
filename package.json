@@ -19,7 +19,7 @@
     "orchestrate": "pnpm build-image && teahouse orchestrate",
     "cockpit": "teahouse cockpit",
     "browse": "teahouse browse",
-    "prune": "teahouse prune",
+    "prune-runs": "teahouse prune",
     "prepare": "node scripts/link-git-hooks.js"
   },
   "dependencies": {

@@ -52,7 +52,7 @@ profile, `~/.teahouse/host-profile.json`), and secrets sourced from `.teahouse/.
 | `pnpm orchestrate` | Build the sandbox image, then run the headless orchestrator loop |
 | `pnpm cockpit`     | Launch the supervised Ink TUI (Live / Sessions / Maintenance)    |
 | `pnpm browse`      | Open the Session browser over captured Transcripts               |
-| `pnpm prune`       | Reclaim throwaway Run state (dry-run by default)                 |
+| `pnpm prune-runs`  | Reclaim throwaway Run state (dry-run by default)                 |
 
 ## Workflows
 

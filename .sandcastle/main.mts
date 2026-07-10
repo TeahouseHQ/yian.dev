@@ -22,7 +22,6 @@ import {
   pickImplementers,
   pickPrs,
   POLL_INTERVAL_MS,
-  POOL_SIZE,
   requeueResolvedPr,
   RETRY_BUDGET_N,
   resolvePlanEmit,
@@ -49,23 +48,50 @@ import {
 } from "./observability.mts";
 import { createEvents } from "./events.mts";
 import { resolveProfile } from "./model-profiles.mts";
+import { loadRepoProfile, verifyCommand, type RepoProfile } from "./repo-profile.mts";
 
 const execFileAsync = promisify(execFile);
 
-// Resolve the active Model profile from SANDCASTLE_PROFILE — never argv (ADR-0016).
-// This is the single source of the four model-bearing roles' models, replacing the
-// old hardcoded MODELS const. Unset falls back silently to `mixed` (the documented
-// default); an unknown name is a LOUD non-zero exit here, before the loop starts,
-// printing the valid names — a typo must not quietly run the wrong (expensive)
-// models. Env is the transport (not an argv flag) so the profile survives a
-// self-restart respawn (ADR-0013) for free via env inheritance; the `--profile`
-// flag on `pnpm sandcastle` is translated into this env var by run.mts.
-const profileResolution = resolveProfile(process.env.SANDCASTLE_PROFILE);
+// Load the Repo profile — the single typed, schema-versioned config file that is
+// this repo's entire behavioural surface toward the engine (ADR-0014, #108). Every
+// repo fact below (pool size, base branch, branch prefix, install/build hook,
+// verify commands, coding-standards path, and the per-role model catalog) is read
+// from it; no repo-fact literal remains in this file. A parse error or an
+// incompatible schema version aborts LOUDLY here, before the loop starts — never a
+// silently reinterpreted profile.
+let repoProfile: RepoProfile;
+try {
+  repoProfile = loadRepoProfile();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
+
+// Resolve the active Model profile from SANDCASTLE_PROFILE — never argv (ADR-0016)
+// — against the profile's model catalog. Unset falls back silently to the catalog
+// default (`mixed`); an unknown name is a LOUD non-zero exit here, before the loop
+// starts, printing the valid names — a typo must not quietly run the wrong
+// (expensive) models. Env is the transport (not an argv flag) so the profile
+// survives a self-restart respawn (ADR-0013) for free via env inheritance; the
+// `--profile` flag on `pnpm sandcastle` is translated into this env var by run.mts.
+const profileResolution = resolveProfile(process.env.SANDCASTLE_PROFILE, repoProfile.models);
 if (!profileResolution.ok) {
   console.error(profileResolution.error);
   process.exit(1);
 }
 const activeProfile = profileResolution.profile;
+
+// The repo-fact prompt args, sourced from the Repo profile (ADR-0014, #108) and
+// spread into every dispatch's promptArgs alongside the per-issue args
+// (ISSUE_NUMBER/TITLE/BRANCH). This is how the Canonical prompts stay engine-owned
+// templates while a repo parameterises its verify command, coding-standards path,
+// base branch, and branch prefix — no prompt file carries a repo-fact literal.
+const repoPromptArgs = {
+  VERIFY_COMMAND: verifyCommand(repoProfile),
+  STANDARDS_PATH: repoProfile.codingStandardsPath,
+  BASE_BRANCH: repoProfile.baseBranch,
+  BRANCH_PREFIX: repoProfile.branchPrefix,
+};
 
 // Sandbox factory — use this everywhere instead of calling docker() directly.
 //
@@ -310,7 +336,7 @@ async function queryReviewMergePrs(): Promise<BucketPr[]> {
   }[];
   const prs: BucketPr[] = [];
   for (const r of rows) {
-    const issue = issueFromBranch(r.headRefName);
+    const issue = issueFromBranch(r.headRefName, repoProfile);
     if (issue === null) continue; // not one of our sandcastle PRs
     prs.push({
       prNumber: r.number,
@@ -361,7 +387,7 @@ events.profileSelected(activeProfile.name, activeProfile.models);
 // dispatches the Conflict resolver, which merges origin/main into the branch,
 // fixes it green, and routes it back through review — escalating to
 // ready-for-human only on Retry-budget exhaustion (ADR-0012, #101).
-const pool = createPool(POOL_SIZE);
+const pool = createPool(repoProfile.poolSize);
 const inflight = createInflight();
 
 // The Plan cache (ADR-0010): the Planner's last emit list keyed by a
@@ -447,7 +473,7 @@ async function dispatchImplementer(issue: {
     // lockfile (see implementerSandboxSpec / INSTALL_BUILD in dispatch.mts).
     await using sandbox = await sandcastle.createSandbox({
       sandbox: dockerSandbox(),
-      ...implementerSandboxSpec(issue.branch),
+      ...implementerSandboxSpec(issue.branch, repoProfile),
     });
     implLC.sandbox();
 
@@ -463,6 +489,7 @@ async function dispatchImplementer(issue: {
           agent: sandcastle.pi(activeProfile.models.implementer, piSessions),
           promptFile: "./.sandcastle/implement-prompt.md",
           promptArgs: {
+            ...repoPromptArgs,
             ISSUE_NUMBER: String(issue.number),
             ISSUE_TITLE: issue.title,
             BRANCH: issue.branch,
@@ -547,7 +574,7 @@ async function dispatchReviewer(pr: {
       copyToWorktree: ["node_modules"],
       hooks: {
         sandbox: {
-          onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
+          onSandboxReady: [{ command: repoProfile.installBuild }],
         },
       },
     });
@@ -570,6 +597,7 @@ async function dispatchReviewer(pr: {
           // title is just a header; it is not in the PR-bucket query, so a
           // derived placeholder avoids an extra gh call per Reviewer.
           promptArgs: {
+            ...repoPromptArgs,
             ISSUE_NUMBER: String(pr.issue),
             ISSUE_TITLE: "Issue #" + pr.issue,
             BRANCH: pr.branch,
@@ -643,9 +671,9 @@ async function dispatchReviewer(pr: {
  * sandbox lifecycle is the cost being limited, not an agent — but runs NO agent,
  * NO prompt, and spends zero tokens. In a fresh ISOLATED worktree forked from
  * `main` (never head mode — see below), it validates the merge deterministically
- * via `onSandboxReady` hooks: `git merge <PR branch>` → `pnpm typecheck && pnpm
- * test`. A textual conflict makes `git merge` exit non-zero and a red suite makes
- * typecheck/test exit non-zero — either rejects `createSandbox`, taking us to the
+ * via `onSandboxReady` hooks: `git merge <PR branch>` → the profile's verify
+ * command. A textual conflict makes `git merge` exit non-zero and a red suite makes
+ * verify exit non-zero — either rejects `createSandbox`, taking us to the
  * failure path. On the clean path the orchestrator lands the PR server-side with
  * `gh pr merge --merge` (a real merge commit, preserving the impl vs review
  * commits in history), emits `landing-landed`, and records an agent-free Manifest
@@ -697,7 +725,7 @@ async function dispatchLanding(pr: {
     // to the failure escalation below.
     await using sandbox = await sandcastle.createSandbox({
       sandbox: dockerSandbox(),
-      ...landingSandboxSpec(pr.issue, pr.branch),
+      ...landingSandboxSpec(pr.issue, pr.branch, repoProfile),
     });
     lc.sandbox();
 
@@ -769,7 +797,7 @@ async function dispatchLanding(pr: {
  * re-Landing races in. In a **fresh sandbox checked out on the PR branch** (like
  * the Reviewer, decoupled from the Landing's disposed sandbox) it runs
  * resolve-prompt.md: the agent merges `origin/main` INTO the branch, fixes the
- * conflicts / integration breakage until `pnpm typecheck && pnpm test` are green,
+ * conflicts / integration breakage until the profile's verify command is green,
  * pushes, and ends its Session with a structured **Outcome** (ADR-0011). The
  * orchestrator parses it and mutates GitHub state itself:
  *
@@ -805,7 +833,7 @@ async function dispatchResolver(pr: {
       copyToWorktree: ["node_modules"],
       hooks: {
         sandbox: {
-          onSandboxReady: [{ command: "pnpm install --frozen-lockfile && pnpm build" }],
+          onSandboxReady: [{ command: repoProfile.installBuild }],
         },
       },
     });
@@ -825,6 +853,7 @@ async function dispatchResolver(pr: {
           agent: sandcastle.pi(activeProfile.models.resolver, piSessions),
           promptFile: "./.sandcastle/resolve-prompt.md",
           promptArgs: {
+            ...repoPromptArgs,
             ISSUE_NUMBER: String(pr.issue),
             ISSUE_TITLE: "Issue #" + pr.issue,
             BRANCH: pr.branch,
@@ -906,6 +935,7 @@ async function runPlanner(): Promise<EmittedIssue[]> {
         name: "Planner",
         agent: sandcastle.pi(activeProfile.models.planner, piSessions),
         promptFile: "./.sandcastle/plan-prompt.md",
+        promptArgs: repoPromptArgs,
         logging: observe("planner"),
       }),
   });
@@ -935,7 +965,7 @@ let drainCommit = "";
 
 for (;;) {
   const free = pool.free();
-  events.tick(free, POOL_SIZE, inflight.size());
+  events.tick(free, repoProfile.poolSize, inflight.size());
 
   if (draining) {
     // Draining: dispatch nothing more. In-flight Sessions (fire-and-forget) keep

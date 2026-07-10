@@ -11,22 +11,11 @@
  * `main.mts` drives live sandcastle + gh. See the glossary terms in CONTEXT.md.
  */
 
-/** Shared concurrency Pool size across all roles (ADR-0006). One slot = one
- *  full agent+sandbox lifecycle. The Planner is NOT counted against it. */
-export const POOL_SIZE = 10;
+import { forkBase, mergeBranch, verifyCommand, type RepoProfile } from "./repo-profile.mts";
 
 /** Poll tick interval: the loop tops up free slots roughly every 60s. When the
  *  Pool is full the tick skips the gh query entirely and just sleeps. */
 export const POLL_INTERVAL_MS = 60_000;
-
-/**
- * The single ref the orchestrator bases everything on (CONTEXT.md; ADR-0013).
- * New issue branches fork from it, the Landing validates against it, and Prune's
- * merged-reachability gate uses it — never local `main` or `HEAD`. Local `main`
- * and the working tree stay purely the human's business; a `git fetch origin`
- * each Poll tick keeps this remote-tracking ref fresh without touching them.
- */
-export const BASE_BRANCH = "origin/main";
 
 /**
  * The distinct exit code a self-restarting orchestrator exits with after it has
@@ -80,11 +69,6 @@ function isOrchestratorSourcePath(path: string): boolean {
   return /\.(mts|ts|tsx)$/.test(path);
 }
 
-/** The install+build hook every sandbox runs before its work. Frozen-lockfile
- *  because this repo is pnpm-only — a plain install would resolve a competing
- *  lockfile (see main.mts). */
-const INSTALL_BUILD = "pnpm install --frozen-lockfile && pnpm build";
-
 /**
  * The subset of `sandcastle.createSandbox` options the orchestrator computes per
  * dispatch: which `branch` to work on, the `baseBranch` it forks from, the
@@ -100,41 +84,48 @@ export interface SandboxSpec {
 }
 
 /**
- * Build the sandbox spec for an Implementer: fork the new `sandcastle/issue-N`
- * branch from {@link BASE_BRANCH} (`origin/main`), NEVER `HEAD`. Sandcastle's
- * docker provider defaults `baseBranch` to `HEAD`, so an explicit base is what
- * makes the fork independent of whatever the human has checked out (ADR-0013,
- * #100). Then install + build the worktree before the agent runs.
+ * Build the sandbox spec for an Implementer: fork the new issue branch from the
+ * profile's fork base (`origin/<baseBranch>`), NEVER `HEAD`. Sandcastle's docker
+ * provider defaults `baseBranch` to `HEAD`, so an explicit base is what makes the
+ * fork independent of whatever the human has checked out (ADR-0013, #100). Then
+ * run the profile's install/build hook on the worktree before the agent runs. The
+ * install command and fork base are read from the Repo profile (ADR-0014, #108),
+ * not hardcoded — so a repo with a different toolchain needs no engine edit.
  */
-export function implementerSandboxSpec(branch: string): SandboxSpec {
+export function implementerSandboxSpec(branch: string, profile: RepoProfile): SandboxSpec {
   return {
     branch,
-    baseBranch: BASE_BRANCH,
+    baseBranch: forkBase(profile),
     copyToWorktree: ["node_modules"],
-    hooks: { sandbox: { onSandboxReady: [{ command: INSTALL_BUILD }] } },
+    hooks: { sandbox: { onSandboxReady: [{ command: profile.installBuild }] } },
   };
 }
 
 /**
  * Build the sandbox spec for a Landing (CONTEXT.md: Landing; ADR-0012/0013): a
- * throwaway `sandcastle/merge-N` worktree forked from {@link BASE_BRANCH}
- * (`origin/main`) — the same base the PR will land on server-side, so a green
- * validation is meaningful — never local `main`, which falls behind after every
- * server-side merge. `onSandboxReady` install+builds, then deterministically
- * test-merges the PR branch: `git merge <prBranch>` (a textual conflict) or
- * `pnpm typecheck && pnpm test` (a red suite) exiting non-zero rejects
- * `createSandbox` and routes `main.mts` to the failure escalation.
+ * throwaway `<prefix>merge-N` worktree forked from the profile's fork base
+ * (`origin/<baseBranch>`) — the same base the PR will land on server-side, so a
+ * green validation is meaningful — never local `main`, which falls behind after
+ * every server-side merge. `onSandboxReady` runs the profile's install/build hook,
+ * then deterministically test-merges the PR branch: `git merge <prBranch>` (a
+ * textual conflict) or the profile's verify command (a red suite) exiting non-zero
+ * rejects `createSandbox` and routes `main.mts` to the failure escalation. Branch
+ * prefix, fork base, install, and verify all come from the Repo profile (#108).
  */
-export function landingSandboxSpec(issue: number, prBranch: string): SandboxSpec {
+export function landingSandboxSpec(
+  issue: number,
+  prBranch: string,
+  profile: RepoProfile
+): SandboxSpec {
   return {
-    branch: `sandcastle/merge-${issue}`,
-    baseBranch: BASE_BRANCH,
+    branch: mergeBranch(profile, issue),
+    baseBranch: forkBase(profile),
     copyToWorktree: ["node_modules"],
     hooks: {
       sandbox: {
         onSandboxReady: [
-          { command: INSTALL_BUILD },
-          { command: `git merge ${prBranch} --no-edit && pnpm typecheck && pnpm test` },
+          { command: profile.installBuild },
+          { command: `git merge ${prBranch} --no-edit && ${verifyCommand(profile)}` },
         ],
       },
     },
@@ -161,8 +152,9 @@ export interface Pool {
   release(): void;
 }
 
-/** Create a Pool of `size` (default `POOL_SIZE`). */
-export function createPool(size: number = POOL_SIZE): Pool {
+/** Create a Pool of `size` slots. The size is the Repo profile's `poolSize`
+ *  (ADR-0014, #108), supplied by `main.mts` — no hardcoded engine default. */
+export function createPool(size: number): Pool {
   let occupied = 0;
   const waiters: (() => void)[] = [];
   return {
@@ -273,14 +265,23 @@ export interface ReadyForAgentIssue {
   readonly updatedAt: string;
 }
 
+/** Escape a string for literal use inside a `RegExp` (the branch prefix carries a
+ *  `/`, and could carry other metacharacters for a differently-configured repo). */
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
- * Parse the issue number out of a deterministic `sandcastle/issue-N` branch
- * name, or return `null` when the branch is not one of ours. The branch is the
- * link back from a PR to its issue — used to key the In-flight set, derive the
- * issue `runId`, and populate prompt args for Reviewer/Merger dispatch.
+ * Parse the issue number out of a deterministic `<prefix>issue-N` branch name, or
+ * return `null` when the branch is not one of ours. The branch prefix comes from
+ * the Repo profile (ADR-0014, #108) — a repo can rename `sandcastle/` → `teahouse/`
+ * with no engine edit. The branch is the link back from a PR to its issue — used to
+ * key the In-flight set, derive the issue `runId`, and populate prompt args for
+ * Reviewer/Landing dispatch.
  */
-export function issueFromBranch(branch: string): number | null {
-  const m = branch.match(/^sandcastle\/issue-(\d+)$/);
+export function issueFromBranch(branch: string, profile: RepoProfile): number | null {
+  const pattern = new RegExp(`^${escapeRegExp(profile.branchPrefix)}issue-(\\d+)$`);
+  const m = branch.match(pattern);
   return m ? Number(m[1]) : null;
 }
 

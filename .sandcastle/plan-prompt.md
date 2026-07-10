@@ -22,7 +22,7 @@ An issue B is **blocked by** issue A if:
 
 An issue is **unblocked** if it has zero blocking dependencies on other open issues.
 
-For each unblocked issue, assign a branch name using the exact format `sandcastle/issue-{number}` (no slug or other suffix). This must be deterministic so that re-planning the same issue always produces the same branch name and accumulated progress is preserved.
+For each unblocked issue, assign a branch name using the exact format `{{BRANCH_PREFIX}}issue-{number}` (no slug or other suffix). This must be deterministic so that re-planning the same issue always produces the same branch name and accumulated progress is preserved.
 
 If the issue appears to be a PRD and it has implementation issues which link to it, the PRD cannot be worked on.
 
@@ -31,7 +31,7 @@ If the issue appears to be a PRD and it has implementation issues which link to 
 Output your plan as a JSON object wrapped in `<plan>` tags:
 
 <plan>
-{"issues": [{"number": 42, "title": "Fix auth bug", "branch": "sandcastle/issue-42"}]}
+{"issues": [{"number": 42, "title": "Fix auth bug", "branch": "{{BRANCH_PREFIX}}issue-42"}]}
 </plan>
 
 Include only unblocked issues that are present in the `<issues-json>` block.

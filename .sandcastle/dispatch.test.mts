@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+import type { RepoProfile } from "./repo-profile.mts";
 import {
-  BASE_BRANCH,
   DRAIN_EXIT_CODE,
   NOOP_IMPLEMENTER_COMMENT,
-  POOL_SIZE,
   POLL_INTERVAL_MS,
   RETRY_BUDGET_N,
   budgetExhaustedComment,
@@ -50,6 +49,28 @@ import {
  * isolation, the same way `observability.mts` holds the testable observability
  * logic while `main.mts` drives live sandboxes.
  */
+
+/**
+ * A distinctive Repo profile fixture (#108). Its values deliberately DIFFER from
+ * the shipped `repo-profile.json` (a `robot/` prefix, a `trunk` base, `make`
+ * verify commands) so the sandbox-spec / branch-parse assertions prove the values
+ * flow FROM the profile — a hardcoded literal left in the engine would fail here.
+ */
+const testProfile: RepoProfile = {
+  schemaVersion: 1,
+  installBuild: "make setup",
+  verify: { typecheck: "make tc", test: "make t" },
+  baseBranch: "trunk",
+  branchPrefix: "robot/",
+  poolSize: 4,
+  codingStandardsPath: "@docs/STANDARDS.md",
+  models: {
+    profiles: {
+      solo: { planner: "m", implementer: "m", reviewer: "m", resolver: "m" },
+    },
+    default: "solo",
+  },
+};
 
 const issue = (
   number: number,
@@ -228,18 +249,14 @@ describe("escalateBudgetExhausted", () => {
 });
 
 describe("constants", () => {
-  it("pins the shared Pool size to 10 (ADR-0006)", () => {
-    expect(POOL_SIZE).toBe(10);
-  });
-
   it("pins the Poll tick interval to ~60s", () => {
     expect(POLL_INTERVAL_MS).toBe(60_000);
   });
 });
 
 describe("createPool", () => {
-  it("starts fully free at the configured size", () => {
-    expect(createPool().free()).toBe(10);
+  it("starts fully free at the configured size (the profile's poolSize, #108)", () => {
+    expect(createPool(4).free()).toBe(4);
     expect(createPool(3).free()).toBe(3);
   });
 
@@ -644,24 +661,26 @@ const pr = (
   labels: opts.labels ?? [],
 });
 
-describe("issueFromBranch", () => {
-  it("parses a sandcastle/issue-N branch back to the issue number", () => {
-    expect(issueFromBranch("sandcastle/issue-42")).toBe(42);
-    expect(issueFromBranch("sandcastle/issue-1")).toBe(1);
-    expect(issueFromBranch("sandcastle/issue-9999")).toBe(9999);
+describe("issueFromBranch — parses using the profile's branch prefix (#108)", () => {
+  it("parses a <prefix>issue-N branch back to the issue number", () => {
+    expect(issueFromBranch("robot/issue-42", testProfile)).toBe(42);
+    expect(issueFromBranch("robot/issue-1", testProfile)).toBe(1);
+    expect(issueFromBranch("robot/issue-9999", testProfile)).toBe(9999);
   });
 
-  it("returns null for any non-sandcastle branch", () => {
-    expect(issueFromBranch("main")).toBeNull();
-    expect(issueFromBranch("feature/foo")).toBeNull();
-    expect(issueFromBranch("sandcastle/feature-x")).toBeNull();
+  it("returns null for a branch under a DIFFERENT prefix (the prefix is profile-driven)", () => {
+    // Proves the prefix comes from the profile, not a hardcoded `sandcastle/`.
+    expect(issueFromBranch("sandcastle/issue-42", testProfile)).toBeNull();
+    expect(issueFromBranch("main", testProfile)).toBeNull();
+    expect(issueFromBranch("feature/foo", testProfile)).toBeNull();
+    expect(issueFromBranch("robot/feature-x", testProfile)).toBeNull();
   });
 
-  it("returns null for a malformed sandcastle/issue- branch", () => {
-    expect(issueFromBranch("sandcastle/issue-")).toBeNull(); // no digits
-    expect(issueFromBranch("sandcastle/issue-abc")).toBeNull(); // non-numeric
-    expect(issueFromBranch("sandcastle/issue-42-extra")).toBeNull(); // trailing suffix
-    expect(issueFromBranch("sandcastle/issue-42/notes")).toBeNull(); // nested path
+  it("returns null for a malformed <prefix>issue- branch", () => {
+    expect(issueFromBranch("robot/issue-", testProfile)).toBeNull(); // no digits
+    expect(issueFromBranch("robot/issue-abc", testProfile)).toBeNull(); // non-numeric
+    expect(issueFromBranch("robot/issue-42-extra", testProfile)).toBeNull(); // trailing suffix
+    expect(issueFromBranch("robot/issue-42/notes", testProfile)).toBeNull(); // nested path
   });
 });
 
@@ -966,41 +985,37 @@ describe("resolvePlanEmit", () => {
 
 // ---- main.mts structural guards (read source, never import — it runs the loop) --
 
-describe("implementerSandboxSpec — fork the issue branch from origin/main (ADR-0013, #100)", () => {
-  it("bases the new sandcastle/issue-N branch on origin/main, never HEAD", () => {
-    // The whole point of ADR-0013: the Implementer forks from origin/main
-    // regardless of what the human has checked out in the host worktree.
-    const spec = implementerSandboxSpec("sandcastle/issue-42");
-    expect(spec.branch).toBe("sandcastle/issue-42");
-    expect(spec.baseBranch).toBe("origin/main");
-    expect(spec.baseBranch).toBe(BASE_BRANCH);
+describe("implementerSandboxSpec — fork the issue branch from the profile base (ADR-0013/0014)", () => {
+  it("bases the new issue branch on origin/<baseBranch>, never HEAD", () => {
+    // The whole point of ADR-0013: the Implementer forks from the fork base
+    // regardless of what the human has checked out in the host worktree. The base
+    // is the profile's, not a hardcoded origin/main (#108).
+    const spec = implementerSandboxSpec("robot/issue-42", testProfile);
+    expect(spec.branch).toBe("robot/issue-42");
+    expect(spec.baseBranch).toBe("origin/trunk");
   });
 
-  it("installs + builds the worktree before the agent runs", () => {
-    const spec = implementerSandboxSpec("sandcastle/issue-7");
+  it("runs the profile's install/build hook before the agent runs", () => {
+    const spec = implementerSandboxSpec("robot/issue-7", testProfile);
     const commands = spec.hooks.sandbox.onSandboxReady.map((h) => h.command);
-    expect(commands).toContain("pnpm install --frozen-lockfile && pnpm build");
+    expect(commands).toContain("make setup");
   });
 });
 
-describe("landingSandboxSpec — validate the merge against origin/main (ADR-0013, #100)", () => {
-  it("forks the throwaway merge worktree from origin/main", () => {
+describe("landingSandboxSpec — validate the merge against the profile base (ADR-0013/0014)", () => {
+  it("forks the throwaway merge worktree from origin/<baseBranch> with the profile prefix", () => {
     // Validation base = landing base: the Landing tests the merge against the
-    // same ref it will actually land on server-side (origin/main), not stale
-    // local main.
-    const spec = landingSandboxSpec(88, "sandcastle/issue-88");
-    expect(spec.branch).toBe("sandcastle/merge-88");
-    expect(spec.baseBranch).toBe("origin/main");
-    expect(spec.baseBranch).toBe(BASE_BRANCH);
+    // same ref it will actually land on server-side, not stale local main.
+    const spec = landingSandboxSpec(88, "robot/issue-88", testProfile);
+    expect(spec.branch).toBe("robot/merge-88");
+    expect(spec.baseBranch).toBe("origin/trunk");
   });
 
-  it("test-merges the PR branch then runs typecheck + test", () => {
-    const spec = landingSandboxSpec(88, "sandcastle/issue-88");
+  it("test-merges the PR branch then runs the profile's verify command", () => {
+    const spec = landingSandboxSpec(88, "robot/issue-88", testProfile);
     const commands = spec.hooks.sandbox.onSandboxReady.map((h) => h.command);
-    expect(commands).toContain("pnpm install --frozen-lockfile && pnpm build");
-    expect(commands).toContain(
-      "git merge sandcastle/issue-88 --no-edit && pnpm typecheck && pnpm test"
-    );
+    expect(commands).toContain("make setup");
+    expect(commands).toContain("git merge robot/issue-88 --no-edit && make tc && make t");
   });
 });
 
@@ -1091,9 +1106,9 @@ describe("main.mts — origin-tracking (ADR-0013, #100)", () => {
     expect(mainSource).toMatch(/events\.fetchFailed\(/);
   });
 
-  it("forks the Implementer branch from origin/main via implementerSandboxSpec", () => {
+  it("forks the Implementer branch from the profile base via implementerSandboxSpec", () => {
     const impl = mainSource.slice(mainSource.indexOf("async function dispatchImplementer"));
-    expect(impl).toMatch(/implementerSandboxSpec\(issue\.branch\)/);
+    expect(impl).toMatch(/implementerSandboxSpec\(issue\.branch, repoProfile\)/);
   });
 });
 
@@ -1183,9 +1198,9 @@ describe("main.mts — persistent shared-pool orchestrator (ADR-0006)", () => {
   it("Reviewer creates its own fresh sandbox from the PR branch", () => {
     // impl and review are decoupled across ticks (ADR-0006), so the Reviewer
     // can't reuse the Implementer's sandbox — it builds a fresh one on the PR
-    // branch with install + build, then runs review-prompt.md.
+    // branch with the profile's install/build hook, then runs review-prompt.md.
     expect(mainSource).toMatch(/review-prompt\.md/);
-    expect(mainSource).toMatch(/pnpm install --frozen-lockfile && pnpm build/);
+    expect(mainSource).toMatch(/onSandboxReady: \[\{ command: repoProfile\.installBuild \}\]/);
   });
 
   it("gates the Planner on free slots remaining after merge+review draining", () => {
@@ -1281,7 +1296,7 @@ describe("main.mts — deterministic Landing (ADR-0012, #97)", () => {
     // stale local `main`) keeps the Landing off the host's live main/worktree.
     const landing = mainSource.slice(mainSource.indexOf("async function dispatchLanding"));
     expect(landing).toMatch(/createSandbox/);
-    expect(landing).toMatch(/landingSandboxSpec\(pr\.issue, pr\.branch\)/);
+    expect(landing).toMatch(/landingSandboxSpec\(pr\.issue, pr\.branch, repoProfile\)/);
     expect(landing).not.toMatch(/baseBranch:\s*"main"/);
   });
 

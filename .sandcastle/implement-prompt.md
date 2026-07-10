@@ -23,7 +23,7 @@ If applicable, use RGR to complete the task.
 
 # FEEDBACK LOOPS
 
-Before committing, run `pnpm typecheck` and `pnpm test` to ensure the tests pass.
+Before committing, run `{{VERIFY_COMMAND}}` to ensure the tests pass.
 
 # COMMIT
 
@@ -45,12 +45,12 @@ section entirely — do not push, and do not open a PR.
 If you made commits:
 
 1. Push the branch to origin: `git push -u origin {{BRANCH}}`
-2. Open a **draft** pull request targeting `main`. The body MUST contain
+2. Open a **draft** pull request targeting `{{BASE_BRANCH}}`. The body MUST contain
    `Closes #{{ISSUE_NUMBER}}` so the issue auto-closes when the PR is merged. Open it as
    a draft — the Reviewer marks it ready once it has been reviewed:
 
    ```
-   gh pr create --draft --base main --head {{BRANCH}} \
+   gh pr create --draft --base {{BASE_BRANCH}} --head {{BRANCH}} \
      --title "RALPH: #{{ISSUE_NUMBER}} {{ISSUE_TITLE}}" \
      --body "Closes #{{ISSUE_NUMBER}}"
    ```

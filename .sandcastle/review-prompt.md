@@ -14,7 +14,7 @@ You are an expert code reviewer focused on enhancing code clarity, consistency, 
 
 <diff-to-main>
 
-!`git diff main..HEAD`
+!`git diff {{BASE_BRANCH}}..HEAD`
 
 </diff-to-main>
 
@@ -39,7 +39,7 @@ You are an expert code reviewer focused on enhancing code clarity, consistency, 
    - Remove helpful abstractions that improve code organization
    - Make the code harder to debug or extend
 
-4. **Apply project standards**: Follow the established coding standards in the project at @.sandcastle/CODING_STANDARDS.md.
+4. **Apply project standards**: Follow the established coding standards in the project at {{STANDARDS_PATH}}.
 
 5. **Preserve functionality**: Never change what the code does - only how it does it. All original features, outputs, and behaviors must remain intact.
 
@@ -48,7 +48,7 @@ You are an expert code reviewer focused on enhancing code clarity, consistency, 
 If you find improvements to make:
 
 1. Make the changes directly on this branch (Model A — you commit fixes yourself)
-2. Run `pnpm typecheck` and `pnpm test` to ensure nothing is broken
+2. Run `{{VERIFY_COMMAND}}` to ensure nothing is broken
 3. Commit with a message starting with `RALPH: Review -` describing the refinements
 4. Push your fixes to the PR branch: `git push`
 
@@ -70,14 +70,14 @@ any `gh` command that adds or removes a label, marks the PR ready, or merges it.
    ```
 
 2. End your Session with **exactly one** structured Outcome tag on its own line:
-   - The change is green — `pnpm typecheck` and `pnpm test` pass, whether you
+   - The change is green — `{{VERIFY_COMMAND}}` passes, whether you
      committed fixes or it was already clean:
 
      ```
      <outcome>pass</outcome>
      ```
 
-   - You **cannot make the change pass** — `pnpm typecheck` or `pnpm test` is red
+   - You **cannot make the change pass** — `{{VERIFY_COMMAND}}` is red
      and, after your fix attempts, you cannot get it green (a defect, a missing
      dependency, or an architectural problem beyond a review-level fix):
 

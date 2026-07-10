@@ -50,7 +50,12 @@ import { realpathSync } from "node:fs";
 import { promisify } from "node:util";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
-import { BASE_BRANCH, implementerSandboxSpec } from "./dispatch.mts";
+import { implementerSandboxSpec } from "./dispatch.mts";
+import { forkBase, loadRepoProfile } from "./repo-profile.mts";
+
+// The debug shell forks from the same Repo-profile base as a real Implementer
+// (ADR-0014, #108) — no hardcoded origin/main.
+const repoProfile = loadRepoProfile();
 
 const execFileAsync = promisify(execFile);
 
@@ -155,7 +160,9 @@ function runInteractiveShell(container: string): Promise<number> {
 // ── Open the sandbox and drop into the shell ─────────────────────────────────
 // --build → the full Implementer spec (fork origin/main, carry node_modules,
 // install+build). Default → a fast bare checkout on origin/main with no hooks.
-const spec = wantBuild ? implementerSandboxSpec(branch) : { branch, baseBranch: BASE_BRANCH };
+const spec = wantBuild
+  ? implementerSandboxSpec(branch, repoProfile)
+  : { branch, baseBranch: forkBase(repoProfile) };
 
 deleteDefaultBranch();
 

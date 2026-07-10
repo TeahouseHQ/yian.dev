@@ -3,7 +3,7 @@
 A Landing failed for the reviewed PR on branch {{BRANCH}} (issue #{{ISSUE_NUMBER}}: {{ISSUE_TITLE}}).
 
 The PR was green when it was reviewed, so the failure is an **integration
-conflict with `origin/main`** — either a textual `git merge` conflict, or a
+conflict with `origin/{{BASE_BRANCH}}`** — either a textual `git merge` conflict, or a
 clean merge whose suite is now red because something that landed on `main`
 since the review interacts badly with this branch.
 
@@ -22,13 +22,13 @@ You are already checked out on {{BRANCH}} with the repo installed and built.
 
 # RESOLUTION PROCESS
 
-1. **Merge `origin/main` INTO this branch** (never the other direction — you fix
+1. **Merge `origin/{{BASE_BRANCH}}` INTO this branch** (never the other direction — you fix
    the PR branch, you do not touch `main`). Fetch first so you integrate the
    latest `main`:
 
    ```
    git fetch origin
-   git merge origin/main --no-edit
+   git merge origin/{{BASE_BRANCH}} --no-edit
    ```
 
 2. **Resolve any conflicts and integration breakage.** Prefer the intent of both
@@ -39,10 +39,10 @@ You are already checked out on {{BRANCH}} with the repo installed and built.
 3. **Get the suite green:**
 
    ```
-   pnpm typecheck && pnpm test
+   {{VERIFY_COMMAND}}
    ```
 
-   Iterate — edit, re-run — until both pass. Keep every original feature,
+   Iterate — edit, re-run — until it passes. Keep every original feature,
    output, and behaviour of the issue's change intact; you are integrating it
    with `main`, not rewriting it.
 
@@ -65,7 +65,7 @@ label, marks the PR ready or draft, or merges it.
 
 End your Session with **exactly one** structured Outcome tag on its own line:
 
-- The branch is resolved and pushed — `pnpm typecheck` and `pnpm test` both pass
+- The branch is resolved and pushed — `{{VERIFY_COMMAND}}` passes
   on the merged branch:
 
   ```
@@ -75,8 +75,8 @@ End your Session with **exactly one** structured Outcome tag on its own line:
   The orchestrator will strip the review gate and revert the PR to draft so it
   is re-reviewed before it can land again.
 
-- You **cannot resolve the conflict** — after your attempts `pnpm typecheck` or
-  `pnpm test` is still red, or the integration needs a decision beyond a
+- You **cannot resolve the conflict** — after your attempts `{{VERIFY_COMMAND}}`
+  is still red, or the integration needs a decision beyond a
   merge-level fix:
 
   ```

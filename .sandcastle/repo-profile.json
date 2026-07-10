@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "installBuild": "pnpm install --frozen-lockfile && pnpm build",
+  "verify": {
+    "typecheck": "pnpm typecheck",
+    "test": "pnpm test"
+  },
+  "baseBranch": "main",
+  "branchPrefix": "teahouse/",
+  "poolSize": 4,
+  "codingStandardsPath": "@.sandcastle/CODING_STANDARDS.md",
+  "models": {
+    "profiles": {
+      "glm": {
+        "planner": "litellm/glm-5.2",
+        "implementer": "litellm/glm-5.2",
+        "reviewer": "litellm/glm-5.2",
+        "resolver": "litellm/glm-5.2"
+      },
+      "mixed": {
+        "planner": "claude-opus-4-8",
+        "implementer": "litellm/glm-5.2",
+        "reviewer": "claude-opus-4-8",
+        "resolver": "claude-opus-4-8"
+      }
+    },
+    "default": "mixed"
+  }
+}

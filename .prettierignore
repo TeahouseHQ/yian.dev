@@ -2,13 +2,16 @@
 .next/
 build/
 dist/
+out/
+
+# Test / tooling output
+coverage/
+.playwright-cli/
 
 # Dependencies
 node_modules/
 .pnpm-store/
-
-# Cache directories
-.mypy_cache/
+pnpm-lock.yaml
 
 # Config files
 .eslintrc.js

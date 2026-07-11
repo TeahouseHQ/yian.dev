@@ -15,7 +15,6 @@ module.exports = {
     ".eslintrc.js",
     "tailwind.config.js",
     "next.config.js",
-    ".mypy_cache/",
   ],
   parserOptions: {
     ecmaVersion: "latest",

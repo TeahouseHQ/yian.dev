@@ -18,7 +18,7 @@ const HomeLayout = ({
         <h1 className="sr-only">Yi-An Lai - Pedal Powered Dev</h1>
         <div className="flex-col md:flex-row flex items-center md:justify-between md:h-screen">
           <div className="flex flex-col items-center xl:w-3/12 md:w-5/12 gap-2 pt-16 md:py-0">
-            <Link href={"/play"}>
+            <Link href={"/play"} aria-label="Play — Pedal Powered games">
               <Logo />
             </Link>
             <div className="text-2xl w-[280px] text-left">

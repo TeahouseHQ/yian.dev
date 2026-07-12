@@ -3,8 +3,7 @@ import path from "path";
 import { pathToFileURL } from "url";
 
 import { getAllPosts } from "#/lib/api";
-import { buildLlmsTxt, buildPostMarkdown } from "#/lib/llmsTxt";
-import type Post from "types/post";
+import { buildLlmsTxt, buildPostMarkdown, type LlmsTxtPost } from "#/lib/llmsTxt";
 
 // Exactly the fields the pure generators consume. Requesting more would be
 // dead weight; requesting fewer would break `buildPostMarkdown`/`buildLlmsTxt`.
@@ -47,10 +46,7 @@ export function generateLlmsFiles(options: GenerateLlmsOptions = {}): string[] {
     written.push(relPath);
   };
 
-  const posts = getAllPosts([...POST_FIELDS]) as Pick<
-    Post,
-    "slug" | "title" | "date" | "excerpt" | "tags" | "content"
-  >[];
+  const posts = getAllPosts([...POST_FIELDS]) as LlmsTxtPost[];
 
   writeFile("llms.txt", buildLlmsTxt(posts));
   for (const post of posts) {
@@ -60,7 +56,7 @@ export function generateLlmsFiles(options: GenerateLlmsOptions = {}): string[] {
   return written;
 }
 
-async function main(): Promise<void> {
+function main(): void {
   const written = generateLlmsFiles();
   for (const file of written) {
     console.log(`llms: wrote ${file}`);
@@ -71,5 +67,5 @@ async function main(): Promise<void> {
 // imported (e.g. by tests). `pathToFileURL` keeps the comparison correct across
 // POSIX/Windows and whatever URL form tsx assigns to `import.meta.url`.
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main();
+  main();
 }

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "next dev -p ${PORT:-3030}",
     "build": "next build",
-    "postbuild": "next-sitemap",
+    "postbuild": "next-sitemap && tsx scripts/generate-llms.ts",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc",

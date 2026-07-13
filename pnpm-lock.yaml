@@ -59,7 +59,7 @@ importers:
     optionalDependencies:
       teahouse:
         specifier: git+https://github.com/TeahouseHQ/teahouse.git
-        version: git+https://github.com/TeahouseHQ/teahouse.git#0d68fa41f77b7079409d9b90112e7c7cd4a43aad(@types/react@19.2.17)
+        version: git+https://github.com/TeahouseHQ/teahouse.git#8b14ce7e253cac7fc0c5da1454c3f2a6d0bb36d5(@types/react@19.2.17)
     devDependencies:
       '@ai-hero/sandcastle':
         specifier: ^0.12.0
@@ -2164,8 +2164,8 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@3.3.15:
-    resolution: {integrity: sha512-y7Wygv/7mEOvxTuEQDB8StXdMRBWf1kR/tlhAzBRUFkB2jfcLOAxO/SHmOO2zgz1pVgK29/kyupn059/bCHdjA==}
+  nanoid@3.3.16:
+    resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -2386,8 +2386,8 @@ packages:
     resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
 
-  postcss@8.5.16:
-    resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
+  postcss@8.5.18:
+    resolution: {integrity: sha512-xdB1oSLHbz1vRWgCDalrCqEFTWzFlhqFC5tIHLMOSUIjhm3XXQ1qrFy8S/ESr1JYRRXqM3c1QFiMZUJdUTqyMQ==}
     engines: {node: ^10 || ^12 || >=14}
 
   prelude-ls@1.2.1:
@@ -2740,8 +2740,8 @@ packages:
     resolution: {integrity: sha512-GNzQvQTOIP6RyTfE2Qxb8ZVlNmw0n88vp1szwWRimP02mnTsx3Wtn5qRdqY9w2XduFNUgvOwhNnQsjwCp+kqaQ==}
     engines: {node: '>=6'}
 
-  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#0d68fa41f77b7079409d9b90112e7c7cd4a43aad:
-    resolution: {commit: 0d68fa41f77b7079409d9b90112e7c7cd4a43aad, repo: https://github.com/TeahouseHQ/teahouse.git, type: git}
+  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#8b14ce7e253cac7fc0c5da1454c3f2a6d0bb36d5:
+    resolution: {commit: 8b14ce7e253cac7fc0c5da1454c3f2a6d0bb36d5, repo: https://github.com/TeahouseHQ/teahouse.git, type: git}
     version: 0.1.0
     engines: {node: '>=22'}
     hasBin: true
@@ -5319,7 +5319,7 @@ snapshots:
 
   nanoid@3.3.12: {}
 
-  nanoid@3.3.15: {}
+  nanoid@3.3.16: {}
 
   natural-compare@1.4.0: {}
 
@@ -5533,9 +5533,9 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postcss@8.5.16:
+  postcss@8.5.18:
     dependencies:
-      nanoid: 3.3.15
+      nanoid: 3.3.16
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -6026,7 +6026,7 @@ snapshots:
 
   tapable@2.2.1: {}
 
-  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#0d68fa41f77b7079409d9b90112e7c7cd4a43aad(@types/react@19.2.17):
+  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#8b14ce7e253cac7fc0c5da1454c3f2a6d0bb36d5(@types/react@19.2.17):
     dependencies:
       '@ai-hero/sandcastle': 0.12.0
       ink: 6.8.0(@types/react@19.2.17)(react@19.2.7)
@@ -6222,7 +6222,7 @@ snapshots:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
-      postcss: 8.5.16
+      postcss: 8.5.18
       rolldown: 1.0.3
       tinyglobby: 0.2.17
     optionalDependencies:

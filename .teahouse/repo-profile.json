@@ -24,6 +24,6 @@
         "resolver": "claude-opus-4-8"
       }
     },
-    "default": "mixed"
+    "default": "glm"
   }
 }

@@ -40,7 +40,7 @@
     "unified": "^11.0.4"
   },
   "optionalDependencies": {
-    "teahouse": "git+https://github.com/TeahouseHQ/teahouse.git"
+    "teahouse": "github:TeahouseHQ/teahouse"
   },
   "pnpm": {
     "overrides": {

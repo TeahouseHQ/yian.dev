@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "installBuild": "pnpm install --frozen-lockfile && pnpm build",
+  "schemaVersion": 2,
+  "installBuild": "pnpm install --frozen-lockfile",
   "verify": {
     "typecheck": "pnpm typecheck",
     "test": "pnpm test"
@@ -12,18 +12,42 @@
   "models": {
     "profiles": {
       "glm": {
-        "planner": "litellm/glm-5.2",
-        "implementer": "litellm/glm-5.2",
-        "reviewer": "litellm/glm-5.2",
-        "resolver": "litellm/glm-5.2"
+        "planner": {
+          "model": "litellm/glm-5.2",
+          "effort": "high"
+        },
+        "implementer": {
+          "model": "litellm/glm-5.2",
+          "effort": "medium"
+        },
+        "reviewer": {
+          "model": "litellm/glm-5.2",
+          "effort": "high"
+        },
+        "resolver": {
+          "model": "litellm/glm-5.2",
+          "effort": "high"
+        }
       },
       "mixed": {
-        "planner": "claude-opus-4-8",
-        "implementer": "litellm/glm-5.2",
-        "reviewer": "claude-opus-4-8",
-        "resolver": "claude-opus-4-8"
+        "planner": {
+          "model": "claude-opus-4-8",
+          "effort": "high"
+        },
+        "implementer": {
+          "model": "litellm/glm-5.2",
+          "effort": "medium"
+        },
+        "reviewer": {
+          "model": "claude-opus-4-8",
+          "effort": "high"
+        },
+        "resolver": {
+          "model": "claude-opus-4-8",
+          "effort": "high"
+        }
       }
     },
-    "default": "glm"
+    "default": "mixed"
   }
 }

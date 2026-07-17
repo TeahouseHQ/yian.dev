@@ -58,8 +58,8 @@ importers:
         version: 11.0.4
     optionalDependencies:
       teahouse:
-        specifier: git+https://github.com/TeahouseHQ/teahouse.git
-        version: git+https://github.com/TeahouseHQ/teahouse.git#9fb8de8c05972fb7943226f4a2b8425e3f7a11a2(@types/react@19.2.17)
+        specifier: github:TeahouseHQ/teahouse
+        version: git+https://git@github.com:TeahouseHQ/teahouse.git#6b4e94661dc3b01e671ceb7cd807cc74e8ab1b31(@types/react@19.2.17)
     devDependencies:
       '@ai-hero/sandcastle':
         specifier: ^0.12.0
@@ -2740,8 +2740,8 @@ packages:
     resolution: {integrity: sha512-GNzQvQTOIP6RyTfE2Qxb8ZVlNmw0n88vp1szwWRimP02mnTsx3Wtn5qRdqY9w2XduFNUgvOwhNnQsjwCp+kqaQ==}
     engines: {node: '>=6'}
 
-  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#9fb8de8c05972fb7943226f4a2b8425e3f7a11a2:
-    resolution: {commit: 9fb8de8c05972fb7943226f4a2b8425e3f7a11a2, repo: https://github.com/TeahouseHQ/teahouse.git, type: git}
+  teahouse@git+https://git@github.com:TeahouseHQ/teahouse.git#6b4e94661dc3b01e671ceb7cd807cc74e8ab1b31:
+    resolution: {commit: 6b4e94661dc3b01e671ceb7cd807cc74e8ab1b31, repo: git@github.com:TeahouseHQ/teahouse.git, type: git}
     version: 0.1.0
     engines: {node: '>=22'}
     hasBin: true
@@ -6026,7 +6026,7 @@ snapshots:
 
   tapable@2.2.1: {}
 
-  teahouse@git+https://github.com/TeahouseHQ/teahouse.git#9fb8de8c05972fb7943226f4a2b8425e3f7a11a2(@types/react@19.2.17):
+  teahouse@git+https://git@github.com:TeahouseHQ/teahouse.git#6b4e94661dc3b01e671ceb7cd807cc74e8ab1b31(@types/react@19.2.17):
     dependencies:
       '@ai-hero/sandcastle': 0.12.0
       ink: 6.8.0(@types/react@19.2.17)(react@19.2.7)

@@ -14,15 +14,15 @@
       "glm": {
         "planner": {
           "model": "litellm/glm-5.2",
-          "effort": "high"
+          "effort": "xhigh"
         },
         "implementer": {
           "model": "litellm/glm-5.2",
-          "effort": "medium"
+          "effort": "high"
         },
         "reviewer": {
           "model": "litellm/glm-5.2",
-          "effort": "high"
+          "effort": "xhigh"
         },
         "resolver": {
           "model": "litellm/glm-5.2",
@@ -36,7 +36,7 @@
         },
         "implementer": {
           "model": "litellm/glm-5.2",
-          "effort": "medium"
+          "effort": "high"
         },
         "reviewer": {
           "model": "claude-opus-4-8",
@@ -48,6 +48,6 @@
         }
       }
     },
-    "default": "mixed"
+    "default": "glm"
   }
 }

@@ -14,12 +14,6 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build-base": "docker build -t sandcastle-base:latest --build-arg AGENT_UID=$(id -u) --build-arg AGENT_GID=$(id -g) -f node_modules/teahouse/engine/base.Dockerfile node_modules/teahouse/engine",
-    "build-image": "pnpm build-base && sandcastle docker build-image",
-    "orchestrate": "pnpm build-image && teahouse orchestrate",
-    "cockpit": "teahouse cockpit",
-    "browse": "teahouse browse",
-    "prune-runs": "teahouse prune",
     "prepare": "node scripts/link-git-hooks.js"
   },
   "dependencies": {

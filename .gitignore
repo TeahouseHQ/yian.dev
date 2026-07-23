@@ -55,5 +55,6 @@ public/posts/*.md
 # library creates sandbox checkouts under .sandcastle/worktrees/ at dispatch time.
 .teahouse/logs/
 .teahouse/sessions/
+.teahouse/run/
 .teahouse/.env
 .sandcastle/worktrees/

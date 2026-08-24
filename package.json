@@ -33,9 +33,6 @@
     "remark-rehype": "^11.1.0",
     "unified": "^11.0.4"
   },
-  "optionalDependencies": {
-    "teahouse": "github:TeahouseHQ/teahouse"
-  },
   "pnpm": {
     "overrides": {
       "@types/unist": "^3.0.2"

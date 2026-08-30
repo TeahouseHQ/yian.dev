@@ -58,3 +58,4 @@ public/posts/*.md
 .teahouse/run/
 .teahouse/.env
 .sandcastle/worktrees/
+.env*.local

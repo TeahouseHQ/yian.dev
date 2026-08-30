@@ -26,11 +26,17 @@
  * inlines the values into the client bundle.
  */
 
+import type { ReaderTheme } from "./theme";
+
 /** Giscus app origin: client script source and postMessage target. */
 export const GISCUS_ORIGIN = "https://giscus.app";
 
-/** Theme names accepted by Giscus that match our reader themes (ADR-0005). */
-export type GiscusTheme = "light" | "dark";
+/**
+ * Theme names accepted by Giscus that match our reader themes (ADR-0005):
+ * the vocabularies are deliberately identical, so this aliases the reader
+ * theme union rather than redefining it.
+ */
+export type GiscusTheme = ReaderTheme;
 
 export type GiscusConfig = {
   /** `owner/name` of the repository hosting the Discussions. */
@@ -100,4 +106,17 @@ export function buildGiscusScriptAttributes(
     "data-loading": "lazy",
     crossorigin: "anonymous",
   };
+}
+
+/**
+ * The message payload asking Giscus to switch theme live (ADR-0005). Per
+ * Giscus's postMessage protocol the request must be wrapped in an outer
+ * `giscus` key — messages without it are silently ignored by the client —
+ * and is delivered via `iframe.contentWindow.postMessage(message,
+ * GISCUS_ORIGIN)`.
+ */
+export function giscusSetConfigMessage(theme: GiscusTheme): {
+  giscus: { setConfig: { theme: GiscusTheme } };
+} {
+  return { giscus: { setConfig: { theme } } };
 }

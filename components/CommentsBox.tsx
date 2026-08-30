@@ -1,8 +1,13 @@
 "use client";
 import { useEffect, useRef } from "react";
 
-import { LIGHT_THEME_CLASS, type ReaderTheme } from "#/lib/theme";
-import { GISCUS_ORIGIN, buildGiscusScriptAttributes, resolveGiscusConfig } from "#/lib/giscus";
+import { LIGHT_THEME_CLASS, themeForClass, type ReaderTheme } from "#/lib/theme";
+import {
+  GISCUS_ORIGIN,
+  buildGiscusScriptAttributes,
+  giscusSetConfigMessage,
+  resolveGiscusConfig,
+} from "#/lib/giscus";
 
 type Props = {
   /**
@@ -14,18 +19,14 @@ type Props = {
   enabled?: boolean;
 };
 
-/** Reader theme → Giscus theme name (identical vocabularies). */
-function giscusTheme(readerTheme: ReaderTheme): string {
-  return readerTheme;
-}
-
 /**
  * Ask the Giscus iframe to switch theme live (ADR-0005). Unlike Disqus,
- * Giscus listens for `setConfig` messages from the embedding page, so the
- * comment widget follows the Theme toggle without reloading the thread.
+ * Giscus listens for `setConfig` messages (wrapped in the `giscus` envelope
+ * its client requires) from the embedding page, so the comment widget
+ * follows the Theme toggle without reloading the thread.
  */
 function pushTheme(iframe: HTMLIFrameElement | null, theme: ReaderTheme): void {
-  iframe?.contentWindow?.postMessage({ setConfig: { theme: giscusTheme(theme) } }, GISCUS_ORIGIN);
+  iframe?.contentWindow?.postMessage(giscusSetConfigMessage(theme), GISCUS_ORIGIN);
 }
 
 /**
@@ -67,9 +68,9 @@ const CommentsBox = (props: Props): React.JSX.Element | null => {
       return;
     }
 
-    const currentTheme: ReaderTheme = document.documentElement.classList.contains(LIGHT_THEME_CLASS)
-      ? "light"
-      : "dark";
+    const currentTheme = themeForClass(
+      document.documentElement.classList.contains(LIGHT_THEME_CLASS)
+    );
 
     const script = document.createElement("script");
     for (const [name, value] of Object.entries(
@@ -82,10 +83,15 @@ const CommentsBox = (props: Props): React.JSX.Element | null => {
 
     // Forward reader-theme toggles to the widget for the lifetime of the
     // page; the iframe may not exist yet on early toggles (lazy load), in
-    // which case the update is a no-op.
+    // which case the update is a no-op. Unrelated class changes are ignored
+    // by only posting when the theme actually flipped.
+    let lastTheme = currentTheme;
     const observer = new MutationObserver(() => {
-      const flippedToLight = document.documentElement.classList.contains(LIGHT_THEME_CLASS);
-      pushTheme(host.querySelector("iframe"), flippedToLight ? "light" : "dark");
+      const next = themeForClass(document.documentElement.classList.contains(LIGHT_THEME_CLASS));
+      if (next !== lastTheme) {
+        lastTheme = next;
+        pushTheme(host.querySelector("iframe"), next);
+      }
     });
     observer.observe(document.documentElement, {
       attributes: true,

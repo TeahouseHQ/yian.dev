@@ -51,6 +51,16 @@ export function nextTheme(current: ReaderTheme): ReaderTheme {
 }
 
 /**
+ * Map the presence of {@link LIGHT_THEME_CLASS} on `<html>` to the reader
+ * theme. The class is the theme state broadcast to the whole page (no-flash
+ * script, Theme toggle, and any observer such as the comments widget), so
+ * this is the one conversion every consumer shares.
+ */
+export function themeForClass(hasLightClass: boolean): ReaderTheme {
+  return hasLightClass ? "light" : "dark";
+}
+
+/**
  * Inline, render-blocking script that runs in `<head>` before first paint to
  * avoid a flash of the dark theme for returning light-mode readers (issue
  * #60; the {@link ThemeToggle} client wrapper applies the preference on

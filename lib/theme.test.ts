@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   readPreference,
   nextTheme,
+  themeForClass,
   themeInitScript,
   READER_PATH_PREFIX,
   THEME_STORAGE_KEY,
@@ -10,6 +11,16 @@ import {
 } from "./theme";
 
 describe("reader theme preference", () => {
+  describe("themeForClass", () => {
+    it('maps the light class being present to "light"', () => {
+      expect(themeForClass(true)).toBe("light");
+    });
+
+    it('maps the light class being absent to "dark"', () => {
+      expect(themeForClass(false)).toBe("dark");
+    });
+  });
+
   describe("readPreference", () => {
     it('returns "light" only for the literal stored value "light"', () => {
       expect(readPreference("light")).toBe("light");

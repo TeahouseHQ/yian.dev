@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GISCUS_ORIGIN, buildGiscusScriptAttributes, resolveGiscusConfig } from "./giscus";
+import {
+  GISCUS_ORIGIN,
+  buildGiscusScriptAttributes,
+  giscusSetConfigMessage,
+  resolveGiscusConfig,
+} from "./giscus";
 
 const CONFIG = {
   repo: "TeahouseHQ/yian.dev",
@@ -8,6 +13,19 @@ const CONFIG = {
   category: "Comments",
   categoryId: "DIC_kwDOxyz",
 };
+
+describe("giscusSetConfigMessage", () => {
+  it("wraps setConfig in the giscus envelope its client listens for", () => {
+    // Giscus's postMessage protocol ignores messages without the outer
+    // `giscus` key; this pins the documented shape.
+    expect(giscusSetConfigMessage("light")).toEqual({
+      giscus: { setConfig: { theme: "light" } },
+    });
+    expect(giscusSetConfigMessage("dark")).toEqual({
+      giscus: { setConfig: { theme: "dark" } },
+    });
+  });
+});
 
 describe("resolveGiscusConfig", () => {
   afterEach(() => {

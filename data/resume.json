@@ -1,12 +1,12 @@
 {
   "meta": {
-    "version": "2026-03-10",
-    "lastUpdated": "2026-03-10T00:00:00Z"
+    "version": "2026-08-30",
+    "lastUpdated": "2026-08-30T00:00:00Z"
   },
   "contact": {
     "name": "Yi-An Lai",
     "phone": "(310) 694-1147",
-    "email": "hello@yian.dev",
+    "email": "yian.lai.dev@gmail.com",
     "linkedin": "/in/yi-an-lai-andrew",
     "location": "San Francisco Bay Area, CA"
   },
@@ -31,11 +31,11 @@
   "experience": [
     {
       "company": "Gem",
-      "title": "Software Engineer - Tech Lead Manager",
+      "title": "Tech Lead / TLM",
       "startDate": "2023-08",
       "endDate": null,
       "highlights": [
-        "Automated on-call triage: Engineered a self-hosted system that orchestrates AI coding agents to triage bug reports using static code and production data. Reduced manual triage time by 20 hours per on-call engineer per week.",
+        "Automated on-call triage: Engineered a self-hosted system that orchestrates AI coding agents to triage bug reports using code and production data. Reduced manual triage time by 20 hours per on-call engineer per week.",
         "Reduced API timeouts 80%: Led quarter-long performance initiatives including query tuning, index optimization, and read-replica utilization. Refactored data ingestion pipelines to meet SLAs for high-volume enterprise customers.",
         "Delivered enterprise features: Shipped SAML SSO, RBAC, SCIM, audit logging, and OAuth-based API integrations for $150K+ ARR customers. Partnered with the PM to prioritize roadmaps.",
         "Standardized observability: Implemented OpenTelemetry (OTel) across frontend and backend services, reducing vendor lock-in and unifying monitoring practices org-wide."
@@ -48,7 +48,7 @@
       "endDate": "2023-08",
       "highlights": [
         "Completed MV3 migration: Directed a team to complete a time-sensitive migration of Gem's Chrome extension (20,000 active users) to MV3 with minimal customer disruption. Migrated the codebase to TypeScript and modernized the observability stack to enhance developer experience.",
-        "Shipped Talent Marketing suite: Built forms, landing pages, and event management from scratch — enabling recruiters to run campaigns without marketing team dependencies. Drove $300K in new ARR."
+        "Shipped Talent Marketing suite: Built forms, landing pages, and event management from scratch - enabling recruiters to run campaigns without marketing team dependencies. Drove $300K in new ARR."
       ]
     },
     {

@@ -12,7 +12,6 @@ import PostBody from "../../../components/PostBody";
 import PostHeader from "../../../components/PostHeader";
 import ThemeToggle from "../../../components/ThemeToggle";
 import { getAllPosts, getPostBySlug } from "../../../lib/api";
-import { BaseUrl, Suffix } from "../../../lib/constants";
 import markdownToReact from "../../../lib/markdownToReact";
 
 export const dynamicParams = false;
@@ -78,11 +77,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
           />
           <PostBody content={renderedContent} />
         </article>
-        <CommentsBox
-          pageUrl={`${BaseUrl}/posts/${post.slug}`}
-          pageId={post.id}
-          enabled={post.commentsEnabled}
-        />
+        <CommentsBox term={post.id} enabled={post.commentsEnabled} />
         <PageFooter showMenu />
       </Container>
     </Layout>

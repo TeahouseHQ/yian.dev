@@ -16,7 +16,8 @@ Personal portfolio/blog site for yian.dev, built with Next.js 15 (App Router), T
 
 ### Content
 
-- **Blog posts** live in `/_posts/` as Markdown with YAML front matter (parsed by `gray-matter`). Fields include `isDraft` (hidden in production) and `commentsEnabled` (Disqus).
+- **Blog posts** live in `/_posts/` as Markdown with YAML front matter (parsed by `gray-matter`). Fields include `isDraft` (hidden in production) and `commentsEnabled` (Giscus, backed by GitHub Discussions).
+- **Comments config:** Giscus reads `NEXT_PUBLIC_GISCUS_REPO_ID` / `NEXT_PUBLIC_GISCUS_CATEGORY_ID` (opaque ids from giscus.app after Discussions are enabled). Until both are set, no comment section renders. Repo/category names default to `TeahouseHQ/yian.dev` / `Comments` (`NEXT_PUBLIC_GISCUS_REPO` / `NEXT_PUBLIC_GISCUS_CATEGORY` override).
 - **Markdown pipeline:** `remark-parse` → `remark-rehype` → `rehype-highlight` → `rehype-stringify` (in `lib/markdownToHtml.ts`)
 - **Game catalog** is hardcoded in `lib/gameCatalog.ts` with metadata for Unity WebGL and Godot HTML5 builds.
 

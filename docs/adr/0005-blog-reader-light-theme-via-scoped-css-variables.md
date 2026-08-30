@@ -20,4 +20,4 @@ First-time visitors always get dark, and OS `prefers-color-scheme` is deliberate
 ## Deliberate non-goals
 
 - **Code blocks stay dark in both modes.** Syntax highlighting is `atom-one-dark` loaded from a CDN with hardcoded colours that won't follow our variables. Rather than self-host/scope a second light theme, dark code blocks are kept in light mode (common on light blogs).
-- **Disqus comments are not live-refreshed on toggle.** Disqus auto-detects light/dark by sampling the page background at load, so the no-flash script makes it correct on arrival. A mid-page toggle leaves the already-loaded iframe in its original theme until the next navigation/reload — calling `DISQUS.reset` to force a match would visibly reload the whole thread, which isn't worth it.
+- **Comments follow the toggle live.** Comments are Giscus (issue #43); unlike the Disqus they replaced, Giscus accepts a `setConfig` message, so the widget's initial `data-theme` is read from the `<html>` class at inject time and a MutationObserver forwards every toggle into the iframe — light readers get a light comment section without reloading the thread.

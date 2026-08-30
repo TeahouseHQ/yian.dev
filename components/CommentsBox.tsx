@@ -1,55 +1,112 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+
+import { LIGHT_THEME_CLASS, type ReaderTheme } from "#/lib/theme";
+import { GISCUS_ORIGIN, buildGiscusScriptAttributes, resolveGiscusConfig } from "#/lib/giscus";
 
 type Props = {
-  pageUrl: string;
-  pageId: string;
+  /**
+   * The discussion term this post's comments map to. Always the post's
+   * stable front-matter `id` (a UUID), never the slug, so renaming a post
+   * or editing its title never orphans the thread.
+   */
+  term: string;
   enabled?: boolean;
 };
 
-// Disqus invokes its config callback with `this` bound to an object exposing
-// the `page` identifier/url it will use for the thread.
-type DisqusConfigThis = { page: { identifier: string; url: string } };
+/** Reader theme → Giscus theme name (identical vocabularies). */
+function giscusTheme(readerTheme: ReaderTheme): string {
+  return readerTheme;
+}
 
-const CommentsBox = (props: Props): React.JSX.Element => {
-  const { pageUrl, pageId, enabled } = props;
+/**
+ * Ask the Giscus iframe to switch theme live (ADR-0005). Unlike Disqus,
+ * Giscus listens for `setConfig` messages from the embedding page, so the
+ * comment widget follows the Theme toggle without reloading the thread.
+ */
+function pushTheme(iframe: HTMLIFrameElement | null, theme: ReaderTheme): void {
+  iframe?.contentWindow?.postMessage({ setConfig: { theme: giscusTheme(theme) } }, GISCUS_ORIGIN);
+}
+
+/**
+ * Post comments, backed by GitHub Discussions via Giscus (issue #43).
+ * Rendered on Blog readers below the article when the post's front matter
+ * sets `commentsEnabled`.
+ *
+ * Giscus is configured through `NEXT_PUBLIC_GISCUS_*` variables (see
+ * {@link resolveGiscusConfig}); while the opaque repo/category ids are
+ * unset — Discussions not yet enabled — nothing renders at all, server or
+ * client, instead of a broken embed.
+ *
+ * The server render stops at the empty host container; the client effect
+ * injects the `giscus.app/client.js` script with the attribute map from
+ * {@link buildGiscusScriptAttributes}. The initial `data-theme` comes from
+ * the reader theme already applied to `<html>` (no-flash script /
+ * {@link ThemeToggle}); a MutationObserver on the `<html>` class then
+ * forwards every toggle to the iframe so light/dark switching applies to
+ * comments live.
+ */
+const CommentsBox = (props: Props): React.JSX.Element | null => {
+  const { term, enabled } = props;
+  const hostRef = useRef<HTMLDivElement | null>(null);
+
+  // Resolved at render: NEXT_PUBLIC_ vars are inlined at build time, so the
+  // server render (SSG) and the client bundle always agree.
+  const config = enabled
+    ? resolveGiscusConfig({
+        repo: process.env.NEXT_PUBLIC_GISCUS_REPO,
+        repoId: process.env.NEXT_PUBLIC_GISCUS_REPO_ID,
+        category: process.env.NEXT_PUBLIC_GISCUS_CATEGORY,
+        categoryId: process.env.NEXT_PUBLIC_GISCUS_CATEGORY_ID,
+      })
+    : null;
 
   useEffect(() => {
-    if (!enabled) {
+    const host = hostRef.current;
+    if (!config || !host) {
       return;
     }
 
-    if (window.DISQUS) {
-      window.DISQUS.reset({
-        reload: true,
-        config: function (this: DisqusConfigThis) {
-          this.page.identifier = pageId;
-          this.page.url = pageUrl;
-        },
-      });
-    } else {
-      window.disqus_config = function (this: DisqusConfigThis) {
-        this.page.url = pageUrl;
-        this.page.identifier = pageId;
-      };
-      (function () {
-        var d = document,
-          s = d.createElement("script");
-        s.src = "https://pedalpowereddev.disqus.com/embed.js";
-        s.setAttribute("data-timestamp", new Date().toString());
-        (d.head || d.body).appendChild(s);
-      })();
+    const currentTheme: ReaderTheme = document.documentElement.classList.contains(LIGHT_THEME_CLASS)
+      ? "light"
+      : "dark";
+
+    const script = document.createElement("script");
+    for (const [name, value] of Object.entries(
+      buildGiscusScriptAttributes(config, term, currentTheme)
+    )) {
+      script.setAttribute(name, value);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    script.async = true;
+    host.appendChild(script);
+
+    // Forward reader-theme toggles to the widget for the lifetime of the
+    // page; the iframe may not exist yet on early toggles (lazy load), in
+    // which case the update is a no-op.
+    const observer = new MutationObserver(() => {
+      const flippedToLight = document.documentElement.classList.contains(LIGHT_THEME_CLASS);
+      pushTheme(host.querySelector("iframe"), flippedToLight ? "light" : "dark");
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => {
+      observer.disconnect();
+      // Drop the injected script/iframe so re-running the effect (React 18
+      // strict mode) never duplicates the widget.
+      host.replaceChildren();
+    };
+  }, [config, term]);
+
+  if (!config) {
+    return null;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto mb-32">
-      <div id="disqus_thread" />
-      <noscript>
-        Please enable JavaScript to view the{" "}
-        <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
-      </noscript>
+    <div className="mx-auto mb-32 max-w-4xl">
+      <div ref={hostRef} data-giscus-host="" />
     </div>
   );
 };

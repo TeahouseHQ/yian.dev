@@ -59,3 +59,4 @@ public/posts/*.md
 .teahouse/.env
 .sandcastle/worktrees/
 .env*.local
+tsconfig.tsbuildinfo

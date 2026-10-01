@@ -6,7 +6,7 @@
  * Semantic theme colours, declared as RGB channel triplets so the
  * `rgb(var(--color-*) / <alpha-value>)` wrappers in tailwind.config.js keep
  * working for both plain and opacity-modified utilities. These are the dark
- * "Tomorrow" palette values the site already used; a light theme (ADR-0005)
+ * "Tomorrow" palette values the site already used; a light theme
  * will override this same block. Channels are the exact RGB of the previous
  * hexes, so rendering is unchanged.
  */
@@ -26,7 +26,7 @@
 }
 
 /*
- * Blog reader light theme (ADR-0005, issue #59). Activated by toggling the
+ * Blog reader light theme (issue #59). Activated by toggling the
  * `theme-light` class on <html> from the ThemeToggle client component on post
  * pages. Defined AFTER :root so its equal specificity (class == :root pseudo)
  * wins by source order, overriding every semantic colour at once.

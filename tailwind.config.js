@@ -12,7 +12,7 @@ module.exports = {
       gray: colors.gray,
       // Semantic colours resolve from CSS custom properties declared in
       // `styles/index.css` `:root`, so the palette can be swapped at runtime
-      // (groundwork for the blog reader light theme, ADR-0005). Each value is
+      // (groundwork for the blog reader light theme). Each value is
       // the variable's RGB channels wrapped in `rgb(... / <alpha-value>)`:
       // the `<alpha-value>` placeholder is what lets Tailwind still emit the
       // opacity-modified utilities the site relies on (e.g. `bg-foreground/10`,

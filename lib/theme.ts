@@ -1,5 +1,5 @@
 /**
- * Blog reader theme preference (ADR-0005). A single global light/dark choice
+ * Blog reader theme preference. A single global light/dark choice
  * persisted in `localStorage`, applied to every Blog reader and dark by
  * default. The {@link ThemeToggle} client component reads the preference on
  * mount and adds {@link LIGHT_THEME_CLASS} to `<html>` when it is "light";

@@ -6,7 +6,7 @@ import path from "node:path";
 /**
  * Prefactor #58: indirect the semantic theme colours through CSS custom
  * properties so the palette can be swapped at runtime (groundwork for the
- * blog reader light theme, ADR-0005) with NO visible change.
+ * blog reader light theme) with NO visible change.
  *
  * These tests pin the two things that make the refactor visually inert:
  *  1. Every semantic Tailwind colour resolves from a CSS custom property

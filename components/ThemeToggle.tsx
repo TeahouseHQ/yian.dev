@@ -81,7 +81,7 @@ export function ThemeToggleButton({ theme, onToggle }: ButtonProps): React.JSX.E
 }
 
 /**
- * Blog reader theme toggle (ADR-0005, issue #59). Rendered only on post pages
+ * Blog reader theme toggle (issue #59). Rendered only on post pages
  * (`/posts/[slug]`), where it mounts a fixed sun/moon button.
  *
  * The preference is a single global light/dark choice persisted in

@@ -32,7 +32,7 @@ import type { ReaderTheme } from "./theme";
 export const GISCUS_ORIGIN = "https://giscus.app";
 
 /**
- * Theme names accepted by Giscus that match our reader themes (ADR-0005):
+ * Theme names accepted by Giscus that match our reader themes:
  * the vocabularies are deliberately identical, so this aliases the reader
  * theme union rather than redefining it.
  */
@@ -109,7 +109,7 @@ export function buildGiscusScriptAttributes(
 }
 
 /**
- * The message payload asking Giscus to switch theme live (ADR-0005). Per
+ * The message payload asking Giscus to switch theme live. Per
  * Giscus's postMessage protocol the request must be wrapped in an outer
  * `giscus` key — messages without it are silently ignored by the client —
  * and is delivered via `iframe.contentWindow.postMessage(message,

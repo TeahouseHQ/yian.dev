@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
 # `next build` typechecks the web app (root tsconfig). The orchestration engine
-# now lives in the Teahouse package (ADR-0014, #112), not this repo, so there is
+# now lives in the Teahouse package (#112), not this repo, so there is
 # no longer a vendored `.sandcastle/` to typecheck here.
 pnpm build

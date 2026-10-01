@@ -42,7 +42,7 @@ The port can be overridden with the `PORT` environment variable (default: `3030`
 ### Orchestration (Teahouse)
 
 The AFK agentic workflow is provided by the [Teahouse](https://github.com/TeahouseHQ/teahouse)
-engine (ADR-0014), consumed as a package. This repo carries only the per-repo adoption surface:
+engine, consumed as a package. This repo carries only the per-repo adoption surface:
 the Repo profile and coding standards under `.teahouse/`, and the overlay Dockerfile under
 `.sandcastle/`. Requires a running Docker daemon, a reachable LiteLLM endpoint (see the Host
 profile, `~/.teahouse/host-profile.json`), and secrets sourced from `.teahouse/.env`.

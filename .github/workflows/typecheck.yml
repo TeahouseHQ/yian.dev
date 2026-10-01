@@ -2,7 +2,7 @@ name: Typecheck
 
 # Enforces TypeScript for the web app. `pnpm typecheck` runs `tsc` over the
 # Next.js source. The orchestration engine now lives in the Teahouse package
-# (ADR-0014), not this repo, so it is typechecked in its own CI — this job no
+# (moved out), not this repo, so it is typechecked in its own CI — this job no
 # longer typechecks a vendored `.sandcastle/`. See issue #103, #112.
 
 on:

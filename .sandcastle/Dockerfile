@@ -1,4 +1,4 @@
-# Overlay image for THIS repo (ADR-0014, #110).
+# Overlay image for THIS repo (#110).
 #
 # A thin layer over the reusable sandbox-contract base (base.Dockerfile). Everything
 # generic — git, gh, the pi coding agent, the vendored skills, and the

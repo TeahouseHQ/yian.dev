@@ -62,7 +62,7 @@ export default async function Page(props: { params: Promise<Params> }): Promise<
 
   return (
     <Layout>
-      {/* Reader light/dark toggle — post pages only (ADR-0005, issue #59). */}
+      {/* Reader light/dark toggle — post pages only (issue #59). */}
       <ThemeToggle />
       <BlogPostJsonLd title={post.title} date={post.date} slug={post.slug} excerpt={post.excerpt} />
       <Container>

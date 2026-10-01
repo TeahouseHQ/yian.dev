@@ -20,7 +20,7 @@ type Props = {
 };
 
 /**
- * Ask the Giscus iframe to switch theme live (ADR-0005). Unlike Disqus,
+ * Ask the Giscus iframe to switch theme live. Unlike Disqus,
  * Giscus listens for `setConfig` messages (wrapped in the `giscus` envelope
  * its client requires) from the embedding page, so the comment widget
  * follows the Theme toggle without reloading the thread.

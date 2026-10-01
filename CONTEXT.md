@@ -5,11 +5,10 @@ vocabulary: **Blog reader theming** (the light/dark switching on post pages) and
 repo's role as a **Teahouse consumer**.
 
 The AFK agentic workflow that operates on this repo is the [Teahouse](https://github.com/TeahouseHQ/teahouse)
-orchestration engine, consumed as a package (ADR-0014). The engine's vocabulary — Transcript,
+orchestration engine, consumed as a package. The engine's vocabulary — Transcript,
 Run, Pool, Dispatch bucket, Poll tick, Plan cache, Outcome, Landing, Conflict resolver,
 Cockpit, Session browser, Repo profile, Host profile, Overlay image, Skill, … — lives in the
-**Teahouse repo's `CONTEXT.md`**, not here. Its ADRs live in that repo's `docs/adr/`; the
-engine ADRs that used to live here are now one-line stubs pointing there (ADR-0014).
+**Teahouse repo's `CONTEXT.md`**, not here.
 
 ## Language
 
@@ -44,4 +43,4 @@ definitions for Repo profile, Model profile, Pool, etc. live in the Teahouse rep
 **Overlay image (this repo's)**:
 yian.dev's thin `.sandcastle/Dockerfile`, `FROM` the Teahouse base image, adding only the
 stack extras this repo needs (corepack + a pnpm pin). The base image owns the sandbox contract;
-this overlay owns nothing but the pnpm version (ADR-0014, and the engine's Overlay image term).
+this overlay owns nothing but the pnpm version (see the engine's Overlay image term).

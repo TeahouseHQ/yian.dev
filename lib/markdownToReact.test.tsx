@@ -60,4 +60,28 @@ describe("markdownToReact", () => {
     expect(html).not.toMatch(/aria-label="Copy code to clipboard"/);
     expect(html).toMatch(/<code>inline<\/code>/);
   });
+
+  it("renders GFM tables, strikethrough, autolinks, and task lists", async () => {
+    const md = [
+      "| A | B |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+      "",
+      "~struck~ and ~~gone~~",
+      "",
+      "Visit https://example.com",
+      "",
+      "- [x] done",
+      "- [ ] pending",
+    ].join("\n");
+
+    const node = await markdownToReact(md);
+    const html = renderToStaticMarkup(<>{node}</>);
+
+    expect(html).toMatch(/<table>/);
+    expect(html).toMatch(/<del>gone<\/del>/);
+    expect(html).toMatch(/<a href="https:\/\/example.com"/);
+    expect(html).toMatch(/type="checkbox"/);
+    expect(html).toMatch(/checked=""/);
+  });
 });

@@ -23,4 +23,4 @@ The Reviewer loads this on every review (`@.sandcastle/CODING_STANDARDS.md`) —
 ## Docs & vocabulary
 
 - Use the **CONTEXT.md glossary** terms verbatim (Transcript, Live feed, Pool, Landing, Poll tick, …) in code, comments, and commit messages. Don't reintroduce the "_Avoid_" synonyms.
-- Load-bearing comments explain **why**, not what.
+- Non-obvious decisions cite their ADR (`docs/adr/NNNN-*.md`); load-bearing comments explain **why**, not what.

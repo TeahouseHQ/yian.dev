@@ -65,4 +65,4 @@ Canonical triage roles map 1:1 to default label names (`needs-triage`, `needs-in
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` at the repo root. See `docs/agents/domain.md`.
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

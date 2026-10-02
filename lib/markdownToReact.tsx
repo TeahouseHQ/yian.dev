@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactNode } from "react";
 import * as prod from "react/jsx-runtime";
 import rehypeHighlight from "rehype-highlight";
 import rehypeReact from "rehype-react";
+import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
@@ -56,6 +57,7 @@ const jsxRuntime = prod as unknown as {
 
 const processor = unified()
   .use(remarkParse)
+  .use(remarkGfm)
   .use(remarkRehype)
   .use(rehypeHighlight, { plainText: ["txt", "text"] })
   .use(rehypeReact, {
